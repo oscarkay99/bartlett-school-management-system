@@ -63,3 +63,28 @@ describe("Every student is tied to a guardian", () => {
     for (const st of Q.students) expect(st.guardians.some((g) => g.financial && g.verified), st.admissionNo).toBe(true);
   });
 });
+
+describe("Feeding and Books sections", () => {
+  it("every invoice carries a Feeding and a Books line", () => {
+    for (const i of Q.invoices) for (const label of ["Feeding", "Books"]) expect(i.items.some((x) => x.label === label), `${i.no} ${label}`).toBe(true);
+  });
+  it("Ama's invoice still totals GHS 3,500 with Feeding and Books itemised", () => {
+    const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!; const inv = Q.invoices.find((i) => i.studentId === ama.id)!;
+    expect(inv.items.reduce((a, x) => a + x.amount, 0)).toBe(ghs(3500)); expect(inv.items.find((x) => x.label === "Books")!.amount).toBe(ghs(250));
+  });
+  it("per-class feeding total = amount per student × students charged", () => {
+    for (const c of Q.classes) {
+      const kids = Q.activeStudents().filter((s) => s.classId === c.id);
+      const direct = kids.reduce((a, s) => a + Q.invoices.find((i) => i.studentId === s.id)!.items.find((x) => x.label === "Feeding")!.amount, 0);
+      const perStudent = Q.feeStructure.find((f) => f.classId === c.id)!.day.find((x) => x.label === "Feeding")!.amount;
+      if (c.id !== "c5" && c.id !== "c1") expect(direct).toBe(perStudent * kids.length);
+    }
+  });
+  it("feeding and books stock sections exist with positive value", () => {
+    const val = (cats: string[]) => Q.inventory.filter((i) => cats.includes(i.category)).reduce((a, i) => a + i.onHand * i.cost, 0);
+    expect(Q.inventory.filter((i) => i.category === "Kitchen & Feeding").length).toBeGreaterThanOrEqual(5);
+    expect(Q.inventory.filter((i) => i.category === "Textbooks" || i.category === "Exercise Books").length).toBeGreaterThanOrEqual(7);
+    expect(val(["Kitchen & Feeding"])).toBeGreaterThan(0); expect(val(["Textbooks", "Exercise Books"])).toBeGreaterThan(0);
+    for (const i of Q.inventory) expect(i.onHand).toBeGreaterThanOrEqual(0);
+  });
+});

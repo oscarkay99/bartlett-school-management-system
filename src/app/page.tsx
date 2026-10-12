@@ -63,7 +63,7 @@ export default function Dashboard() {
           ].map((b) => <Link key={b.t} href={b.h} className="flex gap-3 rounded-xl border border-line bg-surface p-3 transition hover:shadow-md"><b.icon className={b.tone} size={20} /><div><div className="font-medium">{b.t}</div><div className="text-xs text-muted">{b.d}</div></div></Link>)}
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
         <Kpi label="Total students" value={String(Q.students.length)} icon={GraduationCap} hint="All student records in the current school, any status." href="/students" />
         <Kpi label="Active students" value={String(act.length)} icon={UserCheck} hint="Students with status Active." trend={{ dir: enrDelta >= 0 ? "up" : "down", text: `${enrDelta > 0 ? "+" : ""}${enrDelta}% vs last year`, good: enrDelta >= 0 }} href="/students" tone="ok" />
         <Kpi label="Total parents" value={String(Q.guardians.length)} icon={UsersRound} hint="Unique guardian records (one per person, linked to many children)." href="/parents" />

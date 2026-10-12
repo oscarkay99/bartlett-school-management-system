@@ -37,7 +37,7 @@ export function FinanceWorkspace({ expenses, tb, budget, recon, cash, incExp, br
   const revenue = inc.reduce((a, t) => a + t.cr - t.dr, 0), spend = exp.reduce((a, t) => a + t.dr - t.cr, 0);
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <Kpi label="Cash position" value={moneyShort(cash)} icon={Wallet} tone="info" hint="Opening cash + confirmed receipts − approved/paid expenses." />
         <Kpi label="Cash received" value={moneyShort(income)} icon={TrendingUp} tone="ok" hint="Confirmed fee receipts (cash basis)." />
         <Kpi label="Expenditure" value={moneyShort(expenseTotal)} icon={TrendingDown} tone="danger" hint="Approved & paid expenses." />

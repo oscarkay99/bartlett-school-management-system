@@ -51,7 +51,7 @@ export function FeesWorkspace({ students, payments, reminders, structures, class
         actions={<><Button size="sm" onClick={() => router.push("/fees?tab=outstanding")}>View Outstanding Students</Button><Button size="sm" variant="primary" onClick={() => router.push("/fees?tab=reminders")}>Prepare Reminders</Button><Button size="sm" onClick={() => router.push("/fees?tab=outstanding&overdue=1")}>View Overdue Fees</Button><Button size="sm" onClick={() => exportCsv(owing)}><Download size={13} />Export Report</Button></>}>
         {od.length} balances are overdue ({money(overdue)}). {eligible.length} guardians are eligible for payment reminders.
       </AlertBanner>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <Kpi label="Total invoiced" value={moneyShort(billed)} icon={FileText} hint="Sum of invoices net of discounts for the filtered students." />
         <Kpi label="Confirmed collections" value={moneyShort(paid)} icon={Banknote} tone="ok" hint="Confirmed payments only; pending gateway payments excluded." />
         <Kpi label="Collection rate" value={`${pct(paid, billed)}%`} icon={Percent} tone="info" hint="Confirmed collections ÷ total invoiced." />
@@ -78,6 +78,7 @@ export function FeesWorkspace({ students, payments, reminders, structures, class
         { id: "reminders", label: "Reminders", badge: String(eligible.length), content: <Reminders rows={reminders.filter((r) => !cls || r.classIds.includes(cls))} /> },
         { id: "payments", label: "Payments", content: <PaymentsTable rows={pp} /> },
         { id: "invoices", label: "Invoices", content: <Invoices students={ss} /> },
+        { id: "components", label: "Feeding & Books", content: <FeeComponents structures={structures} students={ss} /> },
         { id: "structures", label: "Fee structures", content: <Structures rows={structures} /> },
         { id: "reconcile", label: "Reconciliation", badge: String(pp.filter((p) => p.status !== "Confirmed").length), content: <Reconcile rows={pp} /> },
       ]} />
@@ -124,7 +125,7 @@ function Reminders({ rows }: { rows: RRow[] }) {
     <div className="space-y-3">
       <Card className="p-4"><div className="flex flex-wrap items-center justify-between gap-3">
         <div><div className="font-semibold">Bulk reminders</div><p className="text-sm text-muted">One consolidated message per guardian. Only guardians who are verified, financially responsible, and have consented are eligible; siblings are never disclosed to unauthorised guardians.</p></div>
-        <div className="flex items-center gap-3 text-sm"><span><b>{picked.length}</b> selected</span><span className="text-muted">Est. cost <b className="num text-fg">{money(cost)}</b></span><Button variant="primary" disabled={picked.length === 0} onClick={() => setConfirm(true)}><Send size={14} />Send reminders</Button></div></div></Card>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"><span className="whitespace-nowrap"><b>{picked.length}</b> selected</span><span className="whitespace-nowrap text-muted">Est. cost <b className="num text-fg">{money(cost)}</b></span><Button variant="primary" disabled={picked.length === 0} onClick={() => setConfirm(true)}><Send size={14} />Send reminders</Button></div></div></Card>
       <Card><DataTable rows={data} columns={cols} rowId={(x) => x.gid} selectable selected={sel} onSelect={setSel} searchText={(x) => x.name + x.students.map((s) => s.name).join(" ")}
         filters={<><Select label="Channel" value={ch} onChange={setCh} options={[{ value: "", label: "Any channel" }, { value: "WhatsApp", label: "WhatsApp" }, { value: "SMS", label: "SMS" }, { value: "Email", label: "Email" }]} /><Select label="Overdue" value={od} onChange={setOd} options={[{ value: "", label: "All balances" }, { value: "1", label: "Overdue only" }]} /></>}
         toolbar={<Button size="sm" variant="ghost" onClick={() => setSel(new Set(data.filter((r) => r.eligible).map((r) => r.gid)))}>Select all eligible ({data.filter((r) => r.eligible).length})</Button>} pageSize={10} /></Card>
@@ -163,6 +164,39 @@ function Invoices({ students }: { students: SRow[] }) {
         <p>All <b>{students.length}</b> active students in the current filter already have a Term 1 invoice.</p><p className="mt-2 text-sm text-muted">Generation is idempotent: each student can only have one invoice per term, so running it again never creates duplicates. New students admitted later are picked up automatically.</p>
       </Modal>
     </Card>
+  );
+}
+
+// Feeding and Books billed per class: amount per student × students charged = total.
+function FeeComponents({ structures, students }: { structures: FeeLine[]; students: SRow[] }) {
+  const sections = [
+    { key: "Feeding", title: "Feeding", sub: "Meals charged per term", tone: "text-warn" },
+    { key: "Books", title: "Books", sub: "Textbooks and learning materials charged per term", tone: "text-info" },
+  ];
+  const lines = (key: string) => structures.map((c) => {
+    const kids = students.filter((s) => s.classId === c.classId);
+    const day = c.day.find((x) => x.label === key)?.amount ?? 0, boarding = c.boarding.find((x) => x.label === key)?.amount ?? 0;
+    return { classId: c.classId, name: c.className, amount: day, students: kids.length, total: kids.reduce((a, s) => a + (s.cat === "Boarding" ? boarding : day), 0) };
+  });
+  const totals = sections.map((sec) => { const l = lines(sec.key); return { ...sec, lines: l, students: l.reduce((a, x) => a + x.students, 0), total: l.reduce((a, x) => a + x.total, 0) }; });
+  const grand = totals.reduce((a, t) => a + t.total, 0), invoiced = students.reduce((a, s) => a + s.billed, 0);
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+        {totals.map((t) => <Kpi key={t.key} label={`${t.title} billed`} value={moneyShort(t.total)} icon={FileText} hint={`Sum of ${t.title} charges across the filtered students.`} />)}
+        <Kpi label="Feeding + Books" value={moneyShort(grand)} icon={Wallet} tone="info" hint="Combined Feeding and Books charges." />
+        <Kpi label="Share of invoiced" value={`${pct(grand, invoiced)}%`} icon={Percent} hint="Feeding + Books as a share of the total invoiced." />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        {totals.map((t) => (
+          <Card key={t.key}><CardHeader title={t.title} sub={t.sub} action={<Badge tone="info">Total {money(t.total)}</Badge>} />
+            <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-3 py-2 text-left sm:px-4">Class</th><th className="whitespace-nowrap px-2 text-right sm:px-3">Per student</th><th className="hidden px-3 text-right sm:table-cell">Students</th><th className="px-3 text-right sm:px-4">Total</th></tr></thead>
+              <tbody className="divide-y divide-line">{t.lines.map((l) => <tr key={l.classId}><td className="whitespace-nowrap px-3 py-2.5 font-medium sm:px-4">{l.name}</td><td className="num whitespace-nowrap px-2 text-right sm:px-3">{money(l.amount)}</td><td className="num hidden px-3 text-right sm:table-cell">{l.students}</td><td className="num whitespace-nowrap px-3 text-right font-medium sm:px-4">{money(l.total)}</td></tr>)}</tbody>
+              <tfoot><tr className="border-t-2 border-line bg-surface-2/60 font-semibold"><td className="px-3 py-2.5 sm:px-4">Total</td><td className="px-2 sm:px-3" /><td className="num hidden px-3 text-right sm:table-cell">{t.students}</td><td className="num whitespace-nowrap px-3 text-right sm:px-4">{money(t.total)}</td></tr></tfoot></table></div></Card>
+        ))}
+      </div>
+      <p className="text-xs text-muted">Boarders are charged the boarding rate where it differs. Payments are applied to the whole invoice, so collections are not split by component.</p>
+    </div>
   );
 }
 

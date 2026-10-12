@@ -31,6 +31,7 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
   const value = all.reduce((a, i) => a + i.qty * i.cost, 0);
   const byCat = Object.entries(all.reduce<Record<string, number>>((a, i) => ({ ...a, [i.category]: (a[i.category] ?? 0) + (i.qty * i.cost) / 100 }), {})).map(([name, v]) => ({ name, value: Math.round(v) }));
   const issued = Object.entries(moves.filter((m) => m.type === "Issued").reduce<Record<string, number>>((a, m) => ({ ...a, [m.itemId]: (a[m.itemId] ?? 0) + m.qty }), {})).map(([id, q]) => ({ name: items.find((i) => i.id === id)!.name.slice(0, 22), qty: q })).sort((a, b) => b.qty - a.qty).slice(0, 7);
+  const issuedQty = moves.filter((m) => m.type === "Issued").reduce<Record<string, number>>((a, m) => ({ ...a, [m.itemId]: (a[m.itemId] ?? 0) + m.qty }), {});
   const damaged = moves.filter((m) => m.type === "Damaged" || m.type === "Lost").reduce((a, m) => a + m.qty * (items.find((i) => i.id === m.itemId)?.cost ?? 0), 0);
   const post = (m: Omit<Mv, "id" | "date" | "staff">) => { setMoves((x) => [{ ...m, id: `new${x.length}`, date: "2026-10-12", staff: "Kojo Danso" }, ...x]); };
 
@@ -50,7 +51,7 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
   return (
     <div className="space-y-4">
       {(low.length + oos.length > 0) && <AlertBanner tone="warn" icon={AlertTriangle} title={`${low.length + oos.length} items need restocking`} actions={<Button size="sm" variant="primary" onClick={() => setDlg("receive")}>Receive stock</Button>}>{oos.length} out of stock, {low.length} below reorder level{over.length ? `, ${over.length} overstocked` : ""}.</AlertBanner>}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <Kpi label="Inventory valuation" value={moneyShort(value)} icon={Wallet} hint="On-hand quantity × unit cost (accounting cost). Excludes selling price and asset book value." />
         <Kpi label="Items tracked" value={String(items.length)} icon={Boxes} hint="Active SKUs in all stores." />
         <Kpi label="Low / out of stock" value={`${low.length} / ${oos.length}`} icon={PackageX} tone="warn" hint="Below reorder level / zero on hand." />
@@ -60,6 +61,8 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
       <Tabs tabs={[
         { id: "items", label: "Items", content: <><div className="mb-3 flex justify-end">{allow("inventory", "create") && <Button onClick={() => setForm({})}><Plus size={14} />Add item</Button>}</div><Card><DataTable rows={rows} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.sku} pageSize={12} filters={<Select label="Category" value={cat} onChange={setCat} options={[{ value: "", label: "All categories" }, ...Array.from(new Set(items.map((i) => i.category))).map((c) => ({ value: c, label: c }))]} />} /></Card></> },
         { id: "ledger", label: "Stock ledger", content: <Card><CardHeader title="Stock movement ledger" sub="Quantities are derived from this append-only ledger — never edited directly." /><DataTable rows={moves} columns={mcols} rowId={(x) => x.id} pageSize={12} searchText={(x) => x.ref + (items.find((i) => i.id === x.itemId)?.name ?? "")} /></Card> },
+        { id: "feeding", label: "Feeding", content: <Section title="Feeding supplies" sub="Kitchen & Feeding stock: quantity × unit cost" rows={all.filter((i) => i.category === "Kitchen & Feeding")} issued={issuedQty} /> },
+        { id: "books", label: "Books", content: <Section title="Books" sub="Textbooks and exercise books: quantity × unit cost" rows={all.filter((i) => i.category === "Textbooks" || i.category === "Exercise Books")} issued={issuedQty} /> },
         { id: "insights", label: "Insights", content: <div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader title="Value by category" /><div className="px-2 pb-3"><TreemapChart data={byCat} /></div></Card><Card><CardHeader title="Most frequently issued" sub="Units issued this term" /><div className="px-2 pb-3"><HBars data={issued} x="name" y="qty" label="Units" money={false} color="var(--info)" /></div></Card></div> },
         { id: "procure", label: "Procurement", content: <Procurement /> },
         { id: "assets", label: "Assets", content: <Assets /> },
@@ -70,6 +73,26 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
           setItems((x) => (form.item ? x.map((y) => (y.id === it.id ? it : y)) : [it, ...x])); toast(form.item ? `${it.name} updated` : `${it.name} added — record opening stock via “Receive stock”`); setForm(null); }} />}
       <ConfirmDialog open={!!del} onClose={() => setDel(null)} needReason danger confirmLabel="Delete item" title={`Delete ${del?.name ?? ""}`} body={`${(onHand[del?.id ?? ""] ?? 0)} unit(s) are recorded on hand. The item is removed from the catalogue; its stock movement history is kept in the ledger for audit.`} onConfirm={() => { setItems((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.name} deleted`); setDel(null); }} />
       <MoveDialog mode={dlg} onClose={() => setDlg(null)} items={all} students={students} pre={pre} onPost={(m, msg) => { post(m); toast(msg); setDlg(null); }} />
+    </div>
+  );
+}
+
+// A stock section (Feeding / Books): every item with quantity, unit cost and total value, plus section totals.
+function Section({ title, sub, rows, issued }: { title: string; sub: string; rows: (Item & { qty: number })[]; issued: Record<string, number> }) {
+  const value = rows.reduce((a, r) => a + r.qty * r.cost, 0), units = rows.reduce((a, r) => a + r.qty, 0), issuedValue = rows.reduce((a, r) => a + (issued[r.id] ?? 0) * r.cost, 0);
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+        <Kpi label="Items" value={String(rows.length)} icon={Boxes} hint="Distinct items in this section." />
+        <Kpi label="Units on hand" value={units.toLocaleString()} icon={Boxes} hint="Total quantity on hand across items (mixed units)." />
+        <Kpi label="Stock value" value={moneyShort(value)} icon={Wallet} tone="info" hint="On-hand quantity × unit cost." />
+        <Kpi label="Issued value" value={moneyShort(issuedValue)} icon={ArrowUpFromLine} hint="Units issued this term × unit cost." />
+      </div>
+      <Card><CardHeader title={title} sub={sub} action={<Badge tone="info">Total {money(value)}</Badge>} />
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-3 py-2 text-left sm:px-4">Item</th><th className="px-2 text-right sm:px-3">On hand</th><th className="whitespace-nowrap px-2 text-right sm:px-3">Unit cost</th><th className="hidden px-3 text-right sm:table-cell">Issued</th><th className="px-3 text-right sm:px-4">Total value</th></tr></thead>
+          <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.id}><td className="px-3 py-2.5 sm:px-4"><div className="font-medium">{r.name}</div><div className="text-xs text-muted">{r.sku} · {r.location}</div></td><td className="num whitespace-nowrap px-2 text-right sm:px-3">{r.qty} <span className="text-muted">{r.unit}</span>{r.qty <= r.reorder && <div><Badge tone={r.qty <= 0 ? "danger" : "warn"}>{r.qty <= 0 ? "Out" : "Low"}</Badge></div>}</td><td className="num whitespace-nowrap px-2 text-right sm:px-3">{money(r.cost)}</td><td className="num hidden px-3 text-right sm:table-cell">{issued[r.id] ?? 0}</td><td className="num whitespace-nowrap px-3 text-right font-medium sm:px-4">{money(r.qty * r.cost)}</td></tr>)}</tbody>
+          <tfoot><tr className="border-t-2 border-line bg-surface-2/60 font-semibold"><td className="px-3 py-2.5 sm:px-4">Total</td><td className="num px-2 text-right sm:px-3">{units.toLocaleString()}</td><td className="px-2 sm:px-3" /><td className="num hidden px-3 text-right sm:table-cell">{rows.reduce((a, r) => a + (issued[r.id] ?? 0), 0)}</td><td className="num whitespace-nowrap px-3 text-right sm:px-4">{money(value)}</td></tr></tfoot>
+        </table></div></Card>
     </div>
   );
 }

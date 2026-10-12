@@ -41,6 +41,7 @@ const feeFor = (level: string, boarding: boolean) => {
   const items: T.InvoiceItem[] = [
     { label: "Tuition", amount: ghs(tuition) },
     { label: "Feeding", amount: ghs(level === "Kindergarten" ? 450 : 600) },
+    { label: "Books", amount: ghs(level === "Kindergarten" ? 150 : level === "Primary" ? 250 : 350) },
     { label: "ICT & Development Levy", amount: ghs(level === "JHS" ? 250 : 150) },
     { label: "PTA", amount: ghs(50) },
   ];
@@ -143,7 +144,7 @@ students.forEach((st) => {
 const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
 {
   const ai = invoices.find((x) => x.studentId === ama.id)!;
-  ai.items = [{ label: "Tuition", amount: ghs(2400) }, { label: "Feeding", amount: ghs(600) }, { label: "ICT & Development Levy", amount: ghs(150) }, { label: "PTA", amount: ghs(50) }, { label: "Examination", amount: ghs(300) }];
+  ai.items = [{ label: "Tuition", amount: ghs(2200) }, { label: "Feeding", amount: ghs(600) }, { label: "Books", amount: ghs(250) }, { label: "ICT & Development Levy", amount: ghs(150) }, { label: "PTA", amount: ghs(50) }, { label: "Examination", amount: ghs(250) }];
   ai.discount = 0; ai.dueOn = "2026-10-30";
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id) payments.splice(i, 1);
   payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0] });
@@ -191,6 +192,8 @@ const itemDefs: [string, string, string, string, number, number, number, T.Inven
   ["Projector — Epson", "ICT Equipment", "unit", "ICT Room", 3100, 1, 8, "Asset"], ["Student Desk & Chair", "Furniture", "set", "Main Store", 320, 10, 120, "Asset"],
   ["Rice (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 520, 12, 60, "Consumable"], ["Cooking Oil (20L)", "Kitchen & Feeding", "jerry", "Kitchen", 380, 6, 30, "Consumable"],
   ["Paracetamol (blister)", "Laboratory Supplies", "pcs", "Sick Bay", 4, 50, 300, "Consumable"], ["Paint (20L, white)", "Maintenance Supplies", "tin", "Maintenance", 260, 4, 24, "Consumable"],
+  ["Science Textbook (P4)", "Textbooks", "copy", "Main Store", 40, 40, 300, "Reusable"], ["English Textbook (JHS)", "Textbooks", "copy", "Main Store", 46, 30, 200, "Reusable"], ["Story Reader (KG)", "Textbooks", "copy", "Main Store", 22, 30, 150, "Reusable"],
+  ["Beans (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 480, 8, 40, "Consumable"], ["Gari (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 210, 10, 50, "Consumable"], ["Cooking Gas (14.5kg)", "Kitchen & Feeding", "cyl", "Kitchen", 180, 4, 20, "Consumable"],
 ];
 export const inventory: T.InventoryItem[] = itemDefs.map(([name, category, unit, location, cost, reorder, max, kind], i) => ({
   id: `i${i + 1}`, sku: `SKU-${pad(i + 1, 4)}`, name, category, unit, location, supplier: pick(["Kumasi Books Ltd", "Ashanti Stationers", "Gold Coast Uniforms", "TechPoint Ghana", "Adom Supplies"]),

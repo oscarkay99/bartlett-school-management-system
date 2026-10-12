@@ -110,7 +110,23 @@ export function DataTable<T>({ rows, columns, searchText, filters, pageSize = 10
         {searchText && <div className="relative min-w-[180px] flex-1 sm:max-w-xs"><Search size={15} className="absolute left-2.5 top-2.5 text-muted" /><input value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} placeholder="Search…" aria-label="Search table" className="h-9 w-full rounded-lg border border-line bg-surface pl-8 pr-3 text-sm" /></div>}
         {filters}<div className="ml-auto flex gap-2">{toolbar}</div>
       </div>
-      <div className="overflow-x-auto">
+      <ul className="divide-y divide-line md:hidden" aria-label="Results">
+        {view.map((r, i) => {
+          const [head, ...rest] = columns.filter((c) => c.header !== "" || c === columns[0]); const acts = columns.filter((c) => c.header === "" && c !== columns[0]);
+          const fields = rest.filter((c) => !c.hideOnMobile);
+          return (
+            <li key={rowId ? rowId(r) : i} onClick={onRowClick ? () => onRowClick(r) : undefined} className={cn("flex gap-3 px-3 py-3", onRowClick && "cursor-pointer active:bg-surface-2")}>
+              {selectable && rowId && <input type="checkbox" className="mt-1.5 size-5 shrink-0" aria-label="Select row" checked={selected?.has(rowId(r)) ?? false} onClick={(e) => e.stopPropagation()} onChange={(e) => { const s = new Set(selected); if (e.target.checked) s.add(rowId(r)); else s.delete(rowId(r)); onSelect?.(s); }} />}
+              <div className="min-w-0 flex-1">
+                <div className="min-w-0">{head.render(r)}</div>
+                {fields.length > 0 && <dl className="mt-2 flex flex-wrap items-end gap-x-5 gap-y-2 text-[13px]">{fields.map((c) => <div key={c.key} className="min-w-0"><dt className="text-[11px] uppercase tracking-wide text-muted">{c.header}</dt><dd className={cn("num font-medium", c.className)}>{c.render(r)}</dd></div>)}</dl>}
+                {acts.length > 0 && <div className="mt-2 flex flex-wrap justify-end gap-1" onClick={(e) => e.stopPropagation()}>{acts.map((c) => <span key={c.key}>{c.render(r)}</span>)}</div>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-2/60 text-xs uppercase tracking-wide text-muted">
             <tr>
@@ -131,8 +147,8 @@ export function DataTable<T>({ rows, columns, searchText, filters, pageSize = 10
             ))}
           </tbody>
         </table>
-        {view.length === 0 && (empty ?? <EmptyState icon={Search} title="No matching records" body="Try adjusting your search or filters." />)}
       </div>
+      {view.length === 0 && (empty ?? <EmptyState icon={Search} title="No matching records" body="Try adjusting your search or filters." />)}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2 text-xs text-muted">
         <div className="flex items-center gap-3">
           <span>{data.length === 0 ? "0 results" : `${cur * size + 1}–${Math.min(data.length, cur * size + size)} of ${data.length}`}</span>
@@ -142,8 +158,9 @@ export function DataTable<T>({ rows, columns, searchText, filters, pageSize = 10
         <nav aria-label="Pagination" className="flex items-center gap-0.5">
           <Button size="sm" variant="ghost" disabled={cur === 0} onClick={() => setPage(0)} aria-label="First page"><ChevronsLeft size={14} /></Button>
           <Button size="sm" variant="ghost" disabled={cur === 0} onClick={() => setPage(cur - 1)} aria-label="Previous page"><ChevronLeft size={14} /></Button>
-          {pageWindow(cur, pages).map((n, i) => n === "…" ? <span key={`e${i}`} className="px-1">…</span> : (
-            <button key={n} onClick={() => setPage(n - 1)} aria-label={`Page ${n}`} aria-current={n - 1 === cur ? "page" : undefined} className={cn("h-7 min-w-7 rounded-md px-1.5 text-xs font-medium transition", n - 1 === cur ? "bg-info text-white" : "hover:bg-surface-2 text-fg")}>{n}</button>))}
+          <span className="px-2 sm:hidden">Page {cur + 1} / {pages}</span>
+          {pageWindow(cur, pages).map((n, i) => n === "…" ? <span key={`e${i}`} className="hidden px-1 sm:inline">…</span> : (
+            <button key={n} onClick={() => setPage(n - 1)} aria-label={`Page ${n}`} aria-current={n - 1 === cur ? "page" : undefined} className={cn("hidden h-7 min-w-7 rounded-md px-1.5 text-xs font-medium transition sm:block", n - 1 === cur ? "bg-info text-white" : "hover:bg-surface-2 text-fg")}>{n}</button>))}
           <Button size="sm" variant="ghost" disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)} aria-label="Next page"><ChevronRight size={14} /></Button>
           <Button size="sm" variant="ghost" disabled={cur >= pages - 1} onClick={() => setPage(pages - 1)} aria-label="Last page"><ChevronsRight size={14} /></Button>
         </nav>

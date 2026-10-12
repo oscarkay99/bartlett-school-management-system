@@ -40,7 +40,7 @@ export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist,
             <div className="flex flex-wrap items-end gap-3 border-b border-line p-4">
               <Select label="Class" value={classId} onChange={(v) => { setClassId(v); setSubject(classes.find((c) => c.id === v)!.subjects[0]); }} options={classes.map((c) => ({ value: c.id, label: c.name }))} />
               <Select label="Subject" value={subject} onChange={setSubject} options={cd.subjects.map((s) => ({ value: s, label: s }))} />
-              <StatusBadge status={st === "Published" ? "Approved" : st} /><span className="text-xs text-muted">{st}</span>
+              <StatusBadge status={st === "Published" ? "Approved" : st} />
               <div className="ml-auto flex gap-2">
                 {!locked && <Button onClick={() => { setStatus({ ...status, [key]: "Draft" }); toast("Draft saved"); }} disabled={!can}>Save draft</Button>}
                 {!locked && <Button variant="primary" disabled={!can || errs.length > 0 || !wOk} onClick={() => { setStatus({ ...status, [key]: "Submitted" }); toast(`${label(key)} submitted for review`); }}><Send size={14} />Submit for review</Button>}
@@ -51,11 +51,11 @@ export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist,
             </div>
             {!wOk && <p role="alert" className="border-b border-line bg-danger/8 px-4 py-2 text-sm text-danger">Assessment weights total {w.ca + w.exam}% — they must equal 100% before results can be submitted (Assessment setup tab).</p>}
             {!can && <p className="border-b border-line bg-surface-2 px-4 py-2 text-sm text-muted">Your role has read-only access to grades.</p>}
-            <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Student</th><th className="px-3 text-right">CA /{w.ca}</th><th className="px-3 text-right">Exam /{w.exam}</th><th className="px-3 text-right">Total</th><th className="px-4 text-right">Grade</th></tr></thead>
+            <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Student</th><th className="px-1.5 text-right sm:px-3">CA /{w.ca}</th><th className="px-1.5 text-right sm:px-3">Exam /{w.exam}</th><th className="px-1.5 text-right sm:px-3">Total</th><th className="px-2 text-right sm:px-4">Grade</th></tr></thead>
               <tbody className="divide-y divide-line">{cd.students.map((s) => { const ca = parseFloat(val(s.id, "ca")), ex = parseFloat(val(s.id, "exam")); const total = (isNaN(ca) ? 0 : ca) + (isNaN(ex) ? 0 : ex); const g = gradeOf(scale, total); return (
-                <tr key={s.id}><td className="px-4 py-1.5 font-medium">{s.name}</td>
-                  {(["ca", "exam"] as const).map((f) => <td key={f} className="px-3 text-right"><input aria-label={`${s.name} ${f}`} inputMode="decimal" disabled={locked || !can} value={val(s.id, f)} onChange={(e) => setVal(s.id, f, e.target.value)} className={cn("num h-8 w-20 rounded-md border bg-surface px-2 text-right disabled:bg-surface-2", bad(s.id, f) ? "border-danger" : "border-line")} />{bad(s.id, f) && <div className="text-[10px] text-danger">{bad(s.id, f)!.m}</div>}</td>)}
-                  <td className="num px-3 text-right font-semibold">{total}</td><td className="px-4 text-right"><Badge tone={g.grade <= "B" ? "ok" : g.grade === "C" ? "info" : g.grade === "D" ? "warn" : "danger"}>{g.grade}</Badge></td></tr>); })}</tbody></table></div>
+                <tr key={s.id}><td className="max-w-[110px] px-3 py-1.5 font-medium sm:max-w-none sm:px-4">{s.name}</td>
+                  {(["ca", "exam"] as const).map((f) => <td key={f} className="px-1.5 text-right sm:px-3"><input aria-label={`${s.name} ${f}`} inputMode="decimal" disabled={locked || !can} value={val(s.id, f)} onChange={(e) => setVal(s.id, f, e.target.value)} className={cn("num h-10 w-14 rounded-md border bg-surface px-1.5 text-right disabled:bg-surface-2 sm:h-8 sm:w-20 sm:px-2", bad(s.id, f) ? "border-danger" : "border-line")} />{bad(s.id, f) && <div className="text-[10px] text-danger">{bad(s.id, f)!.m}</div>}</td>)}
+                  <td className="num px-1.5 text-right font-semibold sm:px-3">{total}</td><td className="px-2 text-right sm:px-4"><Badge tone={g.grade <= "B" ? "ok" : g.grade === "C" ? "info" : g.grade === "D" ? "warn" : "danger"}>{g.grade}</Badge></td></tr>); })}</tbody></table></div>
             {errs.length > 0 && !locked && <p className="border-t border-line px-4 py-2 text-sm text-danger">{errs.length} field(s) need attention before submitting.</p>}
           </Card>) },
         { id: "analytics", label: "Analytics", content: (

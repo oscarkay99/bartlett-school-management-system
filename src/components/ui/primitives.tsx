@@ -26,7 +26,7 @@ export function Card({ className, children }: { className?: string; children: Re
 }
 export function CardHeader({ title, sub, action }: { title: string; sub?: string; action?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 px-4 pt-4 pb-2">
+    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 px-4 pt-4 pb-2">
       <div><h3 className="font-semibold text-[15px]">{title}</h3>{sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}</div>{action}
     </div>
   );
@@ -61,13 +61,13 @@ export function Kpi({ label, value, icon: Icon, hint, trend, href, tone = "neutr
   label: string; value: string; icon: LucideIcon; hint: string; trend?: { dir: "up" | "down" | "flat"; text: string; good?: boolean }; href?: string; tone?: Tone;
 }) {
   const body = (
-    <div className="group h-full rounded-xl border border-line bg-surface p-4 transition hover:shadow-md hover:-translate-y-px">
+    <div className="group h-full rounded-xl border border-line bg-surface p-3 transition hover:shadow-md hover:-translate-y-px sm:p-4">
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted">{label}
-          <span title={hint} className="cursor-help text-muted/70" aria-label={`Definition: ${hint}`}><Info size={12} /></span></span>
-        <span className={cn("grid size-8 place-items-center rounded-lg", tones[tone])}><Icon size={16} /></span>
+        <span className="flex items-center gap-1.5 text-[11px] font-medium leading-tight text-muted sm:text-xs">{label}
+          <span title={hint} className="hidden cursor-help text-muted/70 sm:inline" aria-label={`Definition: ${hint}`}><Info size={12} /></span></span>
+        <span className={cn("grid size-7 place-items-center rounded-lg sm:size-8", tones[tone])}><Icon size={16} /></span>
       </div>
-      <div className="num mt-2 text-[26px] font-semibold leading-none tracking-tight">{value}</div>
+      <div className="num mt-2 text-[20px] font-semibold leading-none tracking-tight sm:text-[26px]">{value}</div>
       <div className="mt-2 h-4 text-xs">
         {trend ? <span className={cn("inline-flex items-center gap-1 font-medium", trend.good === false ? "text-danger" : trend.good ? "text-ok" : "text-muted")}>
           {trend.dir === "up" ? <TrendingUp size={12} /> : trend.dir === "down" ? <TrendingDown size={12} /> : <Minus size={12} />}{trend.text}</span> : <span className="text-muted/70">No comparison yet</span>}

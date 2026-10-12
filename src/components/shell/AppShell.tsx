@@ -61,6 +61,13 @@ export function AppShell({ children, school, years, terms }: { children: ReactNo
           );
         })}
       </nav>
+      <div className="space-y-2 border-t border-white/10 p-3 md:hidden">
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Academic period</div>
+        <div className="grid grid-cols-2 gap-2">
+          <select aria-label="Academic year" className="h-9 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white" defaultValue={years[0]}>{years.map((y) => <option key={y} className="text-black">{y}</option>)}</select>
+          <select aria-label="Term" className="h-9 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white" defaultValue={terms[0]}>{terms.map((y) => <option key={y} className="text-black">{y}</option>)}</select>
+        </div>
+      </div>
       <button onClick={() => { setCollapsed(!collapsed); try { localStorage.setItem("sb", collapsed ? "0" : "1"); } catch {} }} className="hidden lg:flex items-center gap-2 border-t border-white/10 px-4 py-3 text-xs hover:text-white" aria-label="Collapse sidebar">
         <ChevronLeft size={16} className={cn("transition", collapsed && "rotate-180")} />{!collapsed && "Collapse"}
       </button>
@@ -92,24 +99,25 @@ function Topbar({ school, years, terms, onMenu, role, setRole }: { school: { nam
   const notifs = [["3 grade batches awaiting approval", "/academics"], ["2 gateway payments pending verification", "/fees?tab=reconcile"], ["4 items below reorder level", "/inventory"], ["6 messages failed to deliver", "/communications"]];
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-line bg-surface/90 px-3 backdrop-blur sm:px-5">
-      <button className="rounded-lg p-2 hover:bg-surface-2 lg:hidden" onClick={onMenu} aria-label="Open menu"><Menu size={20} /></button>
-      <div className="hidden min-w-0 md:block"><div className="truncate text-sm font-semibold">{school.name}</div></div>
-      <div className="ml-2 hidden gap-2 sm:flex">
+      <button className="grid size-10 shrink-0 place-items-center rounded-lg hover:bg-surface-2 lg:hidden" onClick={onMenu} aria-label="Open menu"><Menu size={20} /></button>
+      <SchoolLogo size={34} className="shrink-0 lg:hidden" />
+      <div className="hidden min-w-0 xl:block"><div className="truncate text-sm font-semibold">{school.name}</div></div>
+      <div className="ml-1 hidden shrink-0 gap-2 md:flex">
         <select aria-label="Academic year" className="h-8 rounded-lg border border-line bg-surface px-2 text-xs" defaultValue={years[0]}>{years.map((y) => <option key={y}>{y}</option>)}</select>
         <select aria-label="Term" className="h-8 rounded-lg border border-line bg-surface px-2 text-xs" defaultValue={terms[0]}>{terms.map((y) => <option key={y}>{y}</option>)}</select>
       </div>
-      <button onClick={() => setOpen("search")} className="mx-auto flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-3 text-sm text-muted hover:bg-surface-2">
-        <Search size={15} /><span className="flex-1 truncate text-left">Search students, parents, invoices…</span><kbd className="hidden rounded border border-line bg-surface px-1.5 text-[11px] sm:block">⌘K</kbd>
+      <button onClick={() => setOpen("search")} aria-label="Open search" className="ml-auto grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:mx-auto sm:ml-auto sm:flex sm:min-w-0 sm:shrink sm:h-9 sm:w-full sm:max-w-md sm:items-center sm:gap-2 sm:border sm:border-line sm:bg-surface-2/60 sm:px-3 sm:text-sm sm:hover:bg-surface-2">
+        <Search size={17} className="sm:size-[15px]" /><span className="hidden min-w-0 flex-1 truncate text-left sm:block">Search students, parents, invoices…</span><kbd className="hidden rounded border border-line bg-surface px-1.5 text-[11px] md:block">⌘K</kbd>
       </button>
       <div className="relative">
-        <button className="rounded-lg p-2 hover:bg-surface-2" onClick={() => setOpen(open === "quick" ? null : "quick")} aria-label="Quick actions" aria-expanded={open === "quick"}><Plus size={19} /></button>
+        <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "quick" ? null : "quick")} aria-label="Quick actions" aria-expanded={open === "quick"}><Plus size={19} /></button>
         {open === "quick" && <div className={pop}>{[["Register student", "/students/new"], ["Record payment", "/fees?pay=1"], ["Prepare fee reminders", "/fees?tab=reminders"], ["Mark attendance", "/attendance"], ["Issue inventory", "/inventory?issue=1"]].map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
       </div>
       <div className="relative">
-        <button className="relative rounded-lg p-2 hover:bg-surface-2" onClick={() => setOpen(open === "notif" ? null : "notif")} aria-label="Notifications"><Bell size={19} /><span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-danger" /></button>
+        <button className="relative grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "notif" ? null : "notif")} aria-label="Notifications"><Bell size={19} /><span className="absolute right-2 top-2 size-2 rounded-full bg-danger" /></button>
         {open === "notif" && <div className={pop}><div className="px-3 py-2 text-xs font-semibold uppercase text-muted">Needs attention</div>{notifs.map(([l, h]) => <Link key={l} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
       </div>
-      <button className="rounded-lg p-2 hover:bg-surface-2" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{mounted && theme === "dark" ? <Sun size={19} /> : mounted ? <Moon size={19} /> : <Monitor size={19} />}</button>
+      <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{mounted && theme === "dark" ? <Sun size={19} /> : mounted ? <Moon size={19} /> : <Monitor size={19} />}</button>
       <div className="relative">
         <button onClick={() => setOpen(open === "user" ? null : "user")} className="flex items-center gap-2 rounded-lg p-1 hover:bg-surface-2" aria-label="User menu"><Avatar name={ROLES[role].person} size={32} /></button>
         {open === "user" && <div className={pop}>
