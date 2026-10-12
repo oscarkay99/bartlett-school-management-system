@@ -48,7 +48,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Good afternoon, Mrs. Ansah" sub={`${Q.SCHOOL.name} · ${Q.SCHOOL.year} · ${Q.SCHOOL.term} · Week 6 of 15`} actions={<><LinkButton href="/students/new" variant="primary">Register student</LinkButton><LinkButton href="/reports">Reports</LinkButton></>} />
+      <PageHeader title="Good afternoon, Dr. Yeboah" sub={`${Q.SCHOOL.name} · ${Q.SCHOOL.year} · ${Q.SCHOOL.term} · Week 6 of 15`} actions={<><LinkButton href="/students/new" variant="primary">Register student</LinkButton><LinkButton href="/reports">Reports</LinkButton></>} />
       <div className="grid gap-3">
         <AlertBanner tone="danger" icon={AlertTriangle} title={`Outstanding School Fees: ${money(o.outstanding)} across ${o.owingCount} students`}
           actions={<><LinkButton href="/fees?tab=outstanding" size="sm">View students</LinkButton><LinkButton href="/fees?tab=reminders" size="sm" variant="primary">Prepare reminders</LinkButton></>}>

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { Avatar, Badge, Card, CardHeader, PageHeader, StatusBadge } from "@/components/ui/primitives";
+import { ParentRecordActions } from "@/components/RecordActions";
+import { LinkChildButton } from "@/components/ParentActions";
 import { ReminderButtons } from "@/components/fees/ReminderDialog";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
@@ -12,7 +14,7 @@ export default async function ParentPage({ params }: PageProps<"/parents/[id]">)
   const row = Q.reminderRows().find((r) => r.guardian.id === id);
   return (
     <>
-      <PageHeader crumbs={<Link href="/parents" className="text-xs text-muted hover:text-fg">← Parents</Link>} title={`${g.title} ${g.name}`} sub={`Guardian record · ${kids.length} linked child${kids.length === 1 ? "" : "ren"}`} />
+      <PageHeader crumbs={<Link href="/parents" className="text-xs text-muted hover:text-fg">← Parents</Link>} title={`${g.title} ${g.name}`} sub={`Guardian record · ${kids.length} linked child${kids.length === 1 ? "" : "ren"}`} actions={<><ParentRecordActions soleFor={kids.filter((k) => k.guardians.length === 1).map((k) => Q.shortName(k))} initial={{ title: g.title, name: g.name, phone: g.phone, whatsapp: g.whatsapp ?? "", email: g.email ?? "", occupation: g.occupation ?? "", address: g.address, preferred: g.preferred, language: g.language, cSMS: g.consent.SMS ? "1" : "", cWhatsApp: g.consent.WhatsApp ? "1" : "", cEmail: g.consent.Email ? "1" : "" }} /><LinkChildButton parentName={g.name} students={Q.students.filter((x) => !x.guardians.some((y) => y.guardianId === id)).map((x) => ({ id: x.id, name: Q.fullName(x), cls: Q.getClass(x.classId).name, adm: x.admissionNo }))} /></>} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="p-4"><div className="mb-4 flex items-center gap-3"><Avatar name={g.name} size={52} /><div><div className="font-semibold">{g.name}</div></div></div>
           <div className="space-y-2 text-sm"><div className="flex gap-2"><Phone size={15} className="text-muted" />{g.phone}</div>{g.whatsapp && <div className="flex gap-2 text-muted"><Phone size={15} />WhatsApp: {g.whatsapp}</div>}{g.email && <div className="flex gap-2"><Mail size={15} className="text-muted" />{g.email}</div>}<div className="flex gap-2"><MapPin size={15} className="text-muted" />{g.address}</div></div>

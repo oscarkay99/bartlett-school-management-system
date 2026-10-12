@@ -43,3 +43,23 @@ describe("Workflow G — ledgers reconcile", () => {
   it("trial balance balances", () => { const tb = Q.trialBalance(); expect(tb.reduce((a, t) => a + t.dr, 0)).toBe(tb.reduce((a, t) => a + t.cr, 0)); });
   it("fee subledger equals GL fee receivables", () => { expect(Q.subledgerRecon().diff).toBe(0); });
 });
+
+describe("Every student is tied to a guardian", () => {
+  it("each student has at least one verified guardian and exactly one primary", () => {
+    for (const st of Q.students) {
+      const verified = st.guardians.filter((g) => g.verified);
+      expect(verified.length, `${st.admissionNo} has no verified guardian`).toBeGreaterThan(0);
+      expect(st.guardians.filter((g) => g.primary).length, `${st.admissionNo} primary count`).toBe(1);
+    }
+  });
+  it("every guardian reference points to a real guardian record (no orphans)", () => {
+    const ids = new Set(Q.guardians.map((g) => g.id));
+    for (const st of Q.students) for (const g of st.guardians) expect(ids.has(g.guardianId), `${st.admissionNo} -> ${g.guardianId}`).toBe(true);
+  });
+  it("no student has the same guardian linked twice", () => {
+    for (const st of Q.students) expect(new Set(st.guardians.map((g) => g.guardianId)).size).toBe(st.guardians.length);
+  });
+  it("at least one guardian per student is financially responsible", () => {
+    for (const st of Q.students) expect(st.guardians.some((g) => g.financial && g.verified), st.admissionNo).toBe(true);
+  });
+});

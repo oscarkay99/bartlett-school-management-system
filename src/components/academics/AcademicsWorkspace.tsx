@@ -14,7 +14,7 @@ const gradeOf = (scale: Scale[], t: number) => scale.find((g) => t >= g.min) ?? 
 
 export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist, intervention }: { classes: ClassData[]; scale: Scale[]; subjectAvg: { subject: string; avg: number }[]; classAvg: { name: string; avg: number }[]; dist: { grade: string; count: number }[]; intervention: { id: string; name: string; cls: string; avg: number }[] }) {
   const [classId, setClassId] = useState(classes[3].id); const [subject, setSubject] = useState(classes[3].subjects[0]);
-  const { role } = useRole(); const toast = useToast();
+  const { role, allow } = useRole(); const toast = useToast();
   const cd = classes.find((c) => c.id === classId)!;
   const [scores, setScores] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Record<string, Status>>({ "c9|Mathematics": "Submitted", "c10|English Language": "Submitted", "c8|English Language": "Approved", "c5|Mathematics": "Draft" });
@@ -25,8 +25,8 @@ export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist,
   const errs = useMemo(() => cd.students.flatMap((s) => (["ca", "exam"] as const).map((f) => { const v = parseFloat(val(s.id, f)); const max = f === "ca" ? w.ca : w.exam; return isNaN(v) ? { id: s.id, f, m: "Required" } : v < 0 || v > max ? { id: s.id, f, m: `0–${max}` } : null; }).filter(Boolean) as { id: string; f: string; m: string }[]), [cd, scores, key, w]); // eslint-disable-line react-hooks/exhaustive-deps
   const bad = (id: string, f: string) => errs.find((e) => e.id === id && e.f === f);
   const wOk = w.ca + w.exam === 100;
-  const can = role === "teacher" || role === "headmaster" || role === "admin";
-  const isApprover = role === "headmaster" || role === "admin";
+  const can = role === "teacher" || allow("grades", "approve");
+  const isApprover = allow("grades", "approve");
   const pending = Object.entries(status).filter(([, s]) => s === "Submitted");
   const label = (k: string) => { const [c, s] = k.split("|"); return `${classes.find((x) => x.id === c)?.name} — ${s}`; };
 

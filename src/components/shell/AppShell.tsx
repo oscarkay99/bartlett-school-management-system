@@ -7,6 +7,8 @@ import { Bell, BookOpen, Boxes, CalendarCheck, ChevronLeft, GraduationCap, Heart
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
+import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, type Op, type Resource } from "@/lib/permissions";
+export { ROLES };
 
 export interface SearchItem { type: string; label: string; sub: string; href: string }
 interface Nav { href: string; label: string; icon: LucideIcon; key: string }
@@ -25,30 +27,21 @@ const NAV: Nav[] = [
   { href: "/reports", label: "Reports", icon: FileBarChart, key: "reports" },
   { href: "/settings", label: "Settings", icon: Settings, key: "settings" },
 ];
-export const ROLES: Record<string, { label: string; nav: string[]; person: string }> = {
-  proprietor: { label: "Proprietor", person: "Dr. Kwame Yeboah", nav: ["dashboard", "students", "fees", "finance", "inventory", "academics", "attendance", "reports"] },
-  headmaster: { label: "Headmaster", person: "Mrs. Rita Ansah", nav: ["dashboard", "students", "parents", "admissions", "fees", "finance", "inventory", "academics", "staff", "attendance", "comms", "reports", "settings"] },
-  admin: { label: "School Administrator", person: "Adwoa Asante", nav: ["dashboard", "students", "parents", "admissions", "academics", "attendance", "comms", "reports"] },
-  bursar: { label: "Accountant / Bursar", person: "Efua Quansah", nav: ["dashboard", "students", "parents", "fees", "finance", "comms", "reports"] },
-  storekeeper: { label: "Storekeeper", person: "Kojo Danso", nav: ["dashboard", "inventory", "reports"] },
-  teacher: { label: "Teacher", person: "Samuel Owusu", nav: ["dashboard", "academics", "attendance", "students"] },
-  auditor: { label: "Auditor (read-only)", person: "Auditor", nav: ["dashboard", "fees", "finance", "inventory", "reports"] },
-};
-const RoleCtx = createContext<{ role: string; can: (key: string) => boolean }>({ role: "headmaster", can: () => true });
+const RoleCtx = createContext<{ role: string; can: (key: string) => boolean; allow: (r: Resource, o: Op) => boolean }>({ role: DEFAULT_ROLE, can: () => true, allow: () => true });
 export const useRole = () => useContext(RoleCtx);
 
 export function AppShell({ children, school, searchIndex, years, terms }: { children: ReactNode; school: { name: string; short: string }; searchIndex: SearchItem[]; years: string[]; terms: string[] }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
-  const [role, setRole] = useState("headmaster");
+  const [role, setRole] = useState(DEFAULT_ROLE);
   // Read persisted prefs after mount so server and client markup match.
   /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => { try { setCollapsed(localStorage.getItem("sb") === "1"); setRole(localStorage.getItem("role") ?? "headmaster"); } catch {} }, []);
+  useEffect(() => { try { setCollapsed(localStorage.getItem("sb") === "1"); setRole(normalizeRole(localStorage.getItem("role"))); } catch {} }, []);
   useEffect(() => setMobile(false), [path]);
   /* eslint-enable react-hooks/set-state-in-effect */
   const allowed = ROLES[role].nav;
-  const ctx = useMemo(() => ({ role, can: (k: string) => allowed.includes(k) }), [role, allowed]);
+  const ctx = useMemo(() => ({ role, can: (k: string) => allowed.includes(k), allow: (r: Resource, o: Op) => allowedOp(role, r, o) }), [role, allowed]);
   const standalone = path.startsWith("/print") || path === "/login";
   if (standalone) return <>{children}</>;
 

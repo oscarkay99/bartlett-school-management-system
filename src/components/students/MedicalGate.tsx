@@ -8,7 +8,7 @@ import { useRole } from "@/components/shell/AppShell";
 // Field-level authorisation: only designated roles see medical data; others must justify (logged).
 export function MedicalGate({ children }: { children: ReactNode }) {
   const { role } = useRole(); const [granted, setGranted] = useState(false); const [ask, setAsk] = useState(false); const toast = useToast();
-  const allowed = role === "headmaster" || granted;
+  const allowed = role === "owner" || granted;
   if (allowed) return <>{children}</>;
   return (
     <>

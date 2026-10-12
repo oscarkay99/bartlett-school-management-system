@@ -6,13 +6,23 @@ import { DataTable, Modal, Select, Tabs, useToast, type Column } from "@/compone
 import { TreemapChart, HBars } from "@/components/charts/charts";
 import { money, moneyShort } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
+import { RecordDialog, type FieldDef } from "@/components/ui/RecordDialog";
+import { ConfirmDialog } from "@/components/ui/interactive";
+import { useRole } from "@/components/shell/AppShell";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 export interface Item { id: string; sku: string; name: string; category: string; unit: string; location: string; supplier: string; cost: number; reorder: number; max: number; kind: string; expiry?: string }
 export interface Mv { id: string; date: string; itemId: string; type: string; qty: number; ref: string; staff: string; to?: string }
+const ITEM_FIELDS: FieldDef[] = [
+  { key: "name", label: "Item name", required: true, span: 2 }, { key: "category", label: "Category", type: "select", required: true, options: ["Textbooks", "Exercise Books", "Stationery", "Uniforms", "Laboratory Supplies", "Cleaning Materials", "Classroom Supplies", "Sports Equipment", "ICT Equipment", "Furniture", "Maintenance Supplies", "Kitchen & Feeding"] },
+  { key: "kind", label: "Type", type: "select", required: true, options: ["Consumable", "Reusable", "Asset"] }, { key: "sku", label: "SKU", hint: "Auto-generated if blank" }, { key: "unit", label: "Unit", required: true }, { key: "location", label: "Store / location", required: true }, { key: "supplier", label: "Supplier" },
+  { key: "cost", label: "Cost per unit (GHS)", type: "number", required: true, validate: (v) => (Number(v) <= 0 ? "Must be greater than 0" : undefined) }, { key: "reorder", label: "Reorder level", type: "number", required: true }, { key: "max", label: "Maximum stock", type: "number", required: true },
+];
 const IN = ["Received", "Opening", "Returned"];
 const signed = (m: Mv) => (IN.includes(m.type) ? m.qty : m.type === "Adjustment" ? m.qty : -m.qty);
 
-export function InventoryWorkspace({ items, movements, students, openIssue }: { items: Item[]; movements: Mv[]; students: { id: string; name: string; cls: string }[]; openIssue?: boolean }) {
+export function InventoryWorkspace({ items: initialItems, movements, students, openIssue }: { items: Item[]; movements: Mv[]; students: { id: string; name: string; cls: string }[]; openIssue?: boolean }) {
+  const { allow } = useRole(); const [items, setItems] = useState(initialItems); const [form, setForm] = useState<null | { item?: Item }>(null); const [del, setDel] = useState<Item | null>(null);
   const [moves, setMoves] = useState(movements); const [cat, setCat] = useState(""); const [dlg, setDlg] = useState<null | "issue" | "receive">(openIssue ? "issue" : null); const [pre, setPre] = useState(""); const toast = useToast();
   const onHand = useMemo(() => { const m: Record<string, number> = {}; moves.forEach((x) => (m[x.itemId] = (m[x.itemId] ?? 0) + signed(x))); return m; }, [moves]);
   const rows = items.map((i) => ({ ...i, qty: onHand[i.id] ?? 0 })).filter((i) => !cat || i.category === cat);
@@ -31,7 +41,7 @@ export function InventoryWorkspace({ items, movements, students, openIssue }: { 
     { key: "r", header: "Reorder at", align: "right", hideOnMobile: true, render: (x) => x.reorder },
     { key: "v", header: "Value (cost)", align: "right", sort: (x) => x.qty * x.cost, render: (x) => money(x.qty * x.cost) },
     { key: "s", header: "Status", render: (x) => x.qty <= 0 ? <Badge tone="danger" dot>Out of stock</Badge> : x.qty <= x.reorder ? <Badge tone="warn" dot>Low</Badge> : x.qty > x.max ? <Badge tone="info" dot>Overstock</Badge> : <Badge tone="ok" dot>OK</Badge> },
-    { key: "a", header: "", render: (x) => <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setPre(x.id); setDlg("issue"); }}>Issue</Button> },
+    { key: "a", header: "", render: (x) => <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}><Button size="sm" variant="ghost" onClick={() => { setPre(x.id); setDlg("issue"); }}>Issue</Button>{allow("inventory", "edit") && <Button size="sm" variant="ghost" aria-label={`Edit ${x.name}`} onClick={() => setForm({ item: x })}><Pencil size={14} /></Button>}{allow("inventory", "delete") && <Button size="sm" variant="ghost" aria-label={`Delete ${x.name}`} onClick={() => setDel(x)}><Trash2 size={14} className="text-danger" /></Button>}</div> },
   ];
   const mcols: Column<Mv>[] = [
     { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) }, { key: "i", header: "Item", render: (x) => items.find((i) => i.id === x.itemId)?.name }, { key: "t", header: "Type", render: (x) => <Badge tone={IN.includes(x.type) ? "ok" : x.type === "Issued" ? "info" : "danger"}>{x.type}</Badge> },
@@ -48,12 +58,17 @@ export function InventoryWorkspace({ items, movements, students, openIssue }: { 
       </div>
       <div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => { setPre(""); setDlg("issue"); }}><ArrowUpFromLine size={14} />Issue to student / dept</Button><Button onClick={() => setDlg("receive")}><ArrowDownToLine size={14} />Receive stock</Button></div>
       <Tabs tabs={[
-        { id: "items", label: "Items", content: <Card><DataTable rows={rows} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.sku} pageSize={12} filters={<Select label="Category" value={cat} onChange={setCat} options={[{ value: "", label: "All categories" }, ...Array.from(new Set(items.map((i) => i.category))).map((c) => ({ value: c, label: c }))]} />} /></Card> },
+        { id: "items", label: "Items", content: <><div className="mb-3 flex justify-end">{allow("inventory", "create") && <Button onClick={() => setForm({})}><Plus size={14} />Add item</Button>}</div><Card><DataTable rows={rows} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.sku} pageSize={12} filters={<Select label="Category" value={cat} onChange={setCat} options={[{ value: "", label: "All categories" }, ...Array.from(new Set(items.map((i) => i.category))).map((c) => ({ value: c, label: c }))]} />} /></Card></> },
         { id: "ledger", label: "Stock ledger", content: <Card><CardHeader title="Stock movement ledger" sub="Quantities are derived from this append-only ledger — never edited directly." /><DataTable rows={moves} columns={mcols} rowId={(x) => x.id} pageSize={12} searchText={(x) => x.ref + (items.find((i) => i.id === x.itemId)?.name ?? "")} /></Card> },
         { id: "insights", label: "Insights", content: <div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader title="Value by category" /><div className="px-2 pb-3"><TreemapChart data={byCat} /></div></Card><Card><CardHeader title="Most frequently issued" sub="Units issued this term" /><div className="px-2 pb-3"><HBars data={issued} x="name" y="qty" label="Units" money={false} color="var(--info)" /></div></Card></div> },
         { id: "procure", label: "Procurement", content: <Procurement /> },
         { id: "assets", label: "Assets", content: <Assets /> },
       ]} />
+      {form && <RecordDialog open key={form.item?.id ?? "new"} onClose={() => setForm(null)} title={form.item ? `Edit ${form.item.name}` : "Add inventory item"} fields={ITEM_FIELDS} initial={form.item ? { name: form.item.name, category: form.item.category, sku: form.item.sku, unit: form.item.unit, location: form.item.location, supplier: form.item.supplier, cost: String(form.item.cost / 100), reorder: String(form.item.reorder), max: String(form.item.max), kind: form.item.kind } : { name: "", category: "Stationery", sku: "", unit: "pcs", location: "Main Store", supplier: "", cost: "", reorder: "10", max: "100", kind: "Consumable" }}
+        submitLabel={form.item ? "Save changes" : "Add item"} blocked={(v) => (Number(v.max) < Number(v.reorder) ? "Maximum stock must be at least the reorder level." : undefined)}
+        onSubmit={(v) => { const it: Item = { id: form.item?.id ?? `new-${crypto.randomUUID().slice(0, 6)}`, sku: v.sku || `SKU-${String(items.length + 1).padStart(4, "0")}`, name: v.name.trim(), category: v.category, unit: v.unit, location: v.location, supplier: v.supplier, cost: Math.round(Number(v.cost) * 100), reorder: Number(v.reorder), max: Number(v.max), kind: v.kind, expiry: form.item?.expiry };
+          setItems((x) => (form.item ? x.map((y) => (y.id === it.id ? it : y)) : [it, ...x])); toast(form.item ? `${it.name} updated` : `${it.name} added — record opening stock via “Receive stock”`); setForm(null); }} />}
+      <ConfirmDialog open={!!del} onClose={() => setDel(null)} needReason danger confirmLabel="Delete item" title={`Delete ${del?.name ?? ""}`} body={`${(onHand[del?.id ?? ""] ?? 0)} unit(s) are recorded on hand. The item is removed from the catalogue; its stock movement history is kept in the ledger for audit.`} onConfirm={() => { setItems((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.name} deleted`); setDel(null); }} />
       <MoveDialog mode={dlg} onClose={() => setDlg(null)} items={all} students={students} pre={pre} onPost={(m, msg) => { post(m); toast(msg); setDlg(null); }} />
     </div>
   );

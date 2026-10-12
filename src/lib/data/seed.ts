@@ -238,7 +238,7 @@ const expCats: [string, string, string, number][] = [
 ];
 export const expenses: T.Expense[] = expCats.map(([category, vendor, department, amt], i) => ({
   id: `e${i + 1}`, no: `EXP-${pad(i + 1, 4)}`, date: addDays("2026-09-05", i * 3), category, vendor, amount: ghs(amt), method: pick(["Bank Transfer", "Cash", "Mobile Money", "Cheque"]), department,
-  status: i === 10 ? "Pending Approval" : i === 4 ? "Pending Approval" : i % 3 === 0 ? "Paid" : "Approved", approver: amt > 20000 ? "Proprietor" : amt > 5000 ? "Administrator" : "Finance Officer", description: `${vendor} — ${category}`,
+  status: i === 10 ? "Pending Approval" : i === 4 ? "Pending Approval" : i % 3 === 0 ? "Paid" : "Approved", approver: amt > 20000 ? "Owner" : amt > 5000 ? "Administrator" : "Finance Officer", description: `${vendor} — ${category}`,
 }));
 export const budget: T.BudgetLine[] = [
   ["Salaries", 300000], ["Utilities", 28000], ["Internet", 5000], ["Repairs", 20000], ["Stationery", 12000], ["Food Supplies", 80000], ["Transport", 20000], ["Inventory Purchases", 50000], ["Software", 8000], ["Building", 60000], ["Maintenance", 9000],
@@ -261,7 +261,7 @@ export const approvals: T.Approval[] = [
 ];
 export const audit: T.AuditEvent[] = [
   ["Efua Quansah", "Recorded payment RCT-00412 (GHS 2,000)", "Ama Mensah", "Fees"], ["Daniel Ofori", "Reversed payment BNK-2210", "Student s44", "Fees"], ["Adwoa Asante", "Linked guardian Kwabena Mensah", "Kofi Mensah", "Students"],
-  ["Kojo Danso", "Received 100 × English Textbook (GRN-0042)", "Main Store", "Inventory"], ["Headmaster", "Approved grade batch Primary 6 English", "Primary 6", "Academics"], ["Esi Tetteh", "Generated invoices (Term 1)", "11 classes", "Fees"],
+  ["Kojo Danso", "Received 100 × English Textbook (GRN-0042)", "Main Store", "Inventory"], ["Owner", "Approved grade batch Primary 6 English", "Primary 6", "Academics"], ["Esi Tetteh", "Generated invoices (Term 1)", "11 classes", "Fees"],
   ["Admin", "Changed role: Auditor → read-only finance", "User t15", "Access"], ["Kojo Danso", "Adjusted stock: damaged ×2", "Football (size 5)", "Inventory"],
 ].map(([actor, action, target, module], i) => ({ id: `au${i}`, at: `2026-10-${pad(12 - Math.floor(i / 3), 2)} ${pad(16 - i, 2)}:${pad(i * 7 % 60, 2)}`, actor, action, target, module }));
 export const events: T.SchoolEvent[] = [

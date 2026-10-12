@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Download, FileText, Pencil, Phone, Mail, ShieldCheck, TriangleAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileText } from "lucide-react";
 import { Avatar, Badge, Card, CardHeader, LinkButton, PageHeader, Progress, StatusBadge } from "@/components/ui/primitives";
 import { Tabs } from "@/components/ui/interactive";
 import { ReminderButtons } from "@/components/fees/ReminderDialog";
 import { RecordPaymentButton } from "@/components/students/ProfileActions";
 import { MedicalGate } from "@/components/students/MedicalGate";
+import { StudentRecordActions } from "@/components/RecordActions";
+import { GuardiansPanel } from "@/components/students/GuardiansPanel";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { ageFrom, fmtDate, fmtDateLong } from "@/lib/utils";
@@ -35,6 +37,7 @@ export default async function StudentProfile({ params, searchParams }: PageProps
   ].sort((a, b) => a.date.localeCompare(b.date) || a.debit - b.debit);
   let run = 0; const ledgerRows = ledger.map((l) => ({ ...l, bal: (run += l.debit - l.credit) }));
 
+  const directory = Q.guardians.map((g) => ({ id: g.id, title: g.title, name: g.name, phone: g.phone, email: g.email, children: Q.studentsOfGuardian(g.id).length }));
   const payStudent = { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: cls.name, balance: f.balance, invoices: inv.map((i) => ({ no: i.no, balance: f.balance })) };
   const usedRefs = Q.payments.map((p) => p.ref.toUpperCase());
   const tone = f.status === "Paid in Full" ? "ok" : f.status === "Overdue" ? "danger" : f.status === "Credit Balance" ? "info" : "warn";
@@ -51,13 +54,7 @@ export default async function StudentProfile({ params, searchParams }: PageProps
           <div className="flex justify-between"><span className="text-muted">Items on loan</span><b>{issues.filter((i) => i.returnRequired && !i.returned).length}</b></div>
         </div></Card>
       </div>) },
-    { id: "guardians", label: "Parents & Guardians", badge: String(gl.length), content: (
-      <div className="grid gap-3 md:grid-cols-2">{gl.map(({ g, rec }) => (
-        <Card key={g.guardianId}><div className="p-4"><div className="flex items-start justify-between gap-2"><div className="flex items-center gap-3"><Avatar name={rec.name} /><div><Link href={`/parents/${rec.id}`} className="font-semibold hover:text-info">{rec.title} {rec.name}</Link><div className="text-xs text-muted">{g.relationship} · linked to {Q.studentsOfGuardian(rec.id).length} child(ren)</div></div></div>
-          {g.verified ? <Badge tone="ok"><ShieldCheck size={12} />Verified</Badge> : <Badge tone="warn">Unverified</Badge>}</div>
-          <div className="mt-3 flex flex-wrap gap-1.5">{g.primary && <Badge tone="info">Primary</Badge>}{g.legal && <Badge>Legal guardian</Badge>}{g.emergency && <Badge>Emergency</Badge>}{g.pickup && <Badge>Pickup</Badge>}{g.financial && <Badge tone="ok">Financially responsible {g.financialShare}%</Badge>}{!g.receivesFeeReminders && <Badge tone="warn">No fee reminders</Badge>}</div>
-          <div className="mt-3 space-y-1 text-sm text-muted"><div className="flex items-center gap-2"><Phone size={13} />{rec.phone}</div>{rec.email && <div className="flex items-center gap-2"><Mail size={13} />{rec.email}</div>}</div>
-          {g.restriction && <p className="mt-3 flex gap-2 rounded-lg bg-warn/10 p-2.5 text-sm text-warn"><TriangleAlert size={15} className="mt-0.5 shrink-0" />{g.restriction}</p>}</div></Card>))}</div>) },
+    { id: "guardians", label: "Parents & Guardians", badge: String(gl.length), content: <GuardiansPanel studentName={Q.shortName(s)} directory={directory} initial={gl.map(({ g, rec }) => ({ guardianId: rec.id, title: rec.title, name: rec.name, phone: rec.phone, email: rec.email, children: Q.studentsOfGuardian(rec.id).length, relationship: g.relationship, primary: g.primary, legal: g.legal, emergency: g.emergency, pickup: g.pickup, financial: g.financial, share: g.financialShare, reminders: g.receivesFeeReminders, academic: g.receivesAcademic, verified: g.verified, restriction: g.restriction }))} /> },
     { id: "academics", label: "Academic Performance", content: (
       <Card><CardHeader title={`${Q.SCHOOL.term} ${Q.SCHOOL.year}`} sub="Continuous assessment 40% + examination 60% · results shown as drafts until published" action={<LinkButton size="sm" href={`/print/report-card/${s.id}`}><Download size={14} />Report card</LinkButton>} />
         <table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Subject</th><th className="px-3 text-right">CA /40</th><th className="px-3 text-right">Exam /60</th><th className="px-3 text-right">Total</th><th className="px-4 text-right">Grade</th></tr></thead>
@@ -85,7 +82,7 @@ export default async function StudentProfile({ params, searchParams }: PageProps
   return (
     <>
       <PageHeader crumbs={<Link href="/students" className="text-xs text-muted hover:text-fg">← Students</Link>} title={Q.fullName(s)} sub={`${s.admissionNo} · ${cls.name} · ${s.category}`}
-        actions={<><LinkButton href={`/print/statement/${s.id}`}><Download size={14} />Statement</LinkButton><LinkButton href="/students/new"><Pencil size={14} />Edit</LinkButton><RecordPaymentButton student={payStudent} usedRefs={usedRefs} /></>} />
+        actions={<><LinkButton href={`/print/statement/${s.id}`}><Download size={14} />Statement</LinkButton><StudentRecordActions adm={s.admissionNo} classes={Q.classes.map((c) => c.name)} houses={["Nkrumah", "Aggrey", "Yaa Asantewaa", "Sutherland"]} initial={{ first: s.first, middle: s.middle ?? "", last: s.last, dob: s.dob, gender: s.gender, classId: cls.name, category: s.category, house: s.house, status: s.status, address: s.address }} /><RecordPaymentButton student={payStudent} usedRefs={usedRefs} /></>} />
       <div className="mb-5 flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4">
         <Avatar name={Q.shortName(s)} size={64} />
         <div className="flex flex-wrap gap-2"><StatusBadge status={s.status} />{s.medicalAlert && <Badge tone="danger"><AlertTriangle size={11} />Medical alert</Badge>}{s.scholarship && <Badge tone="info">{s.scholarship}</Badge>}</div>
