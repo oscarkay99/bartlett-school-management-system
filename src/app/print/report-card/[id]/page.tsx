@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { PrintFrame } from "@/components/PrintDoc";
 import * as Q from "@/lib/data/queries";
 import { ageFrom, fmtDateLong } from "@/lib/utils";
+export function generateStaticParams() { return Q.students.map((s) => ({ id: s.id })); }
+export const dynamicParams = false;
+
 export default async function ReportCard({ params }: PageProps<"/print/report-card/[id]">) {
   const { id } = await params; const s = Q.getStudent(id); if (!s) notFound();
   const g = Q.studentGrades(id); const att = Q.studentAttendance(id); const avg = Math.round(g.reduce((a, b) => a + b.total, 0) / Math.max(1, g.length));

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export function SchoolLogo({ size = 40, className }: { size?: number; className?: string }) {
   return (
     <span className={cn("inline-grid shrink-0 place-items-center overflow-hidden", className)} style={{ width: size, height: size }}>
-      <Image src="/bartlett-crest.png" alt="Bartlett Montessori School crest" width={size * 2} height={size * 2} priority unoptimized className="size-full object-contain" />
+      <Image src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/bartlett-crest.png`} alt="Bartlett Montessori School crest" width={size * 2} height={size * 2} priority unoptimized className="size-full object-contain" />
     </span>
   );
 }

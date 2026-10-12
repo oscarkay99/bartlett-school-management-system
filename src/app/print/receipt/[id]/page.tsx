@@ -3,6 +3,9 @@ import { PrintFrame } from "@/components/PrintDoc";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { fmtDateLong } from "@/lib/utils";
+export function generateStaticParams() { return Q.payments.map((p) => ({ id: p.id })); }
+export const dynamicParams = false;
+
 export default async function ReceiptPrint({ params }: PageProps<"/print/receipt/[id]">) {
   const { id } = await params; const p = Q.payments.find((x) => x.id === id); if (!p) notFound();
   const s = Q.getStudent(p.studentId)!; const f = Q.feeSummary(s.id); const g = p.guardianId ? Q.getGuardian(p.guardianId) : undefined;

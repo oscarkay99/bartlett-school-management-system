@@ -1,9 +1,9 @@
 import { PageHeader } from "@/components/ui/primitives";
-import { InventoryWorkspace } from "@/components/inventory/InventoryWorkspace";
+import { Suspense } from "react";
+import { InventoryRoute } from "@/components/inventory/InventoryRoute";
 import * as Q from "@/lib/data/queries";
 export const metadata = { title: "Inventory — EduFlow" };
-export default async function Inventory({ searchParams }: PageProps<"/inventory">) {
-  const sp = await searchParams;
+export default function Inventory() {
   return (<><PageHeader title="Inventory & Assets" sub="Stock ledger, issuance, procurement and asset custody" />
-    <InventoryWorkspace items={Q.inventory.map(({ onHand, ...i }) => { void onHand; return i; })} movements={Q.movements.map((m) => ({ ...m }))} students={Q.activeStudents().map((s) => ({ id: s.id, name: Q.fullName(s), cls: Q.getClass(s.classId).name }))} openIssue={sp.issue === "1"} /></>);
+    <Suspense fallback={null}><InventoryRoute items={Q.inventory.map(({ onHand, ...i }) => { void onHand; return i; })} movements={Q.movements.map((m) => ({ ...m }))} students={Q.activeStudents().map((s) => ({ id: s.id, name: Q.fullName(s), cls: Q.getClass(s.classId).name }))} /></Suspense></>);
 }

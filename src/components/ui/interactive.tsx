@@ -1,4 +1,5 @@
 "use client";
+import { useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronsUpDown, Search, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -81,6 +82,12 @@ export function Tabs({ tabs, initial }: { tabs: { id: string; label: string; con
       <div role="tabpanel" className="anim-pop" key={active}>{tabs.find((t) => t.id === active)?.content}</div>
     </div>
   );
+}
+
+// Tabs whose initial tab comes from the URL (?tab=fees). Remounts when the query changes.
+export function QueryTabs(props: Parameters<typeof Tabs>[0]) {
+  const q = useSearchParams().get("tab") ?? undefined;
+  return <Tabs key={q ?? "default"} {...props} initial={q && props.tabs.some((t) => t.id === q) ? q : props.initial} />;
 }
 
 // ---------- DataTable ----------

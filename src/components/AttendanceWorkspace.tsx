@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { Badge, Button, Card, CardHeader } from "@/components/ui/primitives";
@@ -19,7 +20,7 @@ export function AttendanceWorkspace({ classes, trend, chronic }: { classes: { id
           <ul className="divide-y divide-line">{c.students.map((s) => <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5"><span className="min-w-[140px] font-medium">{s.name}</span>
             <div role="radiogroup" aria-label={`Attendance for ${s.name}`} className="flex gap-1">{OPTS.map(([k, l, cls]) => <button key={k} role="radio" aria-checked={get(s.id) === k} title={l} onClick={() => { setMarks({ ...marks, [`${cid}|${s.id}`]: k }); setSaved(false); }} className={cn("size-10 rounded-lg border text-sm font-semibold transition sm:size-9", get(s.id) === k ? cls + " border-transparent" : "border-line text-muted hover:bg-surface-2")}>{k}</button>)}</div></li>)}</ul></Card>) },
       { id: "trend", label: "Trends", content: <Card><CardHeader title="School-wide attendance" sub="Daily %, last 20 school days" /><div className="px-2 pb-3"><LineTrend data={trend.map((t) => ({ ...t, date: t.date.slice(5) }))} x="date" y="rate" label="Attendance" money={false} domain={[85, 100]} color="var(--brand)" /></div></Card> },
-      { id: "chronic", label: "Chronic absence", badge: String(chronic.length), content: <Card><CardHeader title="Attendance concerns" sub="Students absent 3+ days this term. Parent notifications for these need staff verification before sending." />{chronic.map((s) => <div key={s.id} className="flex items-center justify-between border-t border-line px-4 py-3"><a href={`/students/${s.id}`} className="hover:text-info">{s.name} <span className="text-xs text-muted">{s.cls}</span></a><div className="flex items-center gap-2"><Badge tone="warn">{s.absent} absences</Badge><Button size="sm" onClick={() => toast("Notification drafted — awaiting verification")}>Draft notice</Button></div></div>)}</Card> },
+      { id: "chronic", label: "Chronic absence", badge: String(chronic.length), content: <Card><CardHeader title="Attendance concerns" sub="Students absent 3+ days this term. Parent notifications for these need staff verification before sending." />{chronic.map((s) => <div key={s.id} className="flex items-center justify-between border-t border-line px-4 py-3"><Link href={`/students/${s.id}`} className="hover:text-info">{s.name} <span className="text-xs text-muted">{s.cls}</span></Link><div className="flex items-center gap-2"><Badge tone="warn">{s.absent} absences</Badge><Button size="sm" onClick={() => toast("Notification drafted — awaiting verification")}>Draft notice</Button></div></div>)}</Card> },
     ]} />
   );
 }

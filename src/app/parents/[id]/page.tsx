@@ -8,6 +8,9 @@ import { ReminderButtons } from "@/components/fees/ReminderDialog";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 
+export function generateStaticParams() { return Q.guardians.map((g) => ({ id: g.id })); }
+export const dynamicParams = false;
+
 export default async function ParentPage({ params }: PageProps<"/parents/[id]">) {
   const { id } = await params; const g = Q.getGuardian(id); if (!g) notFound();
   const kids = Q.studentsOfGuardian(id);

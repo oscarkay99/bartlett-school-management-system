@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Lock, Send, Undo2 } from "lucide-react";
 import { AlertBanner, Badge, Button, Card, CardHeader, Field, StatusBadge, inputClass } from "@/components/ui/primitives";
@@ -62,7 +63,7 @@ export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist,
             <Card><CardHeader title="Average by class" sub="Mean total score (CA + exam)" /><div className="px-2 pb-3"><HBars data={classAvg} x="name" y="avg" label="Average" money={false} color="var(--info)" height={320} /></div></Card>
             <Card><CardHeader title="Average by subject" /><div className="px-2 pb-3"><VBars data={subjectAvg} x="subject" y="avg" label="Average" color="var(--brand)" domain={[0, 100]} /></div></Card>
             <Card><CardHeader title="Grade distribution" /><div className="px-2 pb-3"><VBars data={dist} x="grade" y="count" label="Results" color="var(--warn)" height={220} /></div></Card>
-            <Card><CardHeader title="Students who may benefit from support" sub="Average below 50%. A prompt for a human conversation, not an automated judgement." /><ul className="divide-y divide-line">{intervention.slice(0, 7).map((s) => <li key={s.id} className="flex justify-between px-4 py-2.5"><a className="hover:text-info" href={`/students/${s.id}?tab=academics`}>{s.name} <span className="text-xs text-muted">{s.cls}</span></a><b>{s.avg}%</b></li>)}{intervention.length === 0 && <li className="p-4 text-muted">No students below threshold.</li>}</ul></Card>
+            <Card><CardHeader title="Students who may benefit from support" sub="Average below 50%. A prompt for a human conversation, not an automated judgement." /><ul className="divide-y divide-line">{intervention.slice(0, 7).map((s) => <li key={s.id} className="flex justify-between px-4 py-2.5"><Link className="hover:text-info" href={`/students/${s.id}?tab=academics`}>{s.name} <span className="text-xs text-muted">{s.cls}</span></Link><b>{s.avg}%</b></li>)}{intervention.length === 0 && <li className="p-4 text-muted">No students below threshold.</li>}</ul></Card>
           </div>) },
         { id: "approvals", label: "Approvals", badge: String(pending.length), content: <Card><CardHeader title="Grade batches" />{Object.entries(status).map(([k, s]) => <div key={k} className="flex items-center justify-between border-t border-line px-4 py-3"><span>{label(k)}</span><StatusBadge status={s === "Published" ? "Approved" : s} /></div>)}</Card> },
         { id: "setup", label: "Assessment setup", content: (

@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Download, FileText } from "lucide-react";
 import { Avatar, Badge, Card, CardHeader, LinkButton, PageHeader, Progress, StatusBadge } from "@/components/ui/primitives";
-import { Tabs } from "@/components/ui/interactive";
+import { Suspense } from "react";
+import { QueryTabs } from "@/components/ui/interactive";
 import { ReminderButtons } from "@/components/fees/ReminderDialog";
 import { RecordPaymentButton } from "@/components/students/ProfileActions";
 import { MedicalGate } from "@/components/students/MedicalGate";
@@ -12,8 +13,11 @@ import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { ageFrom, fmtDate, fmtDateLong } from "@/lib/utils";
 
-export default async function StudentProfile({ params, searchParams }: PageProps<"/students/[id]">) {
-  const { id } = await params; const sp = await searchParams;
+export function generateStaticParams() { return Q.students.map((s) => ({ id: s.id })); }
+export const dynamicParams = false;
+
+export default async function StudentProfile({ params }: PageProps<"/students/[id]">) {
+  const { id } = await params;
   const s = Q.getStudent(id); if (!s) notFound();
   const cls = Q.getClass(s.classId); const f = Q.feeSummary(s.id);
   const inv = Q.invoices.filter((i) => i.studentId === s.id);
@@ -96,7 +100,7 @@ export default async function StudentProfile({ params, searchParams }: PageProps
       ) : (
         <div className="mb-5 flex items-center gap-3 rounded-xl border border-ok/30 bg-ok/8 px-4 py-3"><CheckCircle2 className="text-ok" /><b>{f.status}</b><span className="text-muted">No outstanding fees this term.</span></div>
       )}
-      <Tabs initial={typeof sp.tab === "string" ? sp.tab : undefined} tabs={tabs} />
+      <Suspense fallback={null}><QueryTabs tabs={tabs} /></Suspense>
     </>
   );
 }

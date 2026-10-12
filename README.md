@@ -37,3 +37,13 @@ Flow: `development` → `testing` → `main`.
 Auto-commit: `.claude/settings.json` registers a Claude Code `Stop` hook that runs `scripts/auto-commit.sh`
 after each Claude turn. It commits only when the current branch is `development`; on `testing` or `main`
 nothing is committed automatically. Edits made outside Claude Code are not auto-committed.
+
+## QA site (GitHub Pages)
+Every push to `testing` runs `.github/workflows/deploy-qa.yml`: typecheck → lint → tests → static export → publish.
+URL: https://oscarkay99.github.io/bartlett-school-management-system/
+
+To reproduce the Pages build locally:
+```bash
+GITHUB_PAGES=true NEXT_PUBLIC_BASE_PATH=/bartlett-school-management-system npm run build   # outputs ./out
+```
+The QA site is a static front end with generated demo data only: no real student or financial data belongs in it.

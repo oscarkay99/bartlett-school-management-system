@@ -3,6 +3,9 @@ import { PrintFrame } from "@/components/PrintDoc";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { fmtDateLong } from "@/lib/utils";
+export function generateStaticParams() { return Q.invoices.flatMap((i) => [{ id: i.id }, { id: i.no }]); }
+export const dynamicParams = false;
+
 export default async function InvoicePrint({ params }: PageProps<"/print/invoice/[id]">) {
   const { id } = await params; const i = Q.invoices.find((x) => x.id === id || x.no === id); if (!i) notFound();
   const s = Q.getStudent(i.studentId)!; const f = Q.feeSummary(s.id); const g = Q.getGuardian(s.guardians[0].guardianId)!;

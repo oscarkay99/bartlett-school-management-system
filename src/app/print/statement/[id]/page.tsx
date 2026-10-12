@@ -3,6 +3,9 @@ import { PrintFrame } from "@/components/PrintDoc";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
+export function generateStaticParams() { return Q.students.map((s) => ({ id: s.id })); }
+export const dynamicParams = false;
+
 export default async function StatementPrint({ params }: PageProps<"/print/statement/[id]">) {
   const { id } = await params; const s = Q.getStudent(id); if (!s) notFound();
   const rows = [

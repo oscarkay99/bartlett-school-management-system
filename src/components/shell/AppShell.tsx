@@ -30,7 +30,7 @@ const NAV: Nav[] = [
 const RoleCtx = createContext<{ role: string; can: (key: string) => boolean; allow: (r: Resource, o: Op) => boolean }>({ role: DEFAULT_ROLE, can: () => true, allow: () => true });
 export const useRole = () => useContext(RoleCtx);
 
-export function AppShell({ children, school, searchIndex, years, terms }: { children: ReactNode; school: { name: string; short: string }; searchIndex: SearchItem[]; years: string[]; terms: string[] }) {
+export function AppShell({ children, school, years, terms }: { children: ReactNode; school: { name: string; short: string }; years: string[]; terms: string[] }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
@@ -73,14 +73,14 @@ export function AppShell({ children, school, searchIndex, years, terms }: { chil
       <aside className={cn("fixed inset-y-0 left-0 z-40 hidden transition-[width] lg:block", collapsed ? "w-[68px]" : "w-[250px]")}>{sidebar}</aside>
       {mobile && <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setMobile(false)}><div className="absolute inset-0 bg-black/50" /><aside className="anim-slide relative h-full w-[260px]" style={{ animationName: "none" }} onClick={(e) => e.stopPropagation()}>{sidebar}<button className="absolute right-2 top-4 text-white" onClick={() => setMobile(false)} aria-label="Close menu"><X /></button></aside></div>}
       <div className={cn("transition-[padding]", collapsed ? "lg:pl-[68px]" : "lg:pl-[250px]")}>
-        <Topbar school={school} years={years} terms={terms} onMenu={() => setMobile(true)} searchIndex={searchIndex} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
+        <Topbar school={school} years={years} terms={terms} onMenu={() => setMobile(true)} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
         <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">{children}</main>
       </div>
     </RoleCtx.Provider>
   );
 }
 
-function Topbar({ school, years, terms, onMenu, searchIndex, role, setRole }: { school: { name: string }; years: string[]; terms: string[]; onMenu: () => void; searchIndex: SearchItem[]; role: string; setRole: (r: string) => void }) {
+function Topbar({ school, years, terms, onMenu, role, setRole }: { school: { name: string }; years: string[]; terms: string[]; onMenu: () => void; role: string; setRole: (r: string) => void }) {
   const [open, setOpen] = useState<null | "search" | "notif" | "quick" | "user">(null);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setOpen("search"); } if (e.key === "Escape") setOpen(null); };
@@ -118,12 +118,20 @@ function Topbar({ school, years, terms, onMenu, searchIndex, role, setRole }: { 
           {Object.entries(ROLES).map(([k, r]) => <button key={k} onClick={() => { setRole(k); setOpen(null); }} className={cn("flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left hover:bg-surface-2", k === role && "font-semibold text-info")}>{r.label}{k === role && <ShieldCheck size={14} />}</button>)}
         </div>}
       </div>
-      {open === "search" && <CommandSearch index={searchIndex} onClose={() => setOpen(null)} />}
+      {open === "search" && <CommandSearch onClose={() => setOpen(null)} />}
     </header>
   );
 }
 
-function CommandSearch({ index, onClose }: { index: SearchItem[]; onClose: () => void }) {
+let searchCache: SearchItem[] | null = null;
+function CommandSearch({ onClose }: { onClose: () => void }) {
+  const [index, setIndex] = useState<SearchItem[]>(searchCache ?? []); const [loading, setLoading] = useState(!searchCache); const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (searchCache) return; let live = true;
+    fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/search-index.json`).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((d: SearchItem[]) => { searchCache = d; if (live) { setIndex(d); setLoading(false); } }).catch(() => { if (live) { setFailed(true); setLoading(false); } });
+    return () => { live = false; };
+  }, []);
   const [q, setQ] = useState(""); const [i, setI] = useState(0); const router = useRouter(); const ref = useRef<HTMLInputElement>(null);
   useEffect(() => ref.current?.focus(), []);
   const results = useMemo(() => { const n = q.trim().toLowerCase(); if (!n) return index.slice(0, 8); return index.filter((x) => (x.label + " " + x.sub).toLowerCase().includes(n)).slice(0, 12); }, [q, index]);
@@ -136,7 +144,7 @@ function CommandSearch({ index, onClose }: { index: SearchItem[]; onClose: () =>
             placeholder="Student, admission no., parent, phone, invoice, receipt, item…" className="h-12 flex-1 bg-transparent outline-none" aria-label="Search" /></div>
         <ul className="max-h-[50vh] overflow-y-auto p-1.5" role="listbox">
           {results.map((r, k) => <li key={r.href + r.label} role="option" aria-selected={k === i}><button onMouseEnter={() => setI(k)} onClick={() => go(r)} className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left", k === i && "bg-surface-2")}><span className="w-16 shrink-0 text-[11px] uppercase text-muted">{r.type}</span><span className="min-w-0"><span className="block truncate font-medium">{r.label}</span><span className="block truncate text-xs text-muted">{r.sub}</span></span></button></li>)}
-          {results.length === 0 && <li className="p-6 text-center text-muted">No results for “{q}”</li>}
+          {loading && <li className="p-6 text-center text-muted">Loading search…</li>}{failed && <li className="p-6 text-center text-danger">Search is unavailable right now.</li>}{!loading && !failed && results.length === 0 && <li className="p-6 text-center text-muted">No results for “{q}”</li>}
         </ul>
         <div className="flex gap-4 border-t border-line px-4 py-2 text-[11px] text-muted"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div>
       </div>
