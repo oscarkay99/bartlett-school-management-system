@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, ChevronsUpDown, Search, X, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronsUpDown, Search, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button, EmptyState } from "./primitives";
 
@@ -89,13 +89,13 @@ export function DataTable<T>({ rows, columns, searchText, filters, pageSize = 10
   rows: T[]; columns: Column<T>[]; searchText?: (r: T) => string; filters?: ReactNode; pageSize?: number; onRowClick?: (r: T) => void;
   selectable?: boolean; selected?: Set<string>; onSelect?: (s: Set<string>) => void; empty?: ReactNode; toolbar?: ReactNode; rowId?: (r: T) => string;
 }) {
-  const [q, setQ] = useState(""); const [sort, setSort] = useState<{ k: string; d: 1 | -1 } | null>(null); const [page, setPage] = useState(0);
+  const [q, setQ] = useState(""); const [sort, setSort] = useState<{ k: string; d: 1 | -1 } | null>(null); const [page, setPage] = useState(0); const [size, setSize] = useState(pageSize);
   const data = useMemo(() => {
     let r = rows; if (q && searchText) { const n = q.toLowerCase(); r = r.filter((x) => searchText(x).toLowerCase().includes(n)); }
     if (sort) { const c = columns.find((c) => c.key === sort.k); if (c?.sort) r = [...r].sort((a, b) => { const x = c.sort!(a), y = c.sort!(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.d; }); }
     return r;
   }, [rows, q, sort, columns, searchText]);
-  const pages = Math.max(1, Math.ceil(data.length / pageSize)); const cur = Math.min(page, pages - 1); const view = data.slice(cur * pageSize, cur * pageSize + pageSize);
+  const pages = Math.max(1, Math.ceil(data.length / size)); const cur = Math.min(page, pages - 1); const view = data.slice(cur * size, cur * size + size);
   const allOnPage = selectable && rowId && view.length > 0 && view.every((r) => selected?.has(rowId(r)));
   return (
     <div>
@@ -126,12 +126,31 @@ export function DataTable<T>({ rows, columns, searchText, filters, pageSize = 10
         </table>
         {view.length === 0 && (empty ?? <EmptyState icon={Search} title="No matching records" body="Try adjusting your search or filters." />)}
       </div>
-      <div className="flex items-center justify-between border-t border-line px-3 py-2 text-xs text-muted">
-        <span>{data.length === 0 ? "0 results" : `${cur * pageSize + 1}–${Math.min(data.length, cur * pageSize + pageSize)} of ${data.length}`}</span>
-        <div className="flex items-center gap-1"><Button size="sm" variant="ghost" disabled={cur === 0} onClick={() => setPage(cur - 1)} aria-label="Previous page"><ChevronLeft size={14} /></Button><span>Page {cur + 1} / {pages}</span><Button size="sm" variant="ghost" disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)} aria-label="Next page"><ChevronRight size={14} /></Button></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2 text-xs text-muted">
+        <div className="flex items-center gap-3">
+          <span>{data.length === 0 ? "0 results" : `${cur * size + 1}–${Math.min(data.length, cur * size + size)} of ${data.length}`}</span>
+          <label className="flex items-center gap-1.5">Rows per page
+            <select aria-label="Rows per page" value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }} className="h-7 rounded-md border border-line bg-surface px-1.5 text-xs text-fg">{[...new Set([pageSize, 10, 25, 50, 100])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
+        </div>
+        <nav aria-label="Pagination" className="flex items-center gap-0.5">
+          <Button size="sm" variant="ghost" disabled={cur === 0} onClick={() => setPage(0)} aria-label="First page"><ChevronsLeft size={14} /></Button>
+          <Button size="sm" variant="ghost" disabled={cur === 0} onClick={() => setPage(cur - 1)} aria-label="Previous page"><ChevronLeft size={14} /></Button>
+          {pageWindow(cur, pages).map((n, i) => n === "…" ? <span key={`e${i}`} className="px-1">…</span> : (
+            <button key={n} onClick={() => setPage(n - 1)} aria-label={`Page ${n}`} aria-current={n - 1 === cur ? "page" : undefined} className={cn("h-7 min-w-7 rounded-md px-1.5 text-xs font-medium transition", n - 1 === cur ? "bg-info text-white" : "hover:bg-surface-2 text-fg")}>{n}</button>))}
+          <Button size="sm" variant="ghost" disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)} aria-label="Next page"><ChevronRight size={14} /></Button>
+          <Button size="sm" variant="ghost" disabled={cur >= pages - 1} onClick={() => setPage(pages - 1)} aria-label="Last page"><ChevronsRight size={14} /></Button>
+        </nav>
       </div>
     </div>
   );
+}
+
+// Compact page list: 1 … 4 5 [6] 7 8 … 15
+function pageWindow(cur: number, total: number): (number | "…")[] {
+  const c = cur + 1; if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  if (c <= 4) return [1, 2, 3, 4, 5, "…", total];
+  if (c >= total - 3) return [1, "…", total - 4, total - 3, total - 2, total - 1, total];
+  return [1, "…", c - 1, c, c + 1, "…", total];
 }
 
 export function Select({ value, onChange, options, label }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; label: string }) {
