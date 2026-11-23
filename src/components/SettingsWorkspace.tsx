@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Upload } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Field, inputClass } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
+import { AcademicCalendar } from "@/components/settings/AcademicCalendar";
 import { Tabs, useToast } from "@/components/ui/interactive";
 const PERMS = ["students.read", "students.update", "parents.link", "dashboard.view_finance", "fees.view_outstanding", "fees.send_reminders", "fees.record_payment", "fees.issue_invoice", "feeding.record_payment", "feeding.issue_bill", "extracurricular.record_payment", "extracurricular.issue_invoice", "fees.adjust", "fees.refund", "finance.approve", "inventory.issue", "inventory.adjust", "grades.enter", "grades.approve", "reports.export", "settings.manage"];
 const BILLING = ["fees.view_outstanding", "fees.send_reminders", "fees.record_payment", "fees.issue_invoice", "feeding.record_payment", "feeding.issue_bill", "extracurricular.record_payment", "extracurricular.issue_invoice"];
@@ -19,7 +20,7 @@ export function SettingsWorkspace({ school }: { school: Record<string, string> }
             <div><label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-medium hover:bg-surface-2"><Upload size={14} />Upload logo<input type="file" accept="image/png,image/jpeg,image/svg+xml" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) setLogo(URL.createObjectURL(f)); }} /></label><p className="mt-1 text-xs text-muted">Appears on invoices, receipts, report cards and exports.</p></div></div>
           {[["School name", school.name], ["Phone", school.phone], ["Email", school.email], ["Location", school.city], ["Currency", school.currency], ["Timezone", school.timezone]].map(([l, v]) => <Field key={l} label={l}><input className={inputClass} defaultValue={v} /></Field>)}
           <div className="sm:col-span-2"><Button variant="primary" onClick={() => save("School profile")}>Save changes</Button></div></div></Card>) },
-      { id: "calendar", label: "Academic calendar", content: <Card className="max-w-3xl"><CardHeader title="2026/2027" sub="Terms, holidays and report dates" />{[["Term 1", "7 Sep 2026 – 18 Dec 2026"], ["Term 2", "11 Jan 2027 – 8 Apr 2027"], ["Term 3", "3 May 2027 – 23 Jul 2027"]].map(([a, b]) => <div key={a} className="flex justify-between border-t border-line px-4 py-3"><b>{a}</b><span className="text-muted">{b}</span></div>)}</Card> },
+      { id: "calendar", label: "Academic calendar", content: <AcademicCalendar /> },
       { id: "numbering", label: "Numbering", content: <Card className="max-w-2xl p-5"><div className="grid gap-4 sm:grid-cols-2">{[["Admission number", "BMS/{YY}/{SEQ:4}"], ["Invoice number", "INV-{YYYY}-T{TERM}-{SEQ:4}"], ["Receipt number", "RCT-{SEQ:5}"], ["Purchase order", "PO-{SEQ:4}"]].map(([l, v]) => <Field key={l} label={l}><input className={inputClass} defaultValue={v} /></Field>)}</div><Button className="mt-4" variant="primary" onClick={() => save("Numbering schemes")}>Save</Button></Card> },
       { id: "approvals", label: "Approval thresholds", content: (
         <Card className="max-w-2xl p-5"><p className="mb-3 text-sm text-muted">Expenses up to each limit (GHS) are approved by the listed role. Configurable, never hard-coded.</p>

@@ -1,6 +1,7 @@
 import { ghs, type Minor } from "../money";
 import type * as T from "./types";
 import { ACTIVITIES, type Activity } from "../accounts";
+import type { AcademicYear } from "../calendar";
 
 // Deterministic PRNG so server & client agree and screenshots are stable.
 let s = 20261012;
@@ -17,6 +18,11 @@ export const SCHOOL = {
   email: "accounts@bartlett.edu.gh", currency: "GHS", timezone: "Africa/Accra", year: "2026/2027", term: "Term 1",
   termStart: "2026-09-07", termEnd: "2026-12-18", reopening: "2027-01-11",
   terms: ["Term 1", "Term 2", "Term 3"], years: ["2026/2027", "2025/2026"],
+  // Newest first. More years and terms can be added in Settings → Academic calendar.
+  calendar: [
+    { name: "2026/2027", start: "2026-09-07", end: "2027-07-23", terms: [{ name: "Term 1", start: "2026-09-07", end: "2026-12-18" }, { name: "Term 2", start: "2027-01-11", end: "2027-04-08" }, { name: "Term 3", start: "2027-05-03", end: "2027-07-23" }] },
+    { name: "2025/2026", start: "2025-09-08", end: "2026-07-24", terms: [{ name: "Term 1", start: "2025-09-08", end: "2025-12-19" }, { name: "Term 2", start: "2026-01-12", end: "2026-04-09" }, { name: "Term 3", start: "2026-05-04", end: "2026-07-24" }] },
+  ] as AcademicYear[],
 };
 
 const maleF = ["Kofi", "Kwame", "Yaw", "Kwabena", "Kwesi", "Nana", "Kojo", "Daniel", "Samuel", "Emmanuel", "Joshua", "Prince", "Isaac", "Michael", "Ebenezer", "Caleb"];

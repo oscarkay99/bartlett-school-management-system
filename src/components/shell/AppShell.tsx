@@ -7,6 +7,7 @@ import { Bell, BookOpen, Boxes, CalendarCheck, ChevronLeft, GraduationCap, Heart
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
+import { PeriodSelect } from "./CalendarContext";
 import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, canVisit, type MoneyAccess, type Op, type Resource } from "@/lib/permissions";
 export { ROLES };
 
@@ -41,7 +42,7 @@ export function MoneyGate({ level = "full", children, fallback = null }: { level
   return <>{ok ? children : fallback}</>;
 }
 
-export function AppShell({ children, school, years, terms }: { children: ReactNode; school: { name: string; short: string }; years: string[]; terms: string[] }) {
+export function AppShell({ children, school }: { children: ReactNode; school: { name: string; short: string } }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
@@ -76,8 +77,7 @@ export function AppShell({ children, school, years, terms }: { children: ReactNo
       <div className="space-y-2 border-t border-white/10 p-3 md:hidden">
         <div className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Academic period</div>
         <div className="grid grid-cols-2 gap-2">
-          <select aria-label="Academic year" className="h-9 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white" defaultValue={years[0]}>{years.map((y) => <option key={y} className="text-black">{y}</option>)}</select>
-          <select aria-label="Term" className="h-9 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white" defaultValue={terms[0]}>{terms.map((y) => <option key={y} className="text-black">{y}</option>)}</select>
+          <PeriodSelect dark />
         </div>
       </div>
       <button onClick={() => { setCollapsed(!collapsed); try { localStorage.setItem("sb", collapsed ? "0" : "1"); } catch {} }} className="hidden lg:flex items-center gap-2 border-t border-white/10 px-4 py-3 text-xs hover:text-white" aria-label="Collapse sidebar">
@@ -92,14 +92,14 @@ export function AppShell({ children, school, years, terms }: { children: ReactNo
       <aside className={cn("fixed inset-y-0 left-0 z-40 hidden transition-[width] lg:block", collapsed ? "w-[68px]" : "w-[250px]")}>{sidebar}</aside>
       {mobile && <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setMobile(false)}><div className="absolute inset-0 bg-black/50" /><aside className="anim-slide relative h-full w-[260px]" style={{ animationName: "none" }} onClick={(e) => e.stopPropagation()}>{sidebar}<button className="absolute right-2 top-4 text-white" onClick={() => setMobile(false)} aria-label="Close menu"><X /></button></aside></div>}
       <div className={cn("transition-[padding]", collapsed ? "lg:pl-[68px]" : "lg:pl-[250px]")}>
-        <Topbar school={school} years={years} terms={terms} onMenu={() => setMobile(true)} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
+        <Topbar school={school} onMenu={() => setMobile(true)} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
         <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">{blocked ? <NoAccess label={ROLES[role].label} /> : children}</main>
       </div>
     </RoleCtx.Provider>
   );
 }
 
-function Topbar({ school, years, terms, onMenu, role, setRole }: { school: { name: string }; years: string[]; terms: string[]; onMenu: () => void; role: string; setRole: (r: string) => void }) {
+function Topbar({ school, onMenu, role, setRole }: { school: { name: string }; onMenu: () => void; role: string; setRole: (r: string) => void }) {
   const [open, setOpen] = useState<null | "search" | "notif" | "quick" | "user">(null);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setOpen("search"); } if (e.key === "Escape") setOpen(null); };
@@ -115,8 +115,7 @@ function Topbar({ school, years, terms, onMenu, role, setRole }: { school: { nam
       <SchoolLogo size={34} className="shrink-0 lg:hidden" />
       <div className="hidden min-w-0 xl:block"><div className="truncate text-sm font-semibold">{school.name}</div></div>
       <div className="ml-1 hidden shrink-0 gap-2 md:flex">
-        <select aria-label="Academic year" className="h-8 rounded-lg border border-line bg-surface px-2 text-xs" defaultValue={years[0]}>{years.map((y) => <option key={y}>{y}</option>)}</select>
-        <select aria-label="Term" className="h-8 rounded-lg border border-line bg-surface px-2 text-xs" defaultValue={terms[0]}>{terms.map((y) => <option key={y}>{y}</option>)}</select>
+        <PeriodSelect />
       </div>
       <button onClick={() => setOpen("search")} aria-label="Open search" className="ml-auto grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:mx-auto sm:ml-auto sm:flex sm:min-w-0 sm:shrink sm:h-9 sm:w-full sm:max-w-md sm:items-center sm:gap-2 sm:border sm:border-line sm:bg-surface-2/60 sm:px-3 sm:text-sm sm:hover:bg-surface-2">
         <Search size={17} className="sm:size-[15px]" /><span className="hidden min-w-0 flex-1 truncate text-left sm:block">Search students, parents, invoices…</span><kbd className="hidden rounded border border-line bg-surface px-1.5 text-[11px] md:block">⌘K</kbd>

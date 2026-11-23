@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { AppShell } from "@/components/shell/AppShell";
+import { CalendarProvider } from "@/components/shell/CalendarContext";
 import { ToastProvider } from "@/components/ui/interactive";
 import { SCHOOL } from "@/lib/data/queries";
 
@@ -16,7 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <ToastProvider>
-            <AppShell school={{ name: SCHOOL.name, short: SCHOOL.short }} years={SCHOOL.years} terms={SCHOOL.terms}>{children}</AppShell>
+            <CalendarProvider seed={SCHOOL.calendar} current={{ year: SCHOOL.year, term: SCHOOL.term }}><AppShell school={{ name: SCHOOL.name, short: SCHOOL.short }}>{children}</AppShell></CalendarProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>
