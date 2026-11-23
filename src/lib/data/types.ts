@@ -1,4 +1,6 @@
 import type { Minor } from "../money";
+import type { FeeAccount } from "../accounts";
+export type { FeeAccount };
 
 export type Channel = "SMS" | "WhatsApp" | "Email";
 export type PayMethod = "Cash" | "Mobile Money" | "Bank Transfer" | "Card" | "Cheque" | "Online Gateway" | "Sponsor";
@@ -23,11 +25,11 @@ export interface Student {
 }
 export interface InvoiceItem { label: string; amount: Minor }
 export interface Invoice {
-  id: string; no: string; studentId: string; term: string; year: string; items: InvoiceItem[];
+  id: string; no: string; account: FeeAccount; studentId: string; term: string; year: string; items: InvoiceItem[];
   discount: Minor; billedOn: string; dueOn: string;
 }
 export interface Payment {
-  id: string; receiptNo: string; studentId: string; guardianId?: string; amount: Minor; method: PayMethod;
+  id: string; receiptNo: string; account: FeeAccount; studentId: string; guardianId?: string; amount: Minor; method: PayMethod;
   date: string; ref: string; status: "Confirmed" | "Pending" | "Reversed"; staff: string; note?: string;
 }
 export interface Staff {

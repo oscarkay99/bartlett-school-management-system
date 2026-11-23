@@ -1,5 +1,6 @@
 import { ghs, type Minor } from "../money";
 import type * as T from "./types";
+import { ACTIVITIES, type Activity } from "../accounts";
 
 // Deterministic PRNG so server & client agree and screenshots are stable.
 let s = 20261012;
@@ -36,11 +37,11 @@ export const subjectsByLevel: Record<string, string[]> = {
 };
 
 // ---------- Fee structure (per term, minor units) ----------
+// School fees: tuition, books, levies, exams, boarding. Feeding and extracurricular are billed separately.
 const feeFor = (level: string, boarding: boolean) => {
   const tuition = level === "Kindergarten" ? 1800 : level === "Primary" ? 2400 : 3000;
   const items: T.InvoiceItem[] = [
     { label: "Tuition", amount: ghs(tuition) },
-    { label: "Feeding", amount: ghs(level === "Kindergarten" ? 450 : 600) },
     { label: "Books", amount: ghs(level === "Kindergarten" ? 150 : level === "Primary" ? 250 : 350) },
     { label: "ICT & Development Levy", amount: ghs(level === "JHS" ? 250 : 150) },
     { label: "PTA", amount: ghs(50) },
@@ -49,7 +50,9 @@ const feeFor = (level: string, boarding: boolean) => {
   if (boarding) items.push({ label: "Boarding", amount: ghs(1500) });
   return items;
 };
-export const feeStructure = classes.map((c) => ({ classId: c.id, className: c.name, day: feeFor(c.level, false), boarding: feeFor(c.level, true) }));
+const feedingFor = (level: string) => ghs(level === "Kindergarten" ? 450 : 600);
+export const feeStructure = classes.map((c) => ({ classId: c.id, className: c.name, day: feeFor(c.level, false), boarding: feeFor(c.level, true), feeding: feedingFor(c.level) }));
+export const activityFees: Record<Activity, Minor> = { "Music (Piano)": ghs(400), STEM: ghs(350), "Extra Classes": ghs(300) };
 
 // ---------- Guardians & students ----------
 export const guardians: T.Guardian[] = [];
@@ -128,7 +131,7 @@ students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
   const items = feeFor(cls.level, st.category === "Boarding");
   const discount = st.scholarship ? Math.round(items[0].amount * 0.25) : 0;
-  const i: T.Invoice = { id: `inv${++inv}`, no: `INV-2627-T1-${pad(inv, 4)}`, studentId: st.id, term: "Term 1", year: "2026/2027", items, discount, billedOn: "2026-09-01", dueOn: st.id === "s3" || inv % 5 === 0 ? "2026-10-05" : "2026-10-30" };
+  const i: T.Invoice = { id: `inv${++inv}`, no: `INV-2627-T1-${pad(inv, 4)}`, account: "fees", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount, billedOn: "2026-09-01", dueOn: st.id === "s3" || inv % 5 === 0 ? "2026-10-05" : "2026-10-30" };
   invoices.push(i);
   const total = items.reduce((a, b) => a + b.amount, 0) - discount;
   // payment behaviour: 30% full, 35% partial, 20% none, rest ~ small
@@ -137,22 +140,63 @@ students.forEach((st) => {
   plan.forEach((amt, k) => {
     const day = addDays("2026-09-03", int(0, 38) + k * 10);
     const g = st.guardians[0].guardianId;
-    payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, studentId: st.id, guardianId: g, amount: amt, method: pick<T.PayMethod>(["Mobile Money", "Mobile Money", "Cash", "Bank Transfer", "Card", "Cheque"]), date: day > TODAY ? TODAY : day, ref: `REF${int(100000, 999999)}`, status: "Confirmed", staff: pick(staffNames) });
+    payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: st.id, guardianId: g, amount: amt, method: pick<T.PayMethod>(["Mobile Money", "Mobile Money", "Cash", "Bank Transfer", "Card", "Cheque"]), date: day > TODAY ? TODAY : day, ref: `REF${int(100000, 999999)}`, status: "Confirmed", staff: pick(staffNames) });
   });
 });
-// Demo: Ama Mensah — exactly GHS 3,500 billed, GHS 2,000 paid => 1,500 outstanding.
+// Demo: Ama Mensah — school fees exactly GHS 3,500 billed, GHS 2,000 paid => 1,500 outstanding.
 const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
 {
   const ai = invoices.find((x) => x.studentId === ama.id)!;
-  ai.items = [{ label: "Tuition", amount: ghs(2200) }, { label: "Feeding", amount: ghs(600) }, { label: "Books", amount: ghs(250) }, { label: "ICT & Development Levy", amount: ghs(150) }, { label: "PTA", amount: ghs(50) }, { label: "Examination", amount: ghs(250) }];
+  ai.items = [{ label: "Tuition", amount: ghs(2800) }, { label: "Books", amount: ghs(250) }, { label: "ICT & Development Levy", amount: ghs(150) }, { label: "PTA", amount: ghs(50) }, { label: "Examination", amount: ghs(250) }];
   ai.discount = 0; ai.dueOn = "2026-10-30";
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id) payments.splice(i, 1);
-  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0] });
+  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0] });
 }
 // Exceptions for reconciliation
-payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, studentId: "s20", amount: ghs(500), method: "Online Gateway", date: "2026-10-10", ref: "GW-PENDING-7781", status: "Pending", staff: "System" });
-payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, studentId: "s31", amount: ghs(800), method: "Online Gateway", date: "2026-10-09", ref: "GW-PENDING-7790", status: "Pending", staff: "System" });
-payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, studentId: "s44", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
+payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s20", amount: ghs(500), method: "Online Gateway", date: "2026-10-10", ref: "GW-PENDING-7781", status: "Pending", staff: "System" });
+payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s31", amount: ghs(800), method: "Online Gateway", date: "2026-10-09", ref: "GW-PENDING-7790", status: "Pending", staff: "System" });
+payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s44", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
+
+// ---------- Feeding & extracurricular (separate bills, invoices and receipts) ----------
+// Own PRNG so adding these accounts does not reshuffle the rest of the demo data.
+let s2 = 20261123;
+const rnd2 = () => { s2 |= 0; s2 = (s2 + 0x6d2b79f5) | 0; let t = Math.imul(s2 ^ (s2 >>> 15), 1 | s2); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const PAY_METHODS: T.PayMethod[] = ["Mobile Money", "Mobile Money", "Cash", "Cash", "Bank Transfer"];
+let fInv = 0, xInv = 0, fRc = 0, xRc = 0;
+const settle = (account: "feeding" | "extra", st: T.Student, total: Minor) => {
+  const r = rnd2();
+  const plan = r < 0.4 ? [total] : r < 0.7 ? [Math.round(total * (0.25 + rnd2() * 0.5) / 100) * 100] : r < 0.85 ? [Math.round(total * 0.3 / 100) * 100, Math.round(total * 0.3 / 100) * 100] : [];
+  plan.forEach((amt, k) => {
+    const day = addDays("2026-09-07", Math.floor(rnd2() * 30) + k * 7);
+    const receiptNo = account === "feeding" ? `FRC-${pad(++fRc, 5)}` : `XRC-${pad(++xRc, 5)}`;
+    payments.push({ id: `p${++pay}`, receiptNo, account, studentId: st.id, guardianId: st.guardians[0].guardianId, amount: amt, method: PAY_METHODS[Math.floor(rnd2() * PAY_METHODS.length)], date: day > TODAY ? TODAY : day, ref: `${account === "feeding" ? "FD" : "XC"}${100000 + Math.floor(rnd2() * 899999)}`, status: "Confirmed", staff: staffNames[Math.floor(rnd2() * staffNames.length)] });
+  });
+};
+students.forEach((st) => {
+  const cls = classes.find((c) => c.id === st.classId)!;
+  // Boarders always eat at school; most day students take the feeding programme.
+  if (st.category === "Boarding" || rnd2() < 0.85) {
+    const amount = feedingFor(cls.level);
+    invoices.push({ id: `fdg${++fInv}`, no: `FDG-2627-T1-${pad(fInv, 4)}`, account: "feeding", studentId: st.id, term: "Term 1", year: "2026/2027", items: [{ label: "Feeding", amount }], discount: 0, billedOn: "2026-09-01", dueOn: fInv % 6 === 0 ? "2026-10-05" : "2026-10-30" });
+    settle("feeding", st, amount);
+  }
+  // Extracurricular is opt-in. Kindergarten only offers Music (Piano).
+  const offered: Activity[] = cls.level === "Kindergarten" ? ["Music (Piano)"] : [...ACTIVITIES];
+  const taken = offered.filter(() => rnd2() < (cls.level === "Kindergarten" ? 0.3 : 0.28));
+  if (taken.length) {
+    const items = taken.map((a) => ({ label: a, amount: activityFees[a] }));
+    invoices.push({ id: `exc${++xInv}`, no: `EXC-2627-T1-${pad(xInv, 4)}`, account: "extra", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount: 0, billedOn: "2026-09-08", dueOn: xInv % 5 === 0 ? "2026-10-09" : "2026-10-30" });
+    settle("extra", st, items.reduce((a, b) => a + b.amount, 0));
+  }
+});
+// Demo: Ama Mensah — feeding GHS 600 (GHS 300 paid) and Music (Piano) GHS 400 (unpaid), each on its own bill.
+{
+  for (let i = invoices.length - 1; i >= 0; i--) if (invoices[i].studentId === ama.id && invoices[i].account !== "fees") invoices.splice(i, 1);
+  for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id && payments[i].account !== "fees") payments.splice(i, 1);
+  invoices.push({ id: `fdg${++fInv}`, no: `FDG-2627-T1-${pad(fInv, 4)}`, account: "feeding", studentId: ama.id, term: "Term 1", year: "2026/2027", items: [{ label: "Feeding", amount: ghs(600) }], discount: 0, billedOn: "2026-09-01", dueOn: "2026-10-30" });
+  invoices.push({ id: `exc${++xInv}`, no: `EXC-2627-T1-${pad(xInv, 4)}`, account: "extra", studentId: ama.id, term: "Term 1", year: "2026/2027", items: [{ label: "Music (Piano)", amount: activityFees["Music (Piano)"] }], discount: 0, billedOn: "2026-09-08", dueOn: "2026-10-30" });
+  payments.push({ id: `p${++pay}`, receiptNo: `FRC-${pad(++fRc, 5)}`, account: "feeding", studentId: ama.id, guardianId: mensah.id, amount: ghs(300), method: "Cash", date: "2026-09-21", ref: "FD-CASH-0921", status: "Confirmed", staff: staffNames[0] });
+}
 
 // ---------- Staff ----------
 const tFirst = ["Efua", "Samuel", "Gifty", "Isaac", "Mavis", "Yaw", "Abigail", "Michael", "Priscilla", "Kojo", "Joyce", "Emmanuel", "Selina", "Caleb"];

@@ -1,9 +1,11 @@
 // Data access seam. Every page reads through these functions; the backend replaces this file later.
 import { pct, type Minor } from "../money";
 import * as D from "./seed";
-import type { Student, Guardian } from "./types";
+import type { Student, Guardian, Invoice, Payment } from "./types";
+import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "../accounts";
+export { ACCOUNTS, ACCOUNT_IDS, type FeeAccount };
 
-export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
+export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
 
 export const getClass = (id: string) => classes.find((c) => c.id === id)!;
 export const getStudent = (id: string) => students.find((s) => s.id === id);
@@ -13,30 +15,51 @@ export const fullName = (s: Student) => [s.first, s.middle, s.last].filter(Boole
 export const shortName = (s: Student) => `${s.first} ${s.last}`;
 
 export type FeeStatus = "Paid in Full" | "Partially Paid" | "Outstanding" | "Overdue" | "Credit Balance";
-export interface FeeSummary { billed: Minor; discount: Minor; paid: Minor; balance: Minor; dueOn: string; status: FeeStatus; overdue: boolean }
+export interface FeeSummary { billed: Minor; discount: Minor; paid: Minor; balance: Minor; dueOn: string; status: FeeStatus; overdue: boolean; enrolled: boolean }
+
+// Each account is settled independently: feeding payments never reduce the school-fee balance and vice versa.
+export const invoicesOf = (studentId: string, account: FeeAccount): Invoice[] => invoices.filter((i) => i.studentId === studentId && i.account === account);
+export const paymentsOf = (studentId: string, account: FeeAccount): Payment[] => payments.filter((p) => p.studentId === studentId && p.account === account);
+export const accountPayments = (account: FeeAccount) => payments.filter((p) => p.account === account);
 
 const feeCache = new Map<string, FeeSummary>();
-export function feeSummary(studentId: string): FeeSummary {
-  const hit = feeCache.get(studentId); if (hit) return hit;
-  const inv = invoices.filter((i) => i.studentId === studentId);
+/** School-fees balance (tuition, books, levies…). Use accountSummary for feeding / extracurricular. */
+export const feeSummary = (studentId: string) => accountSummary(studentId, "fees");
+export function accountSummary(studentId: string, account: FeeAccount): FeeSummary {
+  const key = `${account}:${studentId}`; const hit = feeCache.get(key); if (hit) return hit;
+  const inv = invoicesOf(studentId, account);
   const gross = inv.reduce((a, i) => a + i.items.reduce((x, y) => x + y.amount, 0), 0);
   const discount = inv.reduce((a, i) => a + i.discount, 0);
   const billed = gross - discount;
-  const paid = payments.filter((p) => p.studentId === studentId && p.status === "Confirmed").reduce((a, p) => a + p.amount, 0);
+  const paid = paymentsOf(studentId, account).filter((p) => p.status === "Confirmed").reduce((a, p) => a + p.amount, 0);
   const balance = billed - paid;
   const dueOn = inv.map((i) => i.dueOn).sort()[0] ?? D.TODAY;
   const overdue = balance > 0 && dueOn < D.TODAY;
   const status: FeeStatus = balance < 0 ? "Credit Balance" : balance === 0 ? "Paid in Full" : overdue ? "Overdue" : paid > 0 ? "Partially Paid" : "Outstanding";
-  const r = { billed, discount, paid, balance, dueOn, status, overdue };
-  feeCache.set(studentId, r); return r;
+  const r = { billed, discount, paid, balance, dueOn, status, overdue, enrolled: inv.length > 0 };
+  feeCache.set(key, r); return r;
+}
+/** Total owed across all three accounts (never netted: a credit in one account does not pay another). */
+export const totalOwed = (studentId: string) => ACCOUNT_IDS.reduce((a, acc) => a + Math.max(0, accountSummary(studentId, acc).balance), 0);
+
+// Chronological, append-only ledger for one account with running balance.
+export function accountLedger(studentId: string, account: FeeAccount) {
+  const inv = invoicesOf(studentId, account); const pays = paymentsOf(studentId, account);
+  const rows = [
+    ...inv.map((i) => ({ date: i.billedOn, ref: i.no, desc: `${ACCOUNTS[account].label} invoice — ${i.term} ${i.year}`, debit: i.items.reduce((a, b) => a + b.amount, 0), credit: 0 })),
+    ...inv.filter((i) => i.discount > 0).map((i) => ({ date: i.billedOn, ref: i.no, desc: "Scholarship / discount", debit: 0, credit: i.discount })),
+    ...pays.filter((p) => p.status === "Confirmed").map((p) => ({ date: p.date, ref: p.receiptNo, desc: `Payment — ${p.method} (${p.ref})`, debit: 0, credit: p.amount })),
+    ...pays.filter((p) => p.status === "Reversed").flatMap((p) => [{ date: p.date, ref: p.receiptNo, desc: `Payment — ${p.method} (${p.ref})`, debit: 0, credit: p.amount }, { date: p.date, ref: `REV-${p.receiptNo}`, desc: `Reversal of ${p.receiptNo}: ${p.note ?? ""}`, debit: p.amount, credit: 0 }]),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.debit - b.debit);
+  let run = 0; return rows.map((l) => ({ ...l, bal: (run += l.debit - l.credit) }));
 }
 
 export const activeStudents = () => students.filter((s) => s.status === "Active");
 export const studentsOfGuardian = (gid: string) => students.filter((s) => s.guardians.some((g) => g.guardianId === gid));
 
-export function feesOverview(classId?: string, category?: string) {
+export function feesOverview(classId?: string, category?: string, account: FeeAccount = "fees") {
   const list = activeStudents().filter((s) => (!classId || s.classId === classId) && (!category || s.category === category));
-  const rows = list.map((s) => ({ s, f: feeSummary(s.id) }));
+  const rows = list.map((s) => ({ s, f: accountSummary(s.id, account) })).filter((r) => r.f.enrolled);
   const billed = rows.reduce((a, r) => a + r.f.billed, 0);
   const paid = rows.reduce((a, r) => a + r.f.paid, 0);
   const owing = rows.filter((r) => r.f.balance > 0);
@@ -51,19 +74,19 @@ export function feesOverview(classId?: string, category?: string) {
   };
 }
 
-export function collectionsBy(days: number) {
+export function collectionsBy(days: number, account: FeeAccount = "fees") {
   const cutoff = new Date(D.TODAY + "T00:00:00Z"); cutoff.setUTCDate(cutoff.getUTCDate() - days);
-  return payments.filter((p) => p.status === "Confirmed" && p.date >= cutoff.toISOString().slice(0, 10)).reduce((a, p) => a + p.amount, 0);
+  return accountPayments(account).filter((p) => p.status === "Confirmed" && p.date >= cutoff.toISOString().slice(0, 10)).reduce((a, p) => a + p.amount, 0);
 }
-export const collectedToday = () => payments.filter((p) => p.status === "Confirmed" && p.date === D.TODAY).reduce((a, p) => a + p.amount, 0);
-export function collectionsByMethod() {
+export const collectedToday = (account: FeeAccount = "fees") => accountPayments(account).filter((p) => p.status === "Confirmed" && p.date === D.TODAY).reduce((a, p) => a + p.amount, 0);
+export function collectionsByMethod(account: FeeAccount = "fees") {
   const m = new Map<string, number>();
-  payments.filter((p) => p.status === "Confirmed").forEach((p) => m.set(p.method, (m.get(p.method) ?? 0) + p.amount));
+  accountPayments(account).filter((p) => p.status === "Confirmed").forEach((p) => m.set(p.method, (m.get(p.method) ?? 0) + p.amount));
   return [...m].map(([name, value]) => ({ name, value: value / 100 })).sort((a, b) => b.value - a.value);
 }
-export function collectionTrend() {
+export function collectionTrend(account: FeeAccount = "fees") {
   const byDay = new Map<string, number>();
-  payments.filter((p) => p.status === "Confirmed").forEach((p) => byDay.set(p.date, (byDay.get(p.date) ?? 0) + p.amount));
+  accountPayments(account).filter((p) => p.status === "Confirmed").forEach((p) => byDay.set(p.date, (byDay.get(p.date) ?? 0) + p.amount));
   const days = [...byDay.keys()].sort();
   // weekly buckets
   const weeks = new Map<string, number>();
@@ -80,15 +103,15 @@ export interface ReminderRow {
   guardian: Guardian; lines: { student: Student; balance: Minor; overdue: boolean; dueOn: string }[]; total: Minor;
   eligible: boolean; reason?: string; channel: "SMS" | "WhatsApp" | "Email"; lastReminder?: string;
 }
-export function reminderRows(opts: { classId?: string; overdueOnly?: boolean } = {}): ReminderRow[] {
-  const map = new Map<string, ReminderRow>();
+export function reminderRows(opts: { classId?: string; overdueOnly?: boolean; account?: FeeAccount } = {}): ReminderRow[] {
+  const map = new Map<string, ReminderRow>(); const account = opts.account ?? "fees"; const template = ACCOUNTS[account].reminderTemplate;
   activeStudents().forEach((s) => {
     if (opts.classId && s.classId !== opts.classId) return;
-    const f = feeSummary(s.id); if (f.balance <= 0) return; if (opts.overdueOnly && !f.overdue) return;
+    const f = accountSummary(s.id, account); if (f.balance <= 0) return; if (opts.overdueOnly && !f.overdue) return;
     s.guardians.forEach((sg) => {
       if (!sg.financial || !sg.receivesFeeReminders || !sg.verified) return; // never disclose to unauthorised guardians
       const g = getGuardian(sg.guardianId)!;
-      const row = map.get(g.id) ?? { guardian: g, lines: [], total: 0, eligible: true, channel: g.preferred, lastReminder: messages.filter((m) => m.guardianId === g.id && m.template === "Fee Reminder").map((m) => m.date).sort().pop() };
+      const row = map.get(g.id) ?? { guardian: g, lines: [], total: 0, eligible: true, channel: g.preferred, lastReminder: messages.filter((m) => m.guardianId === g.id && m.template === template).map((m) => m.date).sort().pop() };
       row.lines.push({ student: s, balance: f.balance, overdue: f.overdue, dueOn: f.dueOn }); row.total += f.balance; map.set(g.id, row);
     });
   });
@@ -100,15 +123,16 @@ export function reminderRows(opts: { classId?: string; overdueOnly?: boolean } =
   }).sort((a, b) => b.total - a.total);
 }
 
-export function buildReminder(row: ReminderRow, school = SCHOOL) {
+export function buildReminder(row: ReminderRow, school = SCHOOL, account: FeeAccount = "fees") {
+  const noun = ACCOUNTS[account].noun;
   const name = `${row.guardian.title} ${row.guardian.name.split(" ").pop()}`;
   const fmt = (m: number) => `GHS ${(m / 100).toLocaleString("en-GH", { minimumFractionDigits: 0 })}`;
   const due = new Date(row.lines[0].dueOn + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   if (row.lines.length === 1) {
     const l = row.lines[0];
-    return `Dear ${name},\n\nGreetings from ${school.name}.\n\nThis is a friendly reminder that your ward, ${shortName(l.student)}, currently has an outstanding school fee balance of ${fmt(l.balance)} for ${school.term} of the ${school.year} academic year.\n\nKindly make payment by ${due}.\n\nIf you have already paid, please disregard this reminder and contact the school if the payment has not yet been reflected.\n\nThank you.\n\n${school.name}\nAccounts Department`;
+    return `Dear ${name},\n\nGreetings from ${school.name}.\n\nThis is a friendly reminder that your ward, ${shortName(l.student)}, currently has an outstanding ${noun} balance of ${fmt(l.balance)} for ${school.term} of the ${school.year} academic year.\n\nKindly make payment by ${due}.\n\nIf you have already paid, please disregard this reminder and contact the school if the payment has not yet been reflected.\n\nThank you.\n\n${school.name}\nAccounts Department`;
   }
-  return `Dear ${name},\n\nThe following outstanding balances remain for your wards:\n\n${row.lines.map((l) => `${shortName(l.student)} — ${fmt(l.balance)}`).join("\n")}\n\nTotal Outstanding: ${fmt(row.total)}.\n\nKindly contact the Accounts Department or use the approved school payment channel.\n\n${school.name}\nAccounts Department`;
+  return `Dear ${name},\n\nThe following outstanding ${noun} balances remain for your wards:\n\n${row.lines.map((l) => `${shortName(l.student)} — ${fmt(l.balance)}`).join("\n")}\n\nTotal Outstanding: ${fmt(row.total)}.\n\nKindly contact the Accounts Department or use the approved school payment channel.\n\n${school.name}\nAccounts Department`;
 }
 
 // ---- Academics ----
@@ -160,21 +184,23 @@ export const enrollmentTrend = [
   { year: "2022/23", students: 139 }, { year: "2023/24", students: 152 }, { year: "2024/25", students: 168 }, { year: "2025/26", students: 177 }, { year: "2026/27", students: activeStudents().length },
 ];
 export const unreconciled = () => payments.filter((p) => p.status === "Pending");
+/** Billed / collected / outstanding for each account, school-wide (for the owner's dashboard). */
+export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverview(undefined, undefined, id); return { id, label: ACCOUNTS[id].label, href: ACCOUNTS[id].href, billed: o.billed, paid: o.paid, outstanding: o.outstanding, rate: o.rate, students: o.rows.length, owing: o.owingCount }; });
 
 // ---- General ledger (derived; double-entry) ----
 export const OPENING_CASH: Minor = 18_450_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
-const incomeAccount = (label: string) => (label === "Tuition" ? "4100 Tuition Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Boarding" ? "4300 Boarding Fees" : "4400 Levies & Other Fees");
+const incomeAccount = (account: FeeAccount, label: string) => (account === "feeding" ? "4200 Feeding Fees" : account === "extra" ? "4500 Extracurricular Fees" : label === "Tuition" ? "4100 Tuition Fees" : label === "Boarding" ? "4300 Boarding Fees" : "4400 Levies & Other Fees");
 const expenseAccount = (c: string) => `5${({ Salaries: "100", Utilities: "200", Internet: "250", Repairs: "300", Stationery: "350", "Food Supplies": "400", Transport: "450", "Inventory Purchases": "500", Software: "550", Building: "600", Maintenance: "650" } as Record<string, string>)[c] ?? "900"} ${c}`;
 export function generalLedger(): GLLine[] {
   const L: GLLine[] = [{ date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "1100 Bank & Cash", dr: OPENING_CASH, cr: 0 }, { date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "3100 Accumulated Fund", dr: 0, cr: OPENING_CASH }];
   invoices.forEach((i) => {
     const gross = i.items.reduce((a, b) => a + b.amount, 0);
-    L.push({ date: i.billedOn, ref: i.no, memo: "Term 1 invoice (accrual)", account: "1200 Fee Receivables", dr: gross, cr: 0 });
-    i.items.forEach((it) => L.push({ date: i.billedOn, ref: i.no, memo: it.label, account: incomeAccount(it.label), dr: 0, cr: it.amount }));
+    L.push({ date: i.billedOn, ref: i.no, memo: `${i.term} ${ACCOUNTS[i.account].label} invoice (accrual)`, account: "1200 Fee Receivables", dr: gross, cr: 0 });
+    i.items.forEach((it) => L.push({ date: i.billedOn, ref: i.no, memo: it.label, account: incomeAccount(i.account, it.label), dr: 0, cr: it.amount }));
     if (i.discount) { L.push({ date: i.billedOn, ref: i.no, memo: "Scholarship discount", account: "4900 Discounts & Scholarships", dr: i.discount, cr: 0 }); L.push({ date: i.billedOn, ref: i.no, memo: "Scholarship discount", account: "1200 Fee Receivables", dr: 0, cr: i.discount }); }
   });
-  payments.filter((p) => p.status === "Confirmed").forEach((p) => { L.push({ date: p.date, ref: p.receiptNo, memo: `Receipt ${p.method}`, account: "1100 Bank & Cash", dr: p.amount, cr: 0 }); L.push({ date: p.date, ref: p.receiptNo, memo: "Receipt applied", account: "1200 Fee Receivables", dr: 0, cr: p.amount }); });
+  payments.filter((p) => p.status === "Confirmed").forEach((p) => { L.push({ date: p.date, ref: p.receiptNo, memo: `${ACCOUNTS[p.account].label} receipt ${p.method}`, account: "1100 Bank & Cash", dr: p.amount, cr: 0 }); L.push({ date: p.date, ref: p.receiptNo, memo: "Receipt applied", account: "1200 Fee Receivables", dr: 0, cr: p.amount }); });
   expenses.filter((e) => e.status === "Approved" || e.status === "Paid").forEach((e) => { L.push({ date: e.date, ref: e.no, memo: e.description, account: expenseAccount(e.category), dr: e.amount, cr: 0 }); L.push({ date: e.date, ref: e.no, memo: e.description, account: "1100 Bank & Cash", dr: 0, cr: e.amount }); });
   return L;
 }
@@ -185,6 +211,6 @@ export function trialBalance() {
 }
 export function subledgerRecon() {
   const gl = trialBalance().find((t) => t.account.startsWith("1200"))!; const glBal = gl.dr - gl.cr;
-  const sub = students.reduce((a, s) => a + feeSummary(s.id).balance, 0);
+  const sub = students.reduce((a, s) => a + ACCOUNT_IDS.reduce((x, acc) => x + accountSummary(s.id, acc).balance, 0), 0);
   return { gl: glBal, sub, diff: glBal - sub };
 }

@@ -3,6 +3,7 @@ import { useSearchParams } from "next/navigation";
 import { FeesWorkspace } from "./FeesWorkspace";
 
 type Props = Omit<React.ComponentProps<typeof FeesWorkspace>, "initialTab" | "openPay" | "overdueOnly">;
+// One route component for all three billing accounts (fees / feeding / extra).
 // Reads ?tab= / ?pay= / ?overdue= in the browser so the page can be statically exported.
 export function FeesRoute(props: Props) {
   const sp = useSearchParams(); const tab = sp.get("tab") ?? undefined;

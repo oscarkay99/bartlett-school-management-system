@@ -3,9 +3,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Eye, EyeOff, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Button } from "./primitives";
 import { cn } from "@/lib/utils";
+import { useRole } from "@/components/shell/AppShell";
 
-export interface Widget { id: string; title: string; span?: 1 | 2; node: ReactNode }
-export function WidgetBoard({ widgets, storageKey }: { widgets: Widget[]; storageKey: string }) {
+/** `money: true` widgets show fee/finance figures and are only shown to roles with full money access. */
+export interface Widget { id: string; title: string; span?: 1 | 2; node: ReactNode; money?: boolean }
+export function WidgetBoard({ widgets: all, storageKey }: { widgets: Widget[]; storageKey: string }) {
+  const { money, ready } = useRole();
+  const widgets = all.filter((w) => !w.money || (ready && money === "full"));
   const [order, setOrder] = useState(widgets.map((w) => w.id)); const [hidden, setHidden] = useState<string[]>([]); const [edit, setEdit] = useState(false);
   // Restore the saved layout after mount (SSR renders the default order).
   // eslint-disable-next-line react-hooks/set-state-in-effect

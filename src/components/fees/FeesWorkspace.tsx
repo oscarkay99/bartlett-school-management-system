@@ -2,15 +2,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AlertTriangle, Banknote, CalendarClock, Download, FileText, Percent, Receipt, Send, ShieldAlert, Users, Wallet } from "lucide-react";
+import { AlertTriangle, Banknote, CalendarClock, Download, FilePlus2, FileText, Percent, Receipt, Send, ShieldAlert, Users, Wallet } from "lucide-react";
 import { AlertBanner, Badge, Button, Card, CardHeader, Kpi, StatusBadge } from "@/components/ui/primitives";
 import { DataTable, Drawer, Modal, Select, Tabs, useToast, type Column } from "@/components/ui/interactive";
 import { Donut, HBars, LineTrend } from "@/components/charts/charts";
 import { RecordPaymentDialog, type PayStudent } from "./RecordPaymentDialog";
+import { IssueBillDialog, type BillCandidate } from "./IssueBillDialog";
+import { useRole } from "@/components/shell/AppShell";
+import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
 import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; cat: string; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string }
+export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; cat: string; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; items: { label: string; amount: number }[] }
 export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; cat: string; amount: number; method: string; date: string; ref: string; status: string; staff: string }
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
 export interface FeeLine { className: string; classId: string; day: { label: string; amount: number }[]; boarding: { label: string; amount: number }[] }
@@ -18,8 +21,10 @@ const TODAY = "2026-10-12";
 const daysAgo = (n: number) => { const d = new Date(TODAY + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
 const COST = { SMS: 5, WhatsApp: 12, Email: 0 } as const; // pesewas per message (estimate)
 
-export function FeesWorkspace({ students, payments, reminders, structures, classes, initialTab, openPay, overdueOnly, usedRefs }: { students: SRow[]; payments: PRow[]; reminders: RRow[]; structures: FeeLine[]; classes: { id: string; name: string }[]; initialTab?: string; openPay?: boolean; overdueOnly?: boolean; usedRefs: string[] }) {
-  const [cls, setCls] = useState(""); const [cat, setCat] = useState(""); const [range, setRange] = useState("term"); const [payOpen, setPayOpen] = useState(!!openPay);
+export function FeesWorkspace({ account, students, payments, reminders, structures, classes, candidates, activityFees, initialTab, openPay, overdueOnly, usedRefs }: { account: FeeAccount; students: SRow[]; payments: PRow[]; reminders: RRow[]; structures: FeeLine[]; classes: { id: string; name: string }[]; candidates: BillCandidate[]; activityFees: Record<string, number>; initialTab?: string; openPay?: boolean; overdueOnly?: boolean; usedRefs: string[] }) {
+  const A = ACCOUNTS[account];
+  const { ready, money: access, allow } = useRole(); const full = access === "full"; const canPay = allow("payments", "create"); const canBill = allow("invoices", "create");
+  const [cls, setCls] = useState(""); const [cat, setCat] = useState(""); const [range, setRange] = useState("term"); const [payOpen, setPayOpen] = useState(!!openPay); const [billOpen, setBillOpen] = useState(false);
   const router = useRouter();
   const ss = useMemo(() => students.filter((s) => (!cls || s.classId === cls) && (!cat || s.cat === cat)), [students, cls, cat]);
   const pp = useMemo(() => payments.filter((p) => (!cls || p.classId === cls) && (!cat || p.cat === cat)), [payments, cls, cat]);
@@ -40,25 +45,25 @@ export function FeesWorkspace({ students, payments, reminders, structures, class
     <div className="flex flex-wrap items-center gap-2">
       <Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} />
       <Select label="Student category" value={cat} onChange={setCat} options={[{ value: "", label: "Day & boarding" }, { value: "Day", label: "Day" }, { value: "Boarding", label: "Boarding" }]} />
-      <Select label="Collection period" value={range} onChange={setRange} options={[{ value: "today", label: "Today" }, { value: "week", label: "Last 7 days" }, { value: "month", label: "Last 30 days" }, { value: "term", label: "This term" }]} />
+      {full && <Select label="Collection period" value={range} onChange={setRange} options={[{ value: "today", label: "Today" }, { value: "week", label: "Last 7 days" }, { value: "month", label: "Last 30 days" }, { value: "term", label: "This term" }]} />}
       <span className="text-xs text-muted">Term 1 · 2026/2027</span>
     </div>
   );
 
   const overview = (
     <div className="space-y-4">
-      <AlertBanner tone={overdue > 0 ? "danger" : "ok"} icon={AlertTriangle} title={`Outstanding School Fees: ${money(outstanding)} across ${owing.length} students`}
-        actions={<><Button size="sm" onClick={() => router.push("/fees?tab=outstanding")}>View Outstanding Students</Button><Button size="sm" variant="primary" onClick={() => router.push("/fees?tab=reminders")}>Prepare Reminders</Button><Button size="sm" onClick={() => router.push("/fees?tab=outstanding&overdue=1")}>View Overdue Fees</Button><Button size="sm" onClick={() => exportCsv(owing)}><Download size={13} />Export Report</Button></>}>
+      <AlertBanner tone={overdue > 0 ? "danger" : "ok"} icon={AlertTriangle} title={`Outstanding ${A.label}: ${money(outstanding)} across ${owing.length} students`}
+        actions={<><Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding`)}>View Outstanding Students</Button><Button size="sm" variant="primary" onClick={() => router.push(`${A.href}?tab=reminders`)}>Prepare Reminders</Button><Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding&overdue=1`)}>View Overdue</Button><Button size="sm" onClick={() => exportCsv(owing, account)}><Download size={13} />Export Report</Button></>}>
         {od.length} balances are overdue ({money(overdue)}). {eligible.length} guardians are eligible for payment reminders.
       </AlertBanner>
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-        <Kpi label="Total invoiced" value={moneyShort(billed)} icon={FileText} hint="Sum of invoices net of discounts for the filtered students." />
+        <Kpi label="Total invoiced" value={moneyShort(billed)} icon={FileText} hint={`Sum of ${A.label} invoices net of discounts for the filtered students.`} />
         <Kpi label="Confirmed collections" value={moneyShort(paid)} icon={Banknote} tone="ok" hint="Confirmed payments only; pending gateway payments excluded." />
         <Kpi label="Collection rate" value={`${pct(paid, billed)}%`} icon={Percent} tone="info" hint="Confirmed collections ÷ total invoiced." />
         <Kpi label="Expected upcoming" value={moneyShort(upcoming)} icon={CalendarClock} hint="Outstanding balances not yet past their due date." />
-        <Kpi label="Overdue" value={moneyShort(overdue)} icon={ShieldAlert} tone="danger" hint="Outstanding balances past due date." href="/fees?tab=outstanding&overdue=1" />
+        <Kpi label="Overdue" value={moneyShort(overdue)} icon={ShieldAlert} tone="danger" hint="Outstanding balances past due date." href={`${A.href}?tab=outstanding&overdue=1`} />
         <Kpi label="Collected in period" value={moneyShort(sum(periodFrom))} icon={Wallet} tone="ok" hint="Confirmed payments within the selected period." />
-        <Kpi label="Paid in full" value={`${ss.filter((s) => s.balance <= 0).length}`} icon={Users} hint="Students with a zero or credit balance." />
+        <Kpi label="Paid in full" value={`${ss.filter((s) => s.balance <= 0).length} / ${ss.length}`} icon={Users} hint={`Students billed for ${A.label} with a zero or credit balance.`} />
         <Kpi label="Unpaid / partial" value={`${ss.filter((s) => s.balance > 0 && s.paid === 0).length} / ${ss.filter((s) => s.balance > 0 && s.paid > 0).length}`} icon={Receipt} hint="Students with no payment / some payment but a balance." />
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
@@ -69,42 +74,56 @@ export function FeesWorkspace({ students, payments, reminders, structures, class
     </div>
   );
 
+  // Wait for the saved role so the Administrator never sees the collections view flash on load.
+  if (!ready) return null;
+  const breakdown = account === "fees"
+    ? { id: "books", label: "Books", node: <ItemBreakdown students={ss} sections={[{ key: "Books", title: "Books", sub: "Textbooks and learning materials, part of school fees" }]} /> }
+    : account === "feeding"
+      ? { id: "classes", label: "Feeding by class", node: <ItemBreakdown students={ss} sections={[{ key: "Feeding", title: "Feeding", sub: "Meals billed per term, by class" }]} /> }
+      : { id: "activities", label: "Activities", node: <Activities students={ss} /> };
+  type Tab = { id: string; label: string; content: React.ReactNode; badge?: string };
+  const tabs = ([
+    full && { id: "overview", label: "Dashboard", content: overview },
+    { id: "outstanding", label: "Outstanding", badge: String(owing.length), content: <OutstandingTable rows={ss.filter((s) => s.balance > 0)} overdueOnly={overdueOnly} account={account} showTotals={full} /> },
+    { id: "reminders", label: "Reminders", badge: String(eligible.length), content: <Reminders rows={reminders.filter((r) => !cls || r.classIds.includes(cls))} /> },
+    full && { id: "payments", label: "Payments & receipts", content: <PaymentsTable rows={pp} /> },
+    full && { id: "invoices", label: account === "feeding" ? "Bills" : "Invoices", content: <Invoices students={ss} account={account} canBill={canBill} onIssue={() => setBillOpen(true)} /> },
+    full && { id: breakdown.id, label: breakdown.label, content: breakdown.node },
+    full && account === "fees" && { id: "structures", label: "Fee structures", content: <Structures rows={structures} /> },
+    full && { id: "reconcile", label: "Reconciliation", badge: String(pp.filter((p) => p.status !== "Confirmed").length), content: <Reconcile rows={pp} /> },
+  ] as (Tab | false)[]).filter((t): t is Tab => !!t);
+  const start = initialTab && tabs.some((t) => t.id === initialTab) ? initialTab : undefined;
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">{filters}<Button variant="primary" onClick={() => setPayOpen(true)}><Receipt size={14} />Record payment</Button></div>
-      <Tabs initial={initialTab} tabs={[
-        { id: "overview", label: "Dashboard", content: overview },
-        { id: "outstanding", label: "Outstanding", badge: String(owing.length), content: <OutstandingTable rows={ss.filter((s) => s.balance > 0)} overdueOnly={overdueOnly} /> },
-        { id: "reminders", label: "Reminders", badge: String(eligible.length), content: <Reminders rows={reminders.filter((r) => !cls || r.classIds.includes(cls))} /> },
-        { id: "payments", label: "Payments", content: <PaymentsTable rows={pp} /> },
-        { id: "invoices", label: "Invoices", content: <Invoices students={ss} /> },
-        { id: "components", label: "Feeding & Books", content: <FeeComponents structures={structures} students={ss} /> },
-        { id: "structures", label: "Fee structures", content: <Structures rows={structures} /> },
-        { id: "reconcile", label: "Reconciliation", badge: String(pp.filter((p) => p.status !== "Confirmed").length), content: <Reconcile rows={pp} /> },
-      ]} />
-      <RecordPaymentDialog open={payOpen} onClose={() => setPayOpen(false)} students={payStudents} usedRefs={usedRefs} />
+      {!full && <AlertBanner tone="info" icon={Users} title="Follow-up view">You can see which students owe and send reminders to their parents. Collections and payment records are only visible to the Owner and the Accountant.</AlertBanner>}
+      <div className="flex flex-wrap items-center justify-between gap-3">{filters}
+        <div className="flex flex-wrap gap-2">{canBill && account !== "fees" && <Button onClick={() => setBillOpen(true)}><FilePlus2 size={14} />{account === "feeding" ? "Add student to feeding" : "Enrol & bill student"}</Button>}
+          {canPay && <Button variant="primary" onClick={() => setPayOpen(true)}><Receipt size={14} />Record {A.label.toLowerCase()} payment</Button>}</div></div>
+      <Tabs key={access} initial={start} tabs={tabs} />
+      {canPay && <RecordPaymentDialog open={payOpen} onClose={() => setPayOpen(false)} students={payStudents} usedRefs={usedRefs} account={account} />}
+      {canBill && <IssueBillDialog open={billOpen} onClose={() => setBillOpen(false)} account={account} candidates={candidates} activityFees={activityFees} />}
     </div>
   );
 }
 
-function exportCsv(rows: SRow[]) {
+function exportCsv(rows: SRow[], account: FeeAccount) {
   const csv = ["Admission,Student,Class,Billed,Paid,Balance,Due"].concat(rows.map((r) => [r.adm, `"${r.name}"`, r.cls, r.billed / 100, r.paid / 100, r.balance / 100, r.dueOn].join(","))).join("\n");
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "outstanding-fees.csv"; a.click();
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `outstanding-${account}.csv`; a.click();
 }
 
-function OutstandingTable({ rows, overdueOnly }: { rows: SRow[]; overdueOnly?: boolean }) {
+function OutstandingTable({ rows, overdueOnly, account, showTotals }: { rows: SRow[]; overdueOnly?: boolean; account: FeeAccount; showTotals: boolean }) {
   const [od, setOd] = useState(overdueOnly ? "1" : ""); const r = useRouter();
   const data = rows.filter((x) => !od || x.overdue);
   const cols: Column<SRow>[] = [
     { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div> },
-    { key: "c", header: "Class", render: (x) => x.cls }, { key: "b", header: "Billed", align: "right", hideOnMobile: true, render: (x) => money(x.billed) },
-    { key: "p", header: "Paid", align: "right", hideOnMobile: true, render: (x) => money(x.paid) },
+    { key: "c", header: "Class", render: (x) => x.cls },
+    ...(showTotals ? [{ key: "b", header: "Billed", align: "right", hideOnMobile: true, render: (x) => money(x.billed) }, { key: "p", header: "Paid", align: "right", hideOnMobile: true, render: (x) => money(x.paid) }] as Column<SRow>[] : []),
     { key: "o", header: "Outstanding", align: "right", sort: (x) => x.balance, render: (x) => <b className="text-danger">{money(x.balance)}</b> },
     { key: "d", header: "Due", sort: (x) => x.dueOn, render: (x) => fmtDate(x.dueOn) }, { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
   ];
-  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(`/students/${x.id}?tab=fees`)}
+  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(`/students/${x.id}?tab=${account}`)}
     filters={<Select label="Overdue filter" value={od} onChange={setOd} options={[{ value: "", label: "All outstanding" }, { value: "1", label: "Overdue only" }]} />}
-    toolbar={<Button size="sm" onClick={() => exportCsv(data)}><Download size={13} />CSV</Button>} /></Card>;
+    toolbar={<Button size="sm" onClick={() => exportCsv(data, account)}><Download size={13} />CSV</Button>} /></Card>;
 }
 
 function Reminders({ rows }: { rows: RRow[] }) {
@@ -151,12 +170,13 @@ function PaymentsTable({ rows }: { rows: PRow[] }) {
   return <Card><DataTable rows={rows.filter((r) => !m || r.method === m)} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.receipt} ${x.student} ${x.ref}`} filters={<Select label="Method" value={m} onChange={setM} options={[{ value: "", label: "All methods" }, ...["Cash", "Mobile Money", "Bank Transfer", "Card", "Cheque"].map((v) => ({ value: v, label: v }))]} />} pageSize={12} /></Card>;
 }
 
-function Invoices({ students }: { students: SRow[] }) {
-  const [o, setO] = useState(false); const toast = useToast();
+function Invoices({ students, account, canBill, onIssue }: { students: SRow[]; account: FeeAccount; canBill: boolean; onIssue: () => void }) {
+  const [o, setO] = useState(false); const toast = useToast(); const A = ACCOUNTS[account];
   return (
-    <Card><CardHeader title="Term invoices" sub="Term 1 · 2026/2027" action={<Button variant="primary" size="sm" onClick={() => setO(true)}>Generate term invoices</Button>} />
+    <Card><CardHeader title={`${A.label} ${account === "feeding" ? "bills" : "invoices"}`} sub={`Term 1 · 2026/2027 · numbered ${A.invoicePrefix}-… and receipted separately (${A.receiptPrefix}-…)`} action={canBill ? (account === "fees" ? <Button variant="primary" size="sm" onClick={() => setO(true)}>Generate term invoices</Button> : <Button variant="primary" size="sm" onClick={onIssue}><FilePlus2 size={13} />Issue new bill</Button>) : undefined} />
       <DataTable rows={students} columns={[
         { key: "i", header: "Invoice", render: (x) => <b className="num">{x.invoice}</b> }, { key: "n", header: "Student", sort: (x) => x.name, render: (x) => x.name }, { key: "c", header: "Class", render: (x) => x.cls },
+        ...(account === "extra" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: SRow) => x.items.map((i) => i.label).join(", ") }] : []),
         { key: "b", header: "Total", align: "right", sort: (x) => x.billed, render: (x) => money(x.billed) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
         { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> }, { key: "pdf", header: "", render: (x) => <Link className="text-info" href={`/print/invoice/${x.invoice}`}>PDF</Link> },
       ]} rowId={(x) => x.id} searchText={(x) => x.name + x.invoice} pageSize={10} />
@@ -167,26 +187,19 @@ function Invoices({ students }: { students: SRow[] }) {
   );
 }
 
-// Feeding and Books billed per class: amount per student × students charged = total.
-function FeeComponents({ structures, students }: { structures: FeeLine[]; students: SRow[] }) {
-  const sections = [
-    { key: "Feeding", title: "Feeding", sub: "Meals charged per term", tone: "text-warn" },
-    { key: "Books", title: "Books", sub: "Textbooks and learning materials charged per term", tone: "text-info" },
-  ];
-  const lines = (key: string) => structures.map((c) => {
-    const kids = students.filter((s) => s.classId === c.classId);
-    const day = c.day.find((x) => x.label === key)?.amount ?? 0, boarding = c.boarding.find((x) => x.label === key)?.amount ?? 0;
-    return { classId: c.classId, name: c.className, amount: day, students: kids.length, total: kids.reduce((a, s) => a + (s.cat === "Boarding" ? boarding : day), 0) };
+// Billed per class for the given item labels: amount per student × students charged = total.
+function ItemBreakdown({ students, sections }: { students: SRow[]; sections: { key: string; title: string; sub: string }[] }) {
+  const classIds = Array.from(new Set(students.map((s) => s.classId)));
+  const totals = sections.map((sec) => {
+    const lines = classIds.map((cid) => {
+      const charged = students.filter((s) => s.classId === cid).map((s) => ({ s, amt: s.items.find((i) => i.label === sec.key)?.amount ?? 0 })).filter((x) => x.amt > 0);
+      const rates = charged.map((x) => x.amt);
+      return { classId: cid, name: students.find((s) => s.classId === cid)!.cls, amount: rates.sort((a, b) => rates.filter((v) => v === b).length - rates.filter((v) => v === a).length)[0] ?? 0, students: charged.length, total: charged.reduce((a, x) => a + x.amt, 0) };
+    }).filter((l) => l.students > 0);
+    return { ...sec, lines, students: lines.reduce((a, x) => a + x.students, 0), total: lines.reduce((a, x) => a + x.total, 0) };
   });
-  const totals = sections.map((sec) => { const l = lines(sec.key); return { ...sec, lines: l, students: l.reduce((a, x) => a + x.students, 0), total: l.reduce((a, x) => a + x.total, 0) }; });
-  const grand = totals.reduce((a, t) => a + t.total, 0), invoiced = students.reduce((a, s) => a + s.billed, 0);
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-        {totals.map((t) => <Kpi key={t.key} label={`${t.title} billed`} value={moneyShort(t.total)} icon={FileText} hint={`Sum of ${t.title} charges across the filtered students.`} />)}
-        <Kpi label="Feeding + Books" value={moneyShort(grand)} icon={Wallet} tone="info" hint="Combined Feeding and Books charges." />
-        <Kpi label="Share of invoiced" value={`${pct(grand, invoiced)}%`} icon={Percent} hint="Feeding + Books as a share of the total invoiced." />
-      </div>
       <div className="grid gap-4 xl:grid-cols-2">
         {totals.map((t) => (
           <Card key={t.key}><CardHeader title={t.title} sub={t.sub} action={<Badge tone="info">Total {money(t.total)}</Badge>} />
@@ -195,7 +208,27 @@ function FeeComponents({ structures, students }: { structures: FeeLine[]; studen
               <tfoot><tr className="border-t-2 border-line bg-surface-2/60 font-semibold"><td className="px-3 py-2.5 sm:px-4">Total</td><td className="px-2 sm:px-3" /><td className="num hidden px-3 text-right sm:table-cell">{t.students}</td><td className="num whitespace-nowrap px-3 text-right sm:px-4">{money(t.total)}</td></tr></tfoot></table></div></Card>
         ))}
       </div>
-      <p className="text-xs text-muted">Boarders are charged the boarding rate where it differs. Payments are applied to the whole invoice, so collections are not split by component.</p>
+      <p className="text-xs text-muted">Payments are applied to the whole bill, so collections are not split by item.</p>
+    </div>
+  );
+}
+
+// Extracurricular: one card per activity (enrolment and billed), plus the full roster.
+function Activities({ students }: { students: SRow[] }) {
+  const [act, setAct] = useState(""); const r = useRouter();
+  const per = ACTIVITIES.map((a) => { const kids = students.filter((s) => s.items.some((i) => i.label === a)); return { a, kids: kids.length, billed: kids.reduce((x, s) => x + (s.items.find((i) => i.label === a)?.amount ?? 0), 0) }; });
+  const rows = students.filter((s) => !act || s.items.some((i) => i.label === act));
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">{per.map((p) => <button key={p.a} onClick={() => setAct(act === p.a ? "" : p.a)} className={`rounded-xl border bg-surface p-4 text-left transition hover:shadow-md ${act === p.a ? "border-info ring-1 ring-info" : "border-line"}`}><div className="text-xs text-muted">{p.a}</div><div className="mt-1 text-2xl font-semibold">{p.kids} <span className="text-sm font-normal text-muted">students</span></div><div className="num mt-1 text-sm">Billed {money(p.billed)}</div></button>)}</div>
+      <Card><DataTable rows={rows} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(`/students/${x.id}?tab=extra`)} pageSize={12}
+        filters={<Select label="Activity" value={act} onChange={setAct} options={[{ value: "", label: "All activities" }, ...ACTIVITIES.map((a) => ({ value: a, label: a }))]} />}
+        columns={[
+          { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div> },
+          { key: "c", header: "Class", render: (x) => x.cls }, { key: "a", header: "Activities", render: (x) => <div className="flex flex-wrap gap-1">{x.items.map((i) => <Badge key={i.label}>{i.label}</Badge>)}</div> },
+          { key: "b", header: "Billed", align: "right", hideOnMobile: true, render: (x) => money(x.billed) }, { key: "o", header: "Balance", align: "right", sort: (x) => x.balance, render: (x) => <span className={x.balance > 0 ? "font-medium text-danger" : ""}>{money(Math.max(0, x.balance))}</span> },
+          { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
+        ]} /></Card>
     </div>
   );
 }

@@ -17,12 +17,14 @@ Nothing persists: dialogs and forms validate and give feedback, but writes are l
 - `src/lib/data/queries.ts` is the **only** place pages read data. Replace its functions with API/DB calls.
 - `src/lib/data/seed.ts` is demo data only; delete it when the backend lands.
 - Money is integer minor units (`src/lib/money.ts`). Balances are always *derived* from invoices + confirmed payments, never stored.
+- Three separately billed accounts (`src/lib/accounts.ts`): **School Fees** (tuition, books, levies, exams, boarding), **Feeding**, and **Extracurricular** (Music (Piano), STEM, Extra Classes). Each has its own invoices (`INV-` / `FDG-` / `EXC-`), receipts (`RCT-` / `FRC-` / `XRC-`) and balance; a payment only settles its own account.
 - The general ledger and trial balance are derived (`generalLedger()`), and tested to balance and to reconcile to the fee subledger.
-- Role-based nav and field-level medical gating are UI mirrors only; real enforcement belongs on the server.
+- Role-based nav, the route guard, money visibility (`full` / `balances` / `none` in `src/lib/permissions.ts`) and field-level medical gating are UI mirrors only; real enforcement belongs on the server.
+  The School Administrator sees who owes and can send reminders, but not collections, revenue or finance dashboards. The Accountant records payments and issues invoices/receipts for all three accounts.
 - "Preview as role" lives in the avatar menu.
 
 ## Demo scenarios
-- Ama Mensah (Primary 5): GHS 3,500 billed, 2,000 paid, 1,500 outstanding. Her guardian also has Kofi and Abena (consolidated reminder, one parent account).
+- Ama Mensah (Primary 5): school fees GHS 3,500 billed, 2,000 paid, 1,500 outstanding. Separately: feeding GHS 600 (300 paid) and Music (Piano) GHS 400 (unpaid). Her guardian also has Kofi and Abena (consolidated reminder, one parent account).
 - English Textbook: 100 received, 20 issued, 80 on hand.
 
 ## Branches & workflow

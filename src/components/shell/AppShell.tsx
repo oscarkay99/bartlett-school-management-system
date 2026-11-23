@@ -3,11 +3,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BookOpen, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Utensils, Music, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
-import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, type Op, type Resource } from "@/lib/permissions";
+import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, canVisit, type MoneyAccess, type Op, type Resource } from "@/lib/permissions";
 export { ROLES };
 
 export interface SearchItem { type: string; label: string; sub: string; href: string }
@@ -18,6 +18,8 @@ const NAV: Nav[] = [
   { href: "/parents", label: "Parents", icon: UsersRound, key: "parents" },
   { href: "/admissions", label: "Admissions", icon: UserPlus, key: "admissions" },
   { href: "/fees", label: "School Fees", icon: Receipt, key: "fees" },
+  { href: "/feeding", label: "Feeding", icon: Utensils, key: "feeding" },
+  { href: "/extracurricular", label: "Extracurricular", icon: Music, key: "extracurricular" },
   { href: "/finance", label: "Finance", icon: Landmark, key: "finance" },
   { href: "/inventory", label: "Inventory", icon: Boxes, key: "inventory" },
   { href: "/academics", label: "Academics", icon: BookOpen, key: "academics" },
@@ -27,21 +29,31 @@ const NAV: Nav[] = [
   { href: "/reports", label: "Reports", icon: FileBarChart, key: "reports" },
   { href: "/settings", label: "Settings", icon: Settings, key: "settings" },
 ];
-const RoleCtx = createContext<{ role: string; can: (key: string) => boolean; allow: (r: Resource, o: Op) => boolean }>({ role: DEFAULT_ROLE, can: () => true, allow: () => true });
+interface RoleState { role: string; ready: boolean; money: MoneyAccess; can: (key: string) => boolean; allow: (r: Resource, o: Op) => boolean }
+const RoleCtx = createContext<RoleState>({ role: DEFAULT_ROLE, ready: false, money: "full", can: () => true, allow: () => true });
 export const useRole = () => useContext(RoleCtx);
+
+/** Renders children only for roles with at least the given money access. Hidden until the saved role is known. */
+export function MoneyGate({ level = "full", children, fallback = null }: { level?: "full" | "balances"; children: ReactNode; fallback?: ReactNode }) {
+  const { money, ready } = useRole();
+  if (!ready) return null;
+  const ok = level === "balances" ? money !== "none" : money === "full";
+  return <>{ok ? children : fallback}</>;
+}
 
 export function AppShell({ children, school, years, terms }: { children: ReactNode; school: { name: string; short: string }; years: string[]; terms: string[] }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
-  const [role, setRole] = useState(DEFAULT_ROLE);
+  const [role, setRole] = useState(DEFAULT_ROLE); const [ready, setReady] = useState(false);
   // Read persisted prefs after mount so server and client markup match.
   /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => { try { setCollapsed(localStorage.getItem("sb") === "1"); setRole(normalizeRole(localStorage.getItem("role"))); } catch {} }, []);
+  useEffect(() => { try { setCollapsed(localStorage.getItem("sb") === "1"); setRole(normalizeRole(localStorage.getItem("role"))); } catch {} setReady(true); }, []);
   useEffect(() => setMobile(false), [path]);
   /* eslint-enable react-hooks/set-state-in-effect */
   const allowed = ROLES[role].nav;
-  const ctx = useMemo(() => ({ role, can: (k: string) => allowed.includes(k), allow: (r: Resource, o: Op) => allowedOp(role, r, o) }), [role, allowed]);
+  const ctx = useMemo(() => ({ role, ready, money: ROLES[role].money, can: (k: string) => allowed.includes(k), allow: (r: Resource, o: Op) => allowedOp(role, r, o) }), [role, ready, allowed]);
+  const blocked = ready && !canVisit(role, path);
   const standalone = path.startsWith("/print") || path === "/login";
   if (standalone) return <>{children}</>;
 
@@ -81,7 +93,7 @@ export function AppShell({ children, school, years, terms }: { children: ReactNo
       {mobile && <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setMobile(false)}><div className="absolute inset-0 bg-black/50" /><aside className="anim-slide relative h-full w-[260px]" style={{ animationName: "none" }} onClick={(e) => e.stopPropagation()}>{sidebar}<button className="absolute right-2 top-4 text-white" onClick={() => setMobile(false)} aria-label="Close menu"><X /></button></aside></div>}
       <div className={cn("transition-[padding]", collapsed ? "lg:pl-[68px]" : "lg:pl-[250px]")}>
         <Topbar school={school} years={years} terms={terms} onMenu={() => setMobile(true)} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
-        <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">{children}</main>
+        <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">{blocked ? <NoAccess label={ROLES[role].label} /> : children}</main>
       </div>
     </RoleCtx.Provider>
   );
@@ -111,11 +123,11 @@ function Topbar({ school, years, terms, onMenu, role, setRole }: { school: { nam
       </button>
       <div className="relative">
         <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "quick" ? null : "quick")} aria-label="Quick actions" aria-expanded={open === "quick"}><Plus size={19} /></button>
-        {open === "quick" && <div className={pop}>{[["Register student", "/students/new"], ["Record payment", "/fees?pay=1"], ["Prepare fee reminders", "/fees?tab=reminders"], ["Mark attendance", "/attendance"], ["Issue inventory", "/inventory?issue=1"]].map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
+        {open === "quick" && <div className={pop}>{[["Register student", "/students/new", "students"], ["Record school fees payment", "/fees?pay=1", "fees"], ["Record feeding payment", "/feeding?pay=1", "feeding"], ["Record extracurricular payment", "/extracurricular?pay=1", "extracurricular"], ["Prepare fee reminders", "/fees?tab=reminders", "fees"], ["Mark attendance", "/attendance", "attendance"], ["Issue inventory", "/inventory?issue=1", "inventory"]].filter(([l, , k]) => ROLES[role].nav.includes(k) && (!l.startsWith("Record") || allowedOp(role, "payments", "create"))).map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
       </div>
       <div className="relative">
         <button className="relative grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "notif" ? null : "notif")} aria-label="Notifications"><Bell size={19} /><span className="absolute right-2 top-2 size-2 rounded-full bg-danger" /></button>
-        {open === "notif" && <div className={pop}><div className="px-3 py-2 text-xs font-semibold uppercase text-muted">Needs attention</div>{notifs.map(([l, h]) => <Link key={l} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
+        {open === "notif" && <div className={pop}><div className="px-3 py-2 text-xs font-semibold uppercase text-muted">Needs attention</div>{notifs.filter(([, h]) => canVisit(role, h.split("?")[0]) && (!h.includes("reconcile") || ROLES[role].money === "full")).map(([l, h]) => <Link key={l} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
       </div>
       <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{mounted && theme === "dark" ? <Sun size={19} /> : mounted ? <Moon size={19} /> : <Monitor size={19} />}</button>
       <div className="relative">
@@ -128,6 +140,17 @@ function Topbar({ school, years, terms, onMenu, role, setRole }: { school: { nam
       </div>
       {open === "search" && <CommandSearch onClose={() => setOpen(null)} />}
     </header>
+  );
+}
+
+function NoAccess({ label }: { label: string }) {
+  return (
+    <div className="mx-auto mt-16 max-w-md rounded-xl border border-line bg-surface p-8 text-center">
+      <Lock className="mx-auto text-muted" size={32} />
+      <h1 className="mt-3 text-lg font-semibold">You don&apos;t have access to this page</h1>
+      <p className="mt-1 text-sm text-muted">The {label} role can&apos;t open this module. Ask the Owner if you need access.</p>
+      <Link href="/" className="mt-4 inline-block text-sm text-info">Back to dashboard</Link>
+    </div>
   );
 }
 

@@ -3,9 +3,12 @@ import Link from "next/link";
 import { Download, Printer } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/interactive";
-export interface Rep { id: string; title: string; desc: string; group: string; basis?: string; header: string[]; rows: (string | number)[][]; href: string }
-export function ReportsGrid({ reports }: { reports: Rep[] }) {
-  const toast = useToast();
+import { useRole } from "@/components/shell/AppShell";
+/** Fees and Finance reports need full money access unless marked `money: "balances"` (who owes, not what was collected). */
+export interface Rep { id: string; title: string; desc: string; group: string; basis?: string; money?: "full" | "balances"; header: string[]; rows: (string | number)[][]; href: string }
+export function ReportsGrid({ reports: all }: { reports: Rep[] }) {
+  const toast = useToast(); const { money, ready } = useRole();
+  const reports = all.filter((r) => { const need = r.money ?? (r.group === "Fees" || r.group === "Finance" ? "full" : undefined); return !need || (ready && (money === "full" || (need === "balances" && money === "balances"))); });
   const csv = (r: Rep) => { const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`; const t = [r.header, ...r.rows].map((row) => row.map(esc).join(",")).join("\n"); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([t], { type: "text/csv" })); a.download = `${r.id}.csv`; a.click(); toast(`${r.title}: ${r.rows.length} rows exported`); };
   const groups = Array.from(new Set(reports.map((r) => r.group)));
   return (

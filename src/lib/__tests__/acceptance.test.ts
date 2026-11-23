@@ -64,20 +64,22 @@ describe("Every student is tied to a guardian", () => {
   });
 });
 
-describe("Feeding and Books sections", () => {
-  it("every invoice carries a Feeding and a Books line", () => {
-    for (const i of Q.invoices) for (const label of ["Feeding", "Books"]) expect(i.items.some((x) => x.label === label), `${i.no} ${label}`).toBe(true);
+describe("Books stay in school fees; feeding is billed separately", () => {
+  it("every school-fee invoice carries Books and no Feeding line", () => {
+    for (const i of Q.invoices.filter((x) => x.account === "fees")) {
+      expect(i.items.some((x) => x.label === "Books"), `${i.no} Books`).toBe(true);
+      expect(i.items.some((x) => x.label === "Feeding"), `${i.no} Feeding`).toBe(false);
+    }
   });
-  it("Ama's invoice still totals GHS 3,500 with Feeding and Books itemised", () => {
-    const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!; const inv = Q.invoices.find((i) => i.studentId === ama.id)!;
+  it("Ama's school-fee invoice still totals GHS 3,500 with Books itemised", () => {
+    const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!; const inv = Q.invoicesOf(ama.id, "fees")[0];
     expect(inv.items.reduce((a, x) => a + x.amount, 0)).toBe(ghs(3500)); expect(inv.items.find((x) => x.label === "Books")!.amount).toBe(ghs(250));
   });
-  it("per-class feeding total = amount per student × students charged", () => {
+  it("per-class feeding total = class rate × students on feeding", () => {
     for (const c of Q.classes) {
-      const kids = Q.activeStudents().filter((s) => s.classId === c.id);
-      const direct = kids.reduce((a, s) => a + Q.invoices.find((i) => i.studentId === s.id)!.items.find((x) => x.label === "Feeding")!.amount, 0);
-      const perStudent = Q.feeStructure.find((f) => f.classId === c.id)!.day.find((x) => x.label === "Feeding")!.amount;
-      if (c.id !== "c5" && c.id !== "c1") expect(direct).toBe(perStudent * kids.length);
+      const bills = Q.invoices.filter((i) => i.account === "feeding" && Q.getStudent(i.studentId)!.classId === c.id);
+      const rate = Q.feeStructure.find((f) => f.classId === c.id)!.feeding;
+      if (c.id !== "c5") expect(bills.reduce((a, i) => a + i.items[0].amount, 0)).toBe(rate * bills.length);
     }
   });
   it("feeding and books stock sections exist with positive value", () => {
@@ -86,5 +88,48 @@ describe("Feeding and Books sections", () => {
     expect(Q.inventory.filter((i) => i.category === "Textbooks" || i.category === "Exercise Books").length).toBeGreaterThanOrEqual(7);
     expect(val(["Kitchen & Feeding"])).toBeGreaterThan(0); expect(val(["Textbooks", "Exercise Books"])).toBeGreaterThan(0);
     for (const i of Q.inventory) expect(i.onHand).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("Separate accounts: school fees, feeding, extracurricular", () => {
+  const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
+  it("each account has its own invoice and receipt numbering", () => {
+    const prefix = { fees: ["INV-", "RCT-"], feeding: ["FDG-", "FRC-"], extra: ["EXC-", "XRC-"] } as const;
+    for (const i of Q.invoices) expect(i.no.startsWith(prefix[i.account][0]), i.no).toBe(true);
+    for (const p of Q.payments) expect(p.receiptNo.startsWith(prefix[p.account][1]), p.receiptNo).toBe(true);
+    expect(new Set(Q.invoices.map((i) => i.no)).size).toBe(Q.invoices.length);
+    expect(new Set(Q.payments.map((p) => p.receiptNo)).size).toBe(Q.payments.length);
+    for (const acc of Q.ACCOUNT_IDS) expect(Q.payments.some((p) => p.account === acc), acc).toBe(true);
+  });
+  it("Ama: feeding GHS 600 (300 paid) and Music GHS 400 are separate from her GHS 1,500 school-fee balance", () => {
+    const id = ama().id;
+    expect(Q.feeSummary(id).balance).toBe(ghs(1500));
+    const fd = Q.accountSummary(id, "feeding"); expect([fd.billed, fd.paid, fd.balance]).toEqual([ghs(600), ghs(300), ghs(300)]);
+    const ex = Q.accountSummary(id, "extra"); expect([ex.billed, ex.paid, ex.balance]).toEqual([ghs(400), 0, ghs(400)]);
+    expect(Q.totalOwed(id)).toBe(ghs(2200));
+  });
+  it("a payment only reduces the balance of its own account", () => {
+    for (const s of Q.students) for (const acc of Q.ACCOUNT_IDS) {
+      const f = Q.accountSummary(s.id, acc);
+      const paid = Q.payments.filter((p) => p.studentId === s.id && p.account === acc && p.status === "Confirmed").reduce((a, p) => a + p.amount, 0);
+      expect(f.paid).toBe(paid);
+    }
+  });
+  it("extracurricular invoices only contain Music (Piano), STEM or Extra Classes; KG only Music", () => {
+    for (const i of Q.invoices.filter((x) => x.account === "extra")) {
+      const kg = Q.getClass(Q.getStudent(i.studentId)!.classId).level === "Kindergarten";
+      for (const it of i.items) expect(kg ? ["Music (Piano)"] : ["Music (Piano)", "STEM", "Extra Classes"]).toContain(it.label);
+    }
+  });
+  it("feeding reminders mention feeding, not school fees", () => {
+    const row = Q.reminderRows({ account: "feeding" })[0];
+    expect(Q.buildReminder(row, Q.SCHOOL, "feeding")).toMatch(/feeding/);
+    for (const r of Q.reminderRows({ account: "feeding" })) for (const l of r.lines) expect(Q.accountSummary(l.student.id, "feeding").balance).toBe(l.balance);
+  });
+  it("GL posts feeding and extracurricular to their own income accounts and still reconciles", () => {
+    const tb = Q.trialBalance();
+    expect(tb.find((t) => t.account === "4200 Feeding Fees")!.cr).toBe(Q.invoices.filter((i) => i.account === "feeding").reduce((a, i) => a + i.items.reduce((x, y) => x + y.amount, 0), 0));
+    expect(tb.some((t) => t.account === "4500 Extracurricular Fees")).toBe(true);
+    expect(Q.subledgerRecon().diff).toBe(0);
   });
 });
