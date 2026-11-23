@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BookOpen, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Utensils, Music, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Utensils, Shapes, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
@@ -19,7 +19,7 @@ const NAV: Nav[] = [
   { href: "/admissions", label: "Admissions", icon: UserPlus, key: "admissions" },
   { href: "/fees", label: "School Fees", icon: Receipt, key: "fees" },
   { href: "/feeding", label: "Feeding", icon: Utensils, key: "feeding" },
-  { href: "/extracurricular", label: "Extracurricular", icon: Music, key: "extracurricular" },
+  { href: "/extracurricular", label: "Extracurricular", icon: Shapes, key: "extracurricular" },
   { href: "/finance", label: "Finance", icon: Landmark, key: "finance" },
   { href: "/inventory", label: "Inventory", icon: Boxes, key: "inventory" },
   { href: "/academics", label: "Academics", icon: BookOpen, key: "academics" },
