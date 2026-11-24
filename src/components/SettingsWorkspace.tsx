@@ -4,7 +4,8 @@ import { Upload } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Field, inputClass } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
 import { AcademicCalendar } from "@/components/settings/AcademicCalendar";
-import { Tabs, useToast } from "@/components/ui/interactive";
+import { QueryTabs, useToast } from "@/components/ui/interactive";
+import { FeeScheduleEditor } from "@/components/settings/FeeScheduleEditor";
 const PERMS = ["students.read", "students.update", "parents.link", "dashboard.view_finance", "fees.view_outstanding", "fees.send_reminders", "fees.record_payment", "fees.issue_invoice", "feeding.record_payment", "feeding.issue_bill", "extracurricular.record_payment", "extracurricular.issue_invoice", "fees.adjust", "fees.refund", "finance.approve", "inventory.issue", "inventory.adjust", "grades.enter", "grades.approve", "reports.export", "settings.manage"];
 const BILLING = ["fees.view_outstanding", "fees.send_reminders", "fees.record_payment", "fees.issue_invoice", "feeding.record_payment", "feeding.issue_bill", "extracurricular.record_payment", "extracurricular.issue_invoice"];
 const ROLES: Record<string, string[]> = { Owner: [...PERMS], Administrator: ["students.read", "students.update", "parents.link", "fees.view_outstanding", "fees.send_reminders", "grades.approve", "reports.export"], Accountant: ["students.read", "dashboard.view_finance", ...BILLING, "fees.adjust", "fees.refund", "finance.approve", "reports.export"], Storekeeper: ["inventory.issue", "inventory.adjust"], Teacher: ["students.read", "grades.enter"], Auditor: ["students.read", "dashboard.view_finance", "fees.view_outstanding", "reports.export"] };
@@ -13,7 +14,7 @@ export function SettingsWorkspace({ school }: { school: Record<string, string> }
   const [roles, setRoles] = useState(ROLES);
   const save = (m: string) => toast(`${m} saved`);
   return (
-    <Tabs tabs={[
+    <QueryTabs tabs={[
       { id: "profile", label: "School profile", content: (
         <Card className="max-w-3xl p-5"><div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2 flex items-center gap-4"><div className="grid size-20 place-items-center overflow-hidden rounded-xl border border-dashed border-line bg-surface-2">{logo ? <img /* eslint-disable-line @next/next/no-img-element */ src={logo} alt="School logo preview" className="size-full object-contain" /> : <SchoolLogo size={80} />}</div>
@@ -21,6 +22,7 @@ export function SettingsWorkspace({ school }: { school: Record<string, string> }
           {[["School name", school.name], ["Phone", school.phone], ["Email", school.email], ["Location", school.city], ["Currency", school.currency], ["Timezone", school.timezone]].map(([l, v]) => <Field key={l} label={l}><input className={inputClass} defaultValue={v} /></Field>)}
           <div className="sm:col-span-2"><Button variant="primary" onClick={() => save("School profile")}>Save changes</Button></div></div></Card>) },
       { id: "calendar", label: "Academic calendar", content: <AcademicCalendar /> },
+      { id: "fees", label: "Fee schedule", content: <FeeScheduleEditor /> },
       { id: "numbering", label: "Numbering", content: <Card className="max-w-2xl p-5"><div className="grid gap-4 sm:grid-cols-2">{[["Admission number", "BMS/{YY}/{SEQ:4}"], ["Invoice number", "INV-{YYYY}-T{TERM}-{SEQ:4}"], ["Receipt number", "RCT-{SEQ:5}"], ["Purchase order", "PO-{SEQ:4}"]].map(([l, v]) => <Field key={l} label={l}><input className={inputClass} defaultValue={v} /></Field>)}</div><Button className="mt-4" variant="primary" onClick={() => save("Numbering schemes")}>Save</Button></Card> },
       { id: "approvals", label: "Approval thresholds", content: (
         <Card className="max-w-2xl p-5"><p className="mb-3 text-sm text-muted">Expenses up to each limit (GHS) are approved by the listed role. Configurable, never hard-coded.</p>

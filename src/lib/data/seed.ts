@@ -2,6 +2,7 @@ import { ghs, type Minor } from "../money";
 import type * as T from "./types";
 import { ACTIVITIES, type Activity } from "../accounts";
 import type { AcademicYear } from "../calendar";
+import { classFees, feedingRate, findTerm, type LevelFees, type TermFees } from "../fees";
 
 // Deterministic PRNG so server & client agree and screenshots are stable.
 let s = 20261012;
@@ -42,23 +43,28 @@ export const subjectsByLevel: Record<string, string[]> = {
   JHS: ["English Language", "Mathematics", "Integrated Science", "Social Studies", "RME", "Computing", "French"],
 };
 
-// ---------- Fee structure (per term, minor units) ----------
+// ---------- Fee schedule (per academic year + term, minor units) ----------
 // School fees: tuition, books, levies, exams, boarding. Feeding and extracurricular are billed separately.
-const feeFor = (level: string, boarding: boolean) => {
-  const tuition = level === "Kindergarten" ? 1800 : level === "Primary" ? 2400 : 3000;
-  const items: T.InvoiceItem[] = [
-    { label: "Tuition", amount: ghs(tuition) },
-    { label: "Books", amount: ghs(level === "Kindergarten" ? 150 : level === "Primary" ? 250 : 350) },
-    { label: "ICT & Development Levy", amount: ghs(level === "JHS" ? 250 : 150) },
-    { label: "PTA", amount: ghs(50) },
-  ];
-  if (level === "JHS") items.push({ label: "Examination", amount: ghs(200) });
-  if (boarding) items.push({ label: "Boarding", amount: ghs(1500) });
-  return items;
-};
-const feedingFor = (level: string) => ghs(level === "Kindergarten" ? 450 : 600);
-export const feeStructure = classes.map((c) => ({ classId: c.id, className: c.name, day: feeFor(c.level, false), boarding: feeFor(c.level, true), feeding: feedingFor(c.level) }));
-export const activityFees: Record<Activity, Minor> = { "Music (Piano)": ghs(400), STEM: ghs(350), "Extra Classes": ghs(300) };
+// Fees are set per level; a class can override or add lines (see `overrides`). Edited in Settings → Fee schedule.
+const lvl = (tuition: number, books: number, levy: number, exam: number, boarding: number, feeding: number): LevelFees => ({
+  items: [{ label: "Tuition", amount: ghs(tuition) }, { label: "Books", amount: ghs(books) }, { label: "ICT & Development Levy", amount: ghs(levy) }, { label: "PTA", amount: ghs(50) }, ...(exam ? [{ label: "Examination", amount: ghs(exam) }] : [])],
+  boarding: ghs(boarding), feeding: ghs(feeding),
+});
+const acts = (piano: number, stem: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), STEM: ghs(stem), "Extra Classes": ghs(extra) });
+const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 150, 0, 0, 420), Primary: lvl(2200, 250, 150, 0, 0, 560), JHS: lvl(2750, 350, 250, 200, 1400, 560) }, overrides: {}, activities: acts(380, 320, 280) });
+export const feeSchedule: TermFees[] = [
+  lastYear("Term 1"), lastYear("Term 2"), { ...lastYear("Term 3"), overrides: { c11: [{ label: "BECE Registration", amount: ghs(300) }] } },
+  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 150, 0, 0, 450), Primary: lvl(2400, 250, 150, 0, 0, 600), JHS: lvl(3000, 350, 250, 200, 1500, 600) }, overrides: {}, activities: acts(400, 350, 300) },
+  // Term 2: books are bought once a year (Term 1), Primary 6 pays a mock-exam fee, JHS 3 pays BECE registration.
+  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 150, 0, 0, 450), Primary: lvl(2400, 0, 150, 0, 0, 600), JHS: lvl(3000, 0, 250, 200, 1500, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350, 300) },
+  // Term 3 of 2026/2027 has no fees yet — set it up in Settings → Fee schedule.
+];
+const billingTerm = findTerm(feeSchedule, "2026/2027", "Term 1")!;
+const feeFor = (cls: T.SchoolClass, boarding: boolean) => classFees(billingTerm, cls, boarding);
+const feedingFor = (cls: T.SchoolClass) => feedingRate(billingTerm, cls);
+/** The current term's fees per class (derived from the schedule). */
+export const feeStructure = classes.map((c) => ({ classId: c.id, className: c.name, day: feeFor(c, false), boarding: feeFor(c, true), feeding: feedingFor(c) }));
+export const activityFees = billingTerm.activities as Record<Activity, Minor>;
 
 // ---------- Guardians & students ----------
 export const guardians: T.Guardian[] = [];
@@ -135,7 +141,7 @@ const staffNames = ["Efua Quansah (Bursar)", "Daniel Ofori (Accounts)", "Esi Tet
 let inv = 0, pay = 0, rc = 0;
 students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
-  const items = feeFor(cls.level, st.category === "Boarding");
+  const items = feeFor(cls, st.category === "Boarding");
   const discount = st.scholarship ? Math.round(items[0].amount * 0.25) : 0;
   const i: T.Invoice = { id: `inv${++inv}`, no: `INV-2627-T1-${pad(inv, 4)}`, account: "fees", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount, billedOn: "2026-09-01", dueOn: st.id === "s3" || inv % 5 === 0 ? "2026-10-05" : "2026-10-30" };
   invoices.push(i);
@@ -182,7 +188,7 @@ students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
   // Boarders always eat at school; most day students take the feeding programme.
   if (st.category === "Boarding" || rnd2() < 0.85) {
-    const amount = feedingFor(cls.level);
+    const amount = feedingFor(cls);
     invoices.push({ id: `fdg${++fInv}`, no: `FDG-2627-T1-${pad(fInv, 4)}`, account: "feeding", studentId: st.id, term: "Term 1", year: "2026/2027", items: [{ label: "Feeding", amount }], discount: 0, billedOn: "2026-09-01", dueOn: fInv % 6 === 0 ? "2026-10-05" : "2026-10-30" });
     settle("feeding", st, amount);
   }

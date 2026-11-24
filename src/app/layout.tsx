@@ -5,7 +5,9 @@ import "./globals.css";
 import { AppShell } from "@/components/shell/AppShell";
 import { CalendarProvider } from "@/components/shell/CalendarContext";
 import { ToastProvider } from "@/components/ui/interactive";
-import { SCHOOL } from "@/lib/data/queries";
+import { FeeScheduleProvider } from "@/components/shell/FeeScheduleContext";
+import { SCHOOL, classes, feeSchedule, lockedFeeTerms } from "@/lib/data/queries";
+import { ACTIVITIES } from "@/lib/accounts";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -17,7 +19,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <ToastProvider>
-            <CalendarProvider seed={SCHOOL.calendar} current={{ year: SCHOOL.year, term: SCHOOL.term }}><AppShell school={{ name: SCHOOL.name, short: SCHOOL.short }}>{children}</AppShell></CalendarProvider>
+            <CalendarProvider seed={SCHOOL.calendar} current={{ year: SCHOOL.year, term: SCHOOL.term }}>
+              <FeeScheduleProvider seed={feeSchedule} locked={lockedFeeTerms()} classes={classes.map((c) => ({ id: c.id, name: c.name, level: c.level }))} activities={[...ACTIVITIES]}>
+                <AppShell school={{ name: SCHOOL.name, short: SCHOOL.short }}>{children}</AppShell>
+              </FeeScheduleProvider>
+            </CalendarProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

@@ -3,9 +3,13 @@ import { pct, type Minor } from "../money";
 import * as D from "./seed";
 import type { Student, Guardian, Invoice, Payment } from "./types";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "../accounts";
+import { termKey } from "../fees";
 export { ACCOUNTS, ACCOUNT_IDS, type FeeAccount };
 
-export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
+export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, feeSchedule, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
+
+/** Terms that already have invoices in any account. Their fees are locked: changing them needs an approved adjustment. */
+export const lockedFeeTerms = () => [...new Set(invoices.map((i) => termKey(i.year, i.term)))];
 
 export const getClass = (id: string) => classes.find((c) => c.id === id)!;
 export const getStudent = (id: string) => students.find((s) => s.id === id);

@@ -3,29 +3,33 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Banknote, CalendarClock, Download, FilePlus2, FileText, Percent, Receipt, Send, ShieldAlert, Users, Wallet } from "lucide-react";
-import { AlertBanner, Badge, Button, Card, CardHeader, Kpi, StatusBadge } from "@/components/ui/primitives";
+import { AlertBanner, Badge, Button, Card, CardHeader, EmptyState, Kpi, StatusBadge } from "@/components/ui/primitives";
 import { DataTable, Drawer, Modal, Select, Tabs, useToast, type Column } from "@/components/ui/interactive";
 import { Donut, HBars, LineTrend } from "@/components/charts/charts";
 import { RecordPaymentDialog, type PayStudent } from "./RecordPaymentDialog";
 import { IssueBillDialog, type BillCandidate } from "./IssueBillDialog";
 import { useRole } from "@/components/shell/AppShell";
+import { useCalendar } from "@/components/shell/CalendarContext";
+import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
+import { TermFeeStructure } from "@/components/settings/FeeScheduleEditor";
+import { classFees, invoiceStem, sumItems, termKey } from "@/lib/fees";
 import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
 import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; cat: string; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; items: { label: string; amount: number }[] }
+export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; cat: string; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; terms: string[]; items: { label: string; amount: number }[] }
 export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; cat: string; amount: number; method: string; date: string; ref: string; status: string; staff: string }
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
-export interface FeeLine { className: string; classId: string; day: { label: string; amount: number }[]; boarding: { label: string; amount: number }[] }
 const TODAY = "2026-10-12";
 const daysAgo = (n: number) => { const d = new Date(TODAY + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
 const COST = { SMS: 5, WhatsApp: 12, Email: 0 } as const; // pesewas per message (estimate)
 
-export function FeesWorkspace({ account, students, payments, reminders, structures, classes, candidates, activityFees, initialTab, openPay, overdueOnly, usedRefs }: { account: FeeAccount; students: SRow[]; payments: PRow[]; reminders: RRow[]; structures: FeeLine[]; classes: { id: string; name: string }[]; candidates: BillCandidate[]; activityFees: Record<string, number>; initialTab?: string; openPay?: boolean; overdueOnly?: boolean; usedRefs: string[] }) {
+export function FeesWorkspace({ account, students, payments, reminders, classes, candidates, initialTab, openPay, overdueOnly, usedRefs }: { account: FeeAccount; students: SRow[]; payments: PRow[]; reminders: RRow[]; classes: { id: string; name: string }[]; candidates: BillCandidate[]; initialTab?: string; openPay?: boolean; overdueOnly?: boolean; usedRefs: string[] }) {
   const A = ACCOUNTS[account];
   const { ready, money: access, allow } = useRole(); const full = access === "full"; const canPay = allow("payments", "create"); const canBill = allow("invoices", "create");
   const [cls, setCls] = useState(""); const [cat, setCat] = useState(""); const [range, setRange] = useState("term"); const [payOpen, setPayOpen] = useState(!!openPay); const [billOpen, setBillOpen] = useState(false);
   const router = useRouter();
+  const { year, term } = useCalendar();
   const ss = useMemo(() => students.filter((s) => (!cls || s.classId === cls) && (!cat || s.cat === cat)), [students, cls, cat]);
   const pp = useMemo(() => payments.filter((p) => (!cls || p.classId === cls) && (!cat || p.cat === cat)), [payments, cls, cat]);
   const conf = useMemo(() => pp.filter((p) => p.status === "Confirmed"), [pp]);
@@ -46,7 +50,7 @@ export function FeesWorkspace({ account, students, payments, reminders, structur
       <Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} />
       <Select label="Student category" value={cat} onChange={setCat} options={[{ value: "", label: "Day & boarding" }, { value: "Day", label: "Day" }, { value: "Boarding", label: "Boarding" }]} />
       {full && <Select label="Collection period" value={range} onChange={setRange} options={[{ value: "today", label: "Today" }, { value: "week", label: "Last 7 days" }, { value: "month", label: "Last 30 days" }, { value: "term", label: "This term" }]} />}
-      <span className="text-xs text-muted">Term 1 · 2026/2027</span>
+      <span className="text-xs text-muted">{term} · {year}</span>
     </div>
   );
 
@@ -87,9 +91,9 @@ export function FeesWorkspace({ account, students, payments, reminders, structur
     { id: "outstanding", label: "Outstanding", badge: String(owing.length), content: <OutstandingTable rows={ss.filter((s) => s.balance > 0)} overdueOnly={overdueOnly} account={account} showTotals={full} /> },
     { id: "reminders", label: "Reminders", badge: String(eligible.length), content: <Reminders rows={reminders.filter((r) => !cls || r.classIds.includes(cls))} /> },
     full && { id: "payments", label: "Payments & receipts", content: <PaymentsTable rows={pp} /> },
-    full && { id: "invoices", label: account === "feeding" ? "Bills" : "Invoices", content: <Invoices students={ss} account={account} canBill={canBill} onIssue={() => setBillOpen(true)} /> },
+    full && { id: "invoices", label: account === "feeding" ? "Bills" : "Invoices", content: <Invoices students={ss} candidates={candidates.filter((c) => (!cls || c.classId === cls) && (!cat || (cat === "Boarding") === c.boarding))} account={account} canBill={canBill} onIssue={() => setBillOpen(true)} /> },
     full && { id: breakdown.id, label: breakdown.label, content: breakdown.node },
-    full && account === "fees" && { id: "structures", label: "Fee structures", content: <Structures rows={structures} /> },
+    full && account === "fees" && { id: "structures", label: "Fee structures", content: <TermFeeStructure /> },
     full && { id: "reconcile", label: "Reconciliation", badge: String(pp.filter((p) => p.status !== "Confirmed").length), content: <Reconcile rows={pp} /> },
   ] as (Tab | false)[]).filter((t): t is Tab => !!t);
   const start = initialTab && tabs.some((t) => t.id === initialTab) ? initialTab : undefined;
@@ -101,7 +105,7 @@ export function FeesWorkspace({ account, students, payments, reminders, structur
           {canPay && <Button variant="primary" onClick={() => setPayOpen(true)}><Receipt size={14} />Record {A.label.toLowerCase()} payment</Button>}</div></div>
       <Tabs key={access} initial={start} tabs={tabs} />
       {canPay && <RecordPaymentDialog open={payOpen} onClose={() => setPayOpen(false)} students={payStudents} usedRefs={usedRefs} account={account} />}
-      {canBill && <IssueBillDialog open={billOpen} onClose={() => setBillOpen(false)} account={account} candidates={candidates} activityFees={activityFees} />}
+      {canBill && <IssueBillDialog open={billOpen} onClose={() => setBillOpen(false)} account={account} candidates={candidates} />}
     </div>
   );
 }
@@ -170,20 +174,44 @@ function PaymentsTable({ rows }: { rows: PRow[] }) {
   return <Card><DataTable rows={rows.filter((r) => !m || r.method === m)} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.receipt} ${x.student} ${x.ref}`} filters={<Select label="Method" value={m} onChange={setM} options={[{ value: "", label: "All methods" }, ...["Cash", "Mobile Money", "Bank Transfer", "Card", "Cheque"].map((v) => ({ value: v, label: v }))]} />} pageSize={12} /></Card>;
 }
 
-function Invoices({ students, account, canBill, onIssue }: { students: SRow[]; account: FeeAccount; canBill: boolean; onIssue: () => void }) {
-  const [o, setO] = useState(false); const toast = useToast(); const A = ACCOUNTS[account];
+function Invoices({ students, candidates, account, canBill, onIssue }: { students: SRow[]; candidates: BillCandidate[]; account: FeeAccount; canBill: boolean; onIssue: () => void }) {
+  const [o, setO] = useState(false); const A = ACCOUNTS[account];
+  const { year, term } = useCalendar(); const key = termKey(year, term);
+  const rows = students.filter((s) => s.terms.includes(key));
   return (
-    <Card><CardHeader title={`${A.label} ${account === "feeding" ? "bills" : "invoices"}`} sub={`Term 1 · 2026/2027 · numbered ${A.invoicePrefix}-… and receipted separately (${A.receiptPrefix}-…)`} action={canBill ? (account === "fees" ? <Button variant="primary" size="sm" onClick={() => setO(true)}>Generate term invoices</Button> : <Button variant="primary" size="sm" onClick={onIssue}><FilePlus2 size={13} />Issue new bill</Button>) : undefined} />
-      <DataTable rows={students} columns={[
+    <Card><CardHeader title={`${A.label} ${account === "feeding" ? "bills" : "invoices"} — ${term} ${year}`} sub={`Numbered ${invoiceStem(A.invoicePrefix, year, term)}-… and receipted separately (${A.receiptPrefix}-…)`} action={canBill ? (account === "fees" ? <Button variant="primary" size="sm" onClick={() => setO(true)}>Generate {term} invoices</Button> : <Button variant="primary" size="sm" onClick={onIssue}><FilePlus2 size={13} />Issue new bill</Button>) : undefined} />
+      <DataTable rows={rows} empty={<EmptyState icon={FileText} title={`No ${account === "feeding" ? "bills" : "invoices"} for ${term} ${year} yet`} body={account === "fees" ? "Generate this term's invoices once its fees are set." : "Issue bills to students as they enrol."} />} columns={[
         { key: "i", header: "Invoice", render: (x) => <b className="num">{x.invoice}</b> }, { key: "n", header: "Student", sort: (x) => x.name, render: (x) => x.name }, { key: "c", header: "Class", render: (x) => x.cls },
         ...(account === "extra" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: SRow) => x.items.map((i) => i.label).join(", ") }] : []),
         { key: "b", header: "Total", align: "right", sort: (x) => x.billed, render: (x) => money(x.billed) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
         { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> }, { key: "pdf", header: "", render: (x) => <Link className="text-info" href={`/print/invoice/${x.invoice}`}>PDF</Link> },
       ]} rowId={(x) => x.id} searchText={(x) => x.name + x.invoice} pageSize={10} />
-      <Modal open={o} onClose={() => setO(false)} title="Generate term invoices" footer={<><Button onClick={() => setO(false)}>Close</Button><Button variant="primary" disabled onClick={() => toast("Nothing to generate")}>Generate 0 invoices</Button></>}>
-        <p>All <b>{students.length}</b> active students in the current filter already have a Term 1 invoice.</p><p className="mt-2 text-sm text-muted">Generation is idempotent: each student can only have one invoice per term, so running it again never creates duplicates. New students admitted later are picked up automatically.</p>
-      </Modal>
+      {o && <GenerateInvoices candidates={candidates} onClose={() => setO(false)} />}
     </Card>
+  );
+}
+
+// Bulk school-fee billing for the selected term: every active student without an invoice that term is billed
+// from the fee schedule (their class's fees, plus boarding for boarders). Idempotent by student + term.
+function GenerateInvoices({ candidates, onClose }: { candidates: BillCandidate[]; onClose: () => void }) {
+  const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const toast = useToast();
+  const key = termKey(year, term);
+  const todo = candidates.filter((c) => !c.billed[key]?.length);
+  const lines = tf ? todo.map((c) => { const cls = fs.classes.find((x) => x.id === c.classId)!; return { c, cls, total: sumItems(classFees(tf, cls, c.boarding)) }; }) : [];
+  const byClass = fs.classes.map((cls) => { const l = lines.filter((x) => x.cls.id === cls.id); return { cls, n: l.length, total: l.reduce((a, x) => a + x.total, 0) }; }).filter((r) => r.n > 0);
+  const total = byClass.reduce((a, r) => a + r.total, 0);
+  return (
+    <Modal open onClose={onClose} title={`Generate ${term} ${year} invoices`} wide footer={<><Button onClick={onClose}>Close</Button>{tf && lines.length > 0 && <Button variant="primary" onClick={() => { toast(`${lines.length} ${term} invoices generated · ${money(total)}`); onClose(); }}>Generate {lines.length} invoices · {money(total)}</Button>}</>}>
+      {!tf ? <div className="space-y-2"><p>{term} {year} has no fees set, so invoices can&apos;t be generated yet.</p><Link className="text-sm font-medium text-info hover:underline" href="/settings?tab=fees">Set {term} fees in Settings →</Link></div>
+        : lines.length === 0 ? <><p>All <b>{candidates.length}</b> active students in the current filter already have a {term} invoice.</p><p className="mt-2 text-sm text-muted">Generation is idempotent: each student can only have one invoice per term, so running it again never creates duplicates. New students admitted later are picked up automatically.</p></>
+        : <div className="space-y-3">
+            <p><b>{lines.length}</b> students have no {term} invoice yet. Each is billed their class&apos;s {term} fees from the fee schedule, plus boarding for boarders.</p>
+            <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-3 py-2 text-left">Class</th><th className="px-3 text-right">Students</th><th className="px-3 text-right">Total</th></tr></thead>
+              <tbody className="divide-y divide-line">{byClass.map((r) => <tr key={r.cls.id}><td className="px-3 py-2">{r.cls.name}</td><td className="num px-3 text-right">{r.n}</td><td className="num px-3 text-right">{money(r.total)}</td></tr>)}</tbody>
+              <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-3 py-2">Total</td><td className="num px-3 text-right">{lines.length}</td><td className="num px-3 text-right">{money(total)}</td></tr></tfoot></table></div>
+            <p className="text-xs text-muted">Numbered {invoiceStem("INV", year, term)}-0001 onwards. Scholarships are applied as discounts on each invoice. Front-end preview — invoices are saved once the backend is connected.</p>
+          </div>}
+    </Modal>
   );
 }
 
@@ -230,16 +258,6 @@ function Activities({ students }: { students: SRow[] }) {
           { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
         ]} /></Card>
     </div>
-  );
-}
-
-function Structures({ rows }: { rows: FeeLine[] }) {
-  const labels = Array.from(new Set(rows.flatMap((r) => r.boarding.map((b) => b.label))));
-  const amt = (l: { label: string; amount: number }[], k: string) => l.find((x) => x.label === k)?.amount;
-  return (
-    <Card><CardHeader title="Fee structure — Term 1, 2026/2027" sub="Per-student overrides and scholarships are applied as approved adjustments on the invoice." />
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th>{labels.map((l) => <th key={l} className="px-3 text-right">{l}</th>)}<th className="px-4 text-right">Day total</th><th className="px-4 text-right">Boarding total</th></tr></thead>
-        <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.classId}><td className="px-4 py-2.5 font-medium">{r.className}</td>{labels.map((l) => <td key={l} className="num px-3 text-right">{amt(r.boarding, l) ? money(amt(r.day, l) ?? amt(r.boarding, l)!) : "—"}</td>)}<td className="num px-4 text-right font-medium">{money(r.day.reduce((a, b) => a + b.amount, 0))}</td><td className="num px-4 text-right font-medium">{money(r.boarding.reduce((a, b) => a + b.amount, 0))}</td></tr>)}</tbody></table></div></Card>
   );
 }
 
