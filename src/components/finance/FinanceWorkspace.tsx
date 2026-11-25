@@ -16,7 +16,7 @@ export interface Bud { category: string; budget: number; actual: number }
 const CATS = ["Salaries", "Utilities", "Internet", "Repairs", "Stationery", "Food Supplies", "Transport", "Inventory Purchases", "Software", "Building", "Maintenance", "Other"];
 const EXP_FIELDS: FieldDef[] = [
   { key: "category", label: "Category", type: "select", options: CATS, required: true }, { key: "vendor", label: "Vendor / payee", required: true },
-  { key: "amount", label: "Amount (GHS)", type: "number", required: true, validate: (v) => (Number(v) <= 0 ? "Must be greater than 0" : undefined) }, { key: "date", label: "Expense date", type: "date", required: true },
+  { key: "amount", label: "Amount (GH₵)", type: "number", required: true, validate: (v) => (Number(v) <= 0 ? "Must be greater than 0" : undefined) }, { key: "date", label: "Expense date", type: "date", required: true },
   { key: "department", label: "Department", type: "select", options: ["Administration", "Operations", "Kitchen", "Stores", "Academics"], required: true }, { key: "method", label: "Payment method", type: "select", options: ["Bank Transfer", "Cash", "Mobile Money", "Cheque"], required: true },
 ];
 const THRESH = [{ upTo: 500000, who: "Finance Officer" }, { upTo: 2500000, who: "School Administrator" }, { upTo: Infinity, who: "Owner" }];

@@ -59,7 +59,7 @@ function RequestChange({ year, term }: { year: string; term: string }) {
     <Button size="sm" onClick={() => setOpen(true)}>Request a change</Button>
     <Modal open={open} onClose={() => setOpen(false)} title={`Request a fee change — ${term} ${year}`}
       footer={<><Button onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" disabled={reason.trim().length < 10} onClick={() => { toast("Change request sent for approval"); setOpen(false); setReason(""); }}>Send for approval</Button></>}>
-      <p className="text-sm text-muted">What should change, and why? For example: &quot;JHS ICT levy should be GHS 200, agreed at the PTA meeting on 3 Oct.&quot;</p>
+      <p className="text-sm text-muted">What should change, and why? For example: &quot;JHS ICT levy should be GH₵ 200, agreed at the PTA meeting on 3 Oct.&quot;</p>
       <textarea aria-label="What should change and why" value={reason} onChange={(e) => setReason(e.target.value)} className="mt-3 h-28 w-full rounded-lg border border-line bg-surface p-2 text-sm" />
     </Modal>
   </>);
@@ -77,7 +77,7 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
 
   return (
     <div className="space-y-4">
-      <Card><CardHeader title={`Fees for ${tf.term} ${tf.year}`} sub="Amounts in GHS for one student, per term. Leave a box empty if that level doesn't pay that fee." />
+      <Card><CardHeader title={`Fees for ${tf.term} ${tf.year}`} sub="Amounts in GH₵ for one student, per term. Leave a box empty if that level doesn't pay that fee." />
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left font-medium">Fee</th>{LEVELS.map((lv) => <th key={lv} className={th}><span className="hidden sm:inline">{lv}</span><span className="sm:hidden">{SHORT[lv]}</span></th>)}<th className="w-10" /></tr></thead>
           <tbody className="divide-y divide-line">
@@ -137,7 +137,7 @@ export function ClassFeeTable({ tf, classes, title, sub, action }: { tf: TermFee
   const short = (m: number) => (m / 100).toLocaleString("en-GH");
   return (
     <Card><CardHeader title={title} sub={sub ?? "School fees per student, feeding included. Extra classes are billed separately."} action={action} />
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GHS)</th><th className="whitespace-nowrap px-3 text-right">School fees</th></tr></thead>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GH₵)</th><th className="whitespace-nowrap px-3 text-right">School fees</th></tr></thead>
         <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.c.id} className="align-top">
           <td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.c.name}</td>
           <td className="hidden px-3 py-2.5 text-muted md:table-cell">{r.day.map((i) => { const odd = r.extra.some((e) => e.label === i.label); return <span key={i.label} className={cn("mr-3 inline-block", odd && "font-medium text-info")}>{i.label} {short(i.amount)}</span>; })}</td>

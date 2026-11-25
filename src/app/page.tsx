@@ -23,7 +23,7 @@ export default function Dashboard() {
   ];
 
   const widgets: Widget[] = [
-    { id: "collections", money: true, title: "Fee collections", span: 2, node: <Card><CardHeader title="Fee collections" sub="Confirmed payments per week, GHS" /><div className="px-2 pb-3"><LineTrend data={Q.collectionTrend()} x="week" y="collected" label="Collected" /></div></Card> },
+    { id: "collections", money: true, title: "Fee collections", span: 2, node: <Card><CardHeader title="Fee collections" sub="Confirmed payments per week, GH₵" /><div className="px-2 pb-3"><LineTrend data={Q.collectionTrend()} x="week" y="collected" label="Collected" /></div></Card> },
     { id: "status", money: true, title: "Fee status", node: <Card><CardHeader title="Fee status distribution" sub="Active students" /><div className="px-2 pb-3"><Donut data={fs} money={false} colors={["var(--ok)", "var(--warn)", "var(--danger)"]} centerLabel="students" /></div></Card> },
     { id: "incexp", money: true, title: "Income vs expenditure", node: <Card><CardHeader title="Income vs expenditure" sub="Cash basis · confirmed receipts vs approved/paid expenses" /><div className="px-2 pb-3"><GroupedBars data={Q.incomeVsExpense()} x="month" bars={[{ key: "income", label: "Income (cash)", color: "var(--ok)" }, { key: "expense", label: "Expenditure", color: "var(--danger)" }]} /></div></Card> },
     { id: "byclass", money: true, title: "Outstanding by class", node: <Card><CardHeader title="Outstanding fees by class" /><div className="px-2 pb-3"><HBars data={Q.outstandingByClass()} x="name" y="outstanding" label="Outstanding" height={300} /></div></Card> },

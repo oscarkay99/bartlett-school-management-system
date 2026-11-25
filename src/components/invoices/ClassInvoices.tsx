@@ -150,7 +150,7 @@ function FullSheet({ school, doc: d, setDoc }: { school: School; doc: ClassInvoi
         </> : <><div className="text-[15px] font-semibold">{d.title}</div><div className="text-neutral-600">{d.period}</div></>}
       </div>
       <table className="mt-3 w-full border-collapse">
-        <thead><tr className="bg-neutral-100 text-left"><th className="border border-neutral-300 p-2">Description</th><th className="w-40 border border-neutral-300 p-2 text-right">Amount (GHS)</th>{setDoc && <th className="w-10 border border-neutral-300" />}</tr></thead>
+        <thead><tr className="bg-neutral-100 text-left"><th className="border border-neutral-300 p-2">Description</th><th className="w-40 border border-neutral-300 p-2 text-right">Amount (GH₵)</th>{setDoc && <th className="w-10 border border-neutral-300" />}</tr></thead>
         <tbody>
           {d.lines.map((l, i) => <tr key={`${rev}-${i}`}>
             <td className="border border-neutral-300 p-2">{setDoc ? <input aria-label={`Line ${i + 1} description`} placeholder="Description" className={cn(box, "w-full")} value={l.description} onChange={(e) => setLines(d.lines.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} /> : l.description}</td>

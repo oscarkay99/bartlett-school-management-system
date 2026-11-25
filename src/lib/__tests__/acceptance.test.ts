@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as Q from "../data/queries";
-import { ghs, money } from "../money";
+import { ghs, money, moneyShort } from "../money";
 
 describe("money", () => {
-  it("formats GHS with integer minor units", () => { expect(money(ghs(1500))).toBe("GHS 1,500.00"); expect(ghs(0.1) + ghs(0.2)).toBe(30); });
+  it("formats amounts with the cedi sign and integer minor units", () => { expect(money(ghs(1500))).toBe("GH₵ 1,500.00"); expect(moneyShort(ghs(25000))).toBe("GH₵ 25.0k"); expect(money(-ghs(5))).toBe("-GH₵ 5.00"); expect(ghs(0.1) + ghs(0.2)).toBe(30); });
 });
 describe("Workflow B — partial payment", () => {
   it("Ama Mensah: GHS 3,950 billed (feeding included), 2,300 paid, 1,650 outstanding", () => {

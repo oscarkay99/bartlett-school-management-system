@@ -16,7 +16,7 @@ export interface Mv { id: string; date: string; itemId: string; type: string; qt
 const ITEM_FIELDS: FieldDef[] = [
   { key: "name", label: "Item name", required: true, span: 2 }, { key: "category", label: "Category", type: "select", required: true, options: ["Textbooks", "Exercise Books", "Stationery", "Uniforms", "Laboratory Supplies", "Cleaning Materials", "Classroom Supplies", "Sports Equipment", "ICT Equipment", "Furniture", "Maintenance Supplies", "Kitchen & Feeding"] },
   { key: "kind", label: "Type", type: "select", required: true, options: ["Consumable", "Reusable", "Asset"] }, { key: "sku", label: "SKU", hint: "Auto-generated if blank" }, { key: "unit", label: "Unit", required: true }, { key: "location", label: "Store / location", required: true }, { key: "supplier", label: "Supplier" },
-  { key: "cost", label: "Cost per unit (GHS)", type: "number", required: true, validate: (v) => (Number(v) <= 0 ? "Must be greater than 0" : undefined) }, { key: "reorder", label: "Reorder level", type: "number", required: true }, { key: "max", label: "Maximum stock", type: "number", required: true },
+  { key: "cost", label: "Cost per unit (GH₵)", type: "number", required: true, validate: (v) => (Number(v) <= 0 ? "Must be greater than 0" : undefined) }, { key: "reorder", label: "Reorder level", type: "number", required: true }, { key: "max", label: "Maximum stock", type: "number", required: true },
 ];
 const IN = ["Received", "Opening", "Returned"];
 const signed = (m: Mv) => (IN.includes(m.type) ? m.qty : m.type === "Adjustment" ? m.qty : -m.qty);

@@ -1,11 +1,12 @@
 "use client";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, Treemap, XAxis, YAxis } from "recharts";
+import { CEDI } from "@/lib/money";
 
 const C = { info: "var(--info)", ok: "var(--ok)", warn: "var(--warn)", danger: "var(--danger)", brand: "var(--brand)", muted: "var(--muted)", line: "var(--border)" };
 const PALETTE = ["#2563eb", "#0d9488", "#d97706", "#7c3aed", "#db2777", "#0891b2", "#65a30d", "#64748b", "#ea580c"];
 const tick = { fontSize: 11, fill: "var(--muted)" };
 const tip = { contentStyle: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--fg)" }, labelStyle: { color: "var(--fg)", fontWeight: 600 } };
-const cedi = (v: number) => `GHS ${Number(v).toLocaleString("en-GH", { maximumFractionDigits: 0 })}`;
+const cedi = (v: number) => `${CEDI} ${Number(v).toLocaleString("en-GH", { maximumFractionDigits: 0 })}`;
 const k = (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v));
 
 export function LineTrend({ data, x, y, label, money = true, domain, color = C.info, height = 240 }: { data: Record<string, number | string>[]; x: string; y: string; label: string; money?: boolean; domain?: [number | string, number | string]; color?: string; height?: number }) {

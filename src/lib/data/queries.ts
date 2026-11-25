@@ -1,5 +1,5 @@
 // Data access seam. Every page reads through these functions; the backend replaces this file later.
-import { pct, type Minor } from "../money";
+import { CEDI, pct, type Minor } from "../money";
 import * as D from "./seed";
 import type { Student, Guardian, Invoice, Payment } from "./types";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "../accounts";
@@ -144,7 +144,7 @@ export function reminderRows(opts: { classId?: string; overdueOnly?: boolean; ac
 export function buildReminder(row: ReminderRow, school = SCHOOL, account: FeeAccount = "fees") {
   const noun = ACCOUNTS[account].noun;
   const name = `${row.guardian.title} ${row.guardian.name.split(" ").pop()}`;
-  const fmt = (m: number) => `GHS ${(m / 100).toLocaleString("en-GH", { minimumFractionDigits: 0 })}`;
+  const fmt = (m: number) => `${CEDI} ${(m / 100).toLocaleString("en-GH", { minimumFractionDigits: 0 })}`;
   const due = new Date(row.lines[0].dueOn + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   if (row.lines.length === 1) {
     const l = row.lines[0];

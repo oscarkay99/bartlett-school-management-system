@@ -326,7 +326,7 @@ export const approvals: T.Approval[] = [
   { id: "a6", kind: "Stock adjustment", title: "Write-off: 4 damaged beaker sets", requester: "Kojo Danso", amount: ghs(340), date: "2026-10-06", module: "inventory" },
 ];
 export const audit: T.AuditEvent[] = [
-  ["Efua Quansah", "Recorded payment RCT-00412 (GHS 2,000)", "Ama Mensah", "Fees"], ["Daniel Ofori", "Reversed payment BNK-2210", "Student s44", "Fees"], ["Adwoa Asante", "Linked guardian Kwabena Mensah", "Kofi Mensah", "Students"],
+  ["Efua Quansah", "Recorded payment RCT-00412 (GH₵ 2,000)", "Ama Mensah", "Fees"], ["Daniel Ofori", "Reversed payment BNK-2210", "Student s44", "Fees"], ["Adwoa Asante", "Linked guardian Kwabena Mensah", "Kofi Mensah", "Students"],
   ["Kojo Danso", "Received 100 × English Textbook (GRN-0042)", "Main Store", "Inventory"], ["Owner", "Approved grade batch Primary 6 English", "Primary 6", "Academics"], ["Esi Tetteh", "Generated invoices (Term 1)", "11 classes", "Fees"],
   ["Admin", "Changed role: Auditor → read-only finance", "User t15", "Access"], ["Kojo Danso", "Adjusted stock: damaged ×2", "Football (size 5)", "Inventory"],
 ].map(([actor, action, target, module], i) => ({ id: `au${i}`, at: `2026-10-${pad(12 - Math.floor(i / 3), 2)} ${pad(16 - i, 2)}:${pad(i * 7 % 60, 2)}`, actor, action, target, module }));
