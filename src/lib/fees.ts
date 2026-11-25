@@ -46,7 +46,7 @@ export const copyTerm = (from: TermFees, year: string, term: string): TermFees =
 /** An empty schedule for a term: the usual lines at zero, so the school only types amounts. */
 export function blankTerm(year: string, term: string, activities: readonly string[]): TermFees {
   const lines = (extra: string[] = []) => ["Tuition", "Books", "ICT & Development Levy", "PTA", ...extra].map((label) => ({ label, amount: 0 }));
-  return { year, term, levels: { Kindergarten: { items: lines(), feeding: 0 }, Primary: { items: lines(), feeding: 0 }, JHS: { items: lines(["Examination"]), feeding: 0 } }, overrides: {}, activities: Object.fromEntries(activities.map((a) => [a, 0])) };
+  return { year, term, levels: { Kindergarten: { items: lines(), feeding: 0 }, Primary: { items: lines(), feeding: 0 }, JHS: { items: lines(), feeding: 0 } }, overrides: {}, activities: Object.fromEntries(activities.map((a) => [a, 0])) };
 }
 
 /** The most recent term before (year, term) in calendar order that already has fees — what "Copy from" offers. */

@@ -6,10 +6,10 @@ describe("money", () => {
   it("formats amounts with the cedi sign and integer minor units", () => { expect(money(ghs(1500))).toBe("GH₵ 1,500.00"); expect(moneyShort(ghs(25000))).toBe("GH₵ 25.0k"); expect(money(-ghs(5))).toBe("-GH₵ 5.00"); expect(ghs(0.1) + ghs(0.2)).toBe(30); });
 });
 describe("Workflow B — partial payment", () => {
-  it("Ama Mensah: GHS 3,950 billed (feeding included), 2,300 paid, 1,650 outstanding", () => {
+  it("Ama Mensah: GH₵ 3,700 billed (feeding included), 2,300 paid, 1,400 outstanding", () => {
     const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
     const f = Q.feeSummary(ama.id);
-    expect([f.billed, f.paid, f.balance]).toEqual([ghs(3950), ghs(2300), ghs(1650)]);
+    expect([f.billed, f.paid, f.balance]).toEqual([ghs(3700), ghs(2300), ghs(1400)]);
     expect(f.status).toBe("Partially Paid");
   });
   it("pending and reversed payments are never counted as collected", () => {
@@ -72,12 +72,15 @@ describe("School fees invoice: books and feeding on one invoice", () => {
       expect(i.items.some((x) => x.label === "Feeding"), `${i.no} Feeding`).toBe(true);
     }
   });
+  it("there is no Examination fee on any invoice", () => {
+    for (const i of Q.invoices) expect(i.items.some((x) => x.label === "Examination"), i.no).toBe(false);
+  });
   it("the ICT & Development Levy is not charged yet", () => {
     for (const i of Q.invoices) expect(i.items.some((x) => x.label === "ICT & Development Levy" && x.amount > 0), i.no).toBe(false);
   });
-  it("Ama's school-fee invoice totals GHS 3,950 with Books and Feeding itemised", () => {
+  it("Ama's school-fee invoice totals GH₵ 3,700 with Books and Feeding itemised, no Examination", () => {
     const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!; const inv = Q.invoicesOf(ama.id, "fees")[0];
-    expect(inv.items.reduce((a, x) => a + x.amount, 0)).toBe(ghs(3950)); expect(inv.items.find((x) => x.label === "Books")!.amount).toBe(ghs(250));
+    expect(inv.items.reduce((a, x) => a + x.amount, 0)).toBe(ghs(3700)); expect(inv.items.some((x) => x.label === "Examination")).toBe(false); expect(inv.items.find((x) => x.label === "Books")!.amount).toBe(ghs(250));
     expect(inv.items.find((x) => x.label === "Feeding")!.amount).toBe(ghs(600));
   });
   it("feeding on each invoice = the class's feeding rate", () => {
@@ -106,11 +109,11 @@ describe("Two accounts: school fees and standalone Extra Classes", () => {
     expect(new Set(Q.payments.map((p) => p.receiptNo)).size).toBe(Q.payments.length);
     for (const acc of Q.ACCOUNT_IDS) expect(Q.payments.some((p) => p.account === acc), acc).toBe(true);
   });
-  it("Ama: Music + Extra Classes (GH₵ 750) are separate from her GH₵ 1,650 school-fee balance", () => {
+  it("Ama: Music + Extra Classes (GH₵ 750) are separate from her GH₵ 1,400 school-fee balance", () => {
     const id = ama().id;
-    expect(Q.feeSummary(id).balance).toBe(ghs(1650));
+    expect(Q.feeSummary(id).balance).toBe(ghs(1400));
     const ex = Q.accountSummary(id, "extra"); expect([ex.billed, ex.paid, ex.balance]).toEqual([ghs(750), 0, ghs(750)]);
-    expect(Q.totalOwed(id)).toBe(ghs(1650)); // school fees only: Extra Classes is never added
+    expect(Q.totalOwed(id)).toBe(ghs(1400)); // school fees only: Extra Classes is never added
   });
   it("a payment only reduces the balance of its own account", () => {
     for (const s of Q.students) for (const acc of Q.ACCOUNT_IDS) {

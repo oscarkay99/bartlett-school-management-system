@@ -45,20 +45,20 @@ export const subjectsByLevel: Record<string, string[]> = {
 };
 
 // ---------- Fee schedule (per academic year + term, minor units) ----------
-// School fees invoice: tuition, books, levies, PTA, exams and feeding. The school has no boarders. Extra classes are billed on their own standalone invoice.
+// School fees invoice: tuition, books, levies, PTA and feeding. The school has no boarders. Extra classes are billed on their own standalone invoice.
 // The school does not charge the ICT & Development Levy yet (planned in about two years): it is kept at 0 so invoices show "—".
 // Fees are set per level; a class can override or add lines (see `overrides`). Edited in Settings → Fee schedule.
-const lvl = (tuition: number, books: number, levy: number, exam: number, feeding: number): LevelFees => ({
-  items: [{ label: "Tuition", amount: ghs(tuition) }, { label: "Books", amount: ghs(books) }, { label: "ICT & Development Levy", amount: ghs(levy) }, { label: "PTA", amount: ghs(50) }, ...(exam ? [{ label: "Examination", amount: ghs(exam) }] : [])],
+const lvl = (tuition: number, books: number, levy: number, feeding: number): LevelFees => ({
+  items: [{ label: "Tuition", amount: ghs(tuition) }, { label: "Books", amount: ghs(books) }, { label: "ICT & Development Levy", amount: ghs(levy) }, { label: "PTA", amount: ghs(50) }],
   feeding: ghs(feeding),
 });
 const acts = (piano: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), "Extra Classes": ghs(extra) });
-const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 0, 420), Primary: lvl(2200, 250, 0, 0, 560), JHS: lvl(2750, 350, 0, 200, 560) }, overrides: {}, activities: acts(380, 320) });
+const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 420), Primary: lvl(2200, 250, 0, 560), JHS: lvl(2750, 350, 0, 560) }, overrides: {}, activities: acts(380, 320) });
 export const feeSchedule: TermFees[] = [
   lastYear("Term 1"), lastYear("Term 2"), { ...lastYear("Term 3"), overrides: { c11: [{ label: "BECE Registration", amount: ghs(300) }] } },
-  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 0, 450), Primary: lvl(2400, 250, 0, 0, 600), JHS: lvl(3000, 350, 0, 200, 600) }, overrides: {}, activities: acts(400, 350) },
+  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 450), Primary: lvl(2400, 250, 0, 600), JHS: lvl(3000, 350, 0, 600) }, overrides: {}, activities: acts(400, 350) },
   // Term 2: books are bought once a year (Term 1), Primary 6 pays a mock-exam fee, JHS 3 pays BECE registration.
-  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 0, 450), Primary: lvl(2400, 0, 0, 0, 600), JHS: lvl(3000, 0, 0, 200, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350) },
+  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 450), Primary: lvl(2400, 0, 0, 600), JHS: lvl(3000, 0, 0, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350) },
   // Term 3 of 2026/2027 has no fees yet — set it up in Settings → Fee schedule.
 ];
 const billingTerm = findTerm(feeSchedule, "2026/2027", "Term 1")!;
@@ -165,11 +165,11 @@ students.forEach((st) => {
     payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: st.id, guardianId: g, amount: amt, method: pick<T.PayMethod>(["Mobile Money", "Mobile Money", "Cash", "Bank Transfer", "Card", "Cheque"]), date: day > TODAY ? TODAY : day, ref: `REF${int(100000, 999999)}`, status: "Confirmed", staff: pick(staffNames) });
   });
 });
-// Demo: Ama Mensah — school fees GHS 3,950 billed (feeding included), GHS 2,300 paid => 1,650 outstanding.
+// Demo: Ama Mensah — school fees GH₵ 3,700 billed (feeding included), GH₵ 2,300 paid => 1,400 outstanding.
 const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
 {
   const ai = invoices.find((x) => x.studentId === ama.id)!;
-  ai.items = [{ label: "Tuition", amount: ghs(2800) }, { label: "Books", amount: ghs(250) }, { label: "PTA", amount: ghs(50) }, { label: "Examination", amount: ghs(250) }, { label: "Feeding", amount: ghs(600) }];
+  ai.items = [{ label: "Tuition", amount: ghs(2800) }, { label: "Books", amount: ghs(250) }, { label: "PTA", amount: ghs(50) }, { label: "Feeding", amount: ghs(600) }];
   ai.discount = 0; ai.dueOn = "2026-10-30";
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id) payments.splice(i, 1);
   payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0], feeding: 0 }); // school fees only; feeding paid separately below
