@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blankTerm, classFees, copyTerm, feedingRate, findTerm, invoiceStem, mergeSchedule, previousTermWithFees, sumItems, termKey, validateTermFees, type ClassRef } from "../fees";
+import { blankTerm, classFees, copyTerm, fromGrid, toGrid, validateGrid, feedingRate, findTerm, invoiceStem, mergeSchedule, previousTermWithFees, sumItems, termKey, validateTermFees, type ClassRef } from "../fees";
 import { ghs } from "../money";
 import * as Q from "../data/queries";
 
@@ -111,5 +111,30 @@ describe("What a parent owes for the term", () => {
     expect(firstTen.size).toBeGreaterThan(1);
     const firstInvoices = Q.invoices.filter((i) => i.account === "fees").slice(0, 10).map((i) => Q.getClass(Q.getStudent(i.studentId)!.classId).level);
     expect(new Set(firstInvoices).size).toBeGreaterThan(1);
+  });
+});
+
+describe("Fee schedule — spreadsheet editor", () => {
+  const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!;
+  it("table round-trips a term without changing what any class pays", () => {
+    const back = fromGrid(toGrid(t2), t2.year, t2.term);
+    for (const c of classes) for (const b of [false, true]) expect(classFees(back, c, b)).toEqual(classFees(t2, c, b));
+    expect(back.activities).toEqual(t2.activities);
+  });
+  it("one row per fee; a level that doesn't pay a fee is 0 and gets no line", () => {
+    const g = toGrid(t2);
+    expect(g.rows.map((r) => r.label)).toEqual(["Tuition", "Books", "ICT & Development Levy", "PTA", "Examination"]);
+    expect(g.rows.find((r) => r.label === "Examination")!.amounts).toEqual({ Kindergarten: 0, Primary: 0, JHS: ghs(200) });
+    expect(fromGrid(g, "y", "t").levels.Primary.items.some((i) => i.label === "Examination")).toBe(false);
+    expect(g.exceptions).toContainEqual({ classId: cls("JHS 3").id, label: "BECE Registration", amount: ghs(320) });
+  });
+  it("explains what's missing in plain words", () => {
+    const blank = toGrid(blankTerm("2027/2028", "Term 1", ["STEM"]));
+    expect(validateGrid(blank, classes)).toBe("Enter the fees for Kindergarten, Primary, JHS");
+    const g = toGrid(t2); expect(validateGrid(g, classes)).toBe("");
+    expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toBe("Give every fee a name");
+    expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] }, classes)).toBe(""); // empty extra row is ignored
+    expect(validateGrid({ ...g, rows: [...g.rows, { label: "pta", amounts: { Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toMatch(/listed twice/);
+    expect(validateGrid({ ...g, exceptions: [{ classId: "", label: "X", amount: 1 }] }, classes)).toMatch(/Choose a class/);
   });
 });

@@ -1,17 +1,19 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Copy, FilePlus2, Lock, Plus, Save, Trash2, Undo2 } from "lucide-react";
-import { AlertBanner, Badge, Button, Card, CardHeader, EmptyState, Field, inputClass } from "@/components/ui/primitives";
+import { Copy, FilePlus2, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertBanner, Badge, Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { Modal, useToast } from "@/components/ui/interactive";
 import { PeriodSelect, useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
-import { blankTerm, classFees, copyTerm, feedingRate, LEVELS, previousTermWithFees, sumItems, termKey, validateTermFees, type ClassRef, type FeeItem, type Level, type TermFees } from "@/lib/fees";
+import { blankTerm, classFees, copyTerm, feedingRate, fromGrid, LEVELS, previousTermWithFees, sumItems, toGrid, validateGrid, type ClassRef, type FeeGrid, type Level, type TermFees } from "@/lib/fees";
 import { money } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-const num = "num text-right";
+// Inputs here set their own width (cn() does not resolve Tailwind conflicts, so never mix with inputClass's w-full).
+const box = "h-9 rounded-lg border border-line bg-surface px-2.5 text-sm placeholder:text-muted/60 focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30";
+const SHORT: Record<Level, string> = { Kindergarten: "KG", Primary: "Primary", JHS: "JHS" };
 
 /** Calendar terms oldest → newest, for "Copy from last term". */
 export function usePeriodOrder() {
@@ -19,33 +21,34 @@ export function usePeriodOrder() {
   return useMemo(() => calendar.flatMap((y) => y.terms.map((t) => ({ year: y.name, term: t.name, start: t.start }))).sort((a, b) => a.start.localeCompare(b.start)), [calendar]);
 }
 
-// Settings → Fee schedule: set what each class pays for the selected year + term.
+// Settings → Fee schedule: what each level pays for the term selected at the top.
 export function FeeScheduleEditor() {
   const { year, term } = useCalendar(); const fs = useFeeSchedule(); const order = usePeriodOrder();
   const { allow } = useRole(); const canEdit = allow("settings", "create");
   const saved = fs.get(year, term); const locked = fs.isLocked(year, term);
   const prev = previousTermWithFees(fs.schedule, order, year, term);
-  const [draft, setDraft] = useState<TermFees | null>(null); const [rev, setRev] = useState(0);
-  // A draft belongs to one term; switching terms drops it.
-  const current = draft && draft.year === year && draft.term === term ? draft : null;
-  const start = (tf: TermFees) => { setDraft(tf); setRev((r) => r + 1); };
+  const [draft, setDraft] = useState<{ key: string; tf: TermFees } | null>(null);
+  const key = `${year}|${term}`; const editing = draft?.key === key ? draft.tf : null; // switching terms drops the draft
+  const edit = (tf: TermFees) => setDraft({ key, tf });
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2"><PeriodSelect />
-          {locked ? <Badge tone="warn" dot>Locked · bills issued</Badge> : current ? <Badge tone="info" dot>{saved ? "Unsaved changes" : "New · not saved"}</Badge> : saved ? <Badge tone="ok" dot>Set</Badge> : <Badge dot>Not set</Badge>}</div>
-        <p className="text-sm text-muted">Fees are set per level. A class can be adjusted on top of its level.</p>
-      </div>
-      {locked && <AlertBanner tone="warn" icon={Lock} title={`Bills have been issued for ${term} ${year}, so its fees are locked`}
-        actions={canEdit ? <RequestChange year={year} term={term} /> : undefined}>Invoices already sent to parents are never changed silently. To charge a different amount, request a change: once approved, it is applied as an adjustment on the affected invoices.</AlertBanner>}
-      {current ? <TermEditor key={`${termKey(year, term)}#${rev}`} tf={current} onChange={setDraft} canEdit={canEdit && !locked}
-        onSave={(tf) => { fs.save(tf); setDraft(null); }} onDiscard={() => setDraft(null)} isNew={!saved} />
-        : saved ? <><div className="flex justify-end">{canEdit && !locked && <Button onClick={() => start(structuredClone(saved))}>Edit {term} fees</Button>}</div><FeesSummary tf={saved} classes={fs.classes} /></>
+    <div className="max-w-4xl space-y-4">
+      <div className="flex flex-wrap items-center gap-2"><PeriodSelect />
+        {locked ? <Badge tone="warn" dot>Locked</Badge> : saved && !editing ? <Badge tone="ok" dot>Set</Badge> : !saved && !editing ? <Badge dot>Not set</Badge> : null}</div>
+
+      {locked && <AlertBanner tone="warn" icon={Lock} title={`${term} ${year} has been billed, so its fees can't be edited`} actions={canEdit ? <RequestChange year={year} term={term} /> : undefined}>
+        Bills already sent to parents never change silently. Ask for a change and, once approved, it is applied as an adjustment.</AlertBanner>}
+
+      {editing ? <GridEditor key={key} tf={editing} onCancel={() => setDraft(null)} onSave={(tf) => { fs.save(tf); setDraft(null); }} />
+        : saved ? <>
+            <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term. Feeding and activities are billed separately."
+              action={canEdit && !locked ? <Button size="sm" variant="primary" onClick={() => edit(structuredClone(saved))}><Pencil size={13} />Edit fees</Button> : undefined} />
+            <p className="text-sm text-muted">Activities this term: {Object.entries(saved.activities).map(([a, m]) => `${a} ${money(m)}`).join(" · ")}</p></>
         : <Card><EmptyState icon={FilePlus2} title={`No fees set for ${term} ${year}`}
-            body={canEdit ? (prev ? `Copy ${prev.term} ${prev.year} and adjust what changed, or start from blank lines.` : "Start from the usual lines and enter this term's amounts.") : "Ask the Owner to set this term's fees in Settings."}
-            action={canEdit ? <div className="mt-2 flex flex-wrap justify-center gap-2">{prev && <Button variant="primary" onClick={() => start(copyTerm(prev, year, term))}><Copy size={14} />Copy from {prev.term} {prev.year}</Button>}
-              <Button onClick={() => start(blankTerm(year, term, fs.activities))}>Start from blank</Button></div> : undefined} /></Card>}
+            body={!canEdit ? "Ask the Owner to set this term's fees." : prev ? `Start from ${prev.term} ${prev.year}'s fees and change what's different.` : "Enter what each level pays this term."}
+            action={canEdit ? <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {prev && <Button variant="primary" onClick={() => edit(copyTerm(prev, year, term))}><Copy size={14} />Copy {prev.term} {prev.year}</Button>}
+              <Button variant={prev ? "secondary" : "primary"} onClick={() => edit(blankTerm(year, term, fs.activities))}>{prev ? "Start empty" : "Set fees"}</Button></div> : undefined} /></Card>}
     </div>
   );
 }
@@ -56,110 +59,101 @@ function RequestChange({ year, term }: { year: string; term: string }) {
     <Button size="sm" onClick={() => setOpen(true)}>Request a change</Button>
     <Modal open={open} onClose={() => setOpen(false)} title={`Request a fee change — ${term} ${year}`}
       footer={<><Button onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" disabled={reason.trim().length < 10} onClick={() => { toast("Change request sent for approval"); setOpen(false); setReason(""); }}>Send for approval</Button></>}>
-      <p className="text-sm text-muted">Say what should change and why (for example: &quot;JHS 2 ICT levy should be GHS 200, approved at the PTA meeting on 3 Oct&quot;). It goes to the approvals queue and is logged.</p>
+      <p className="text-sm text-muted">What should change, and why? For example: &quot;JHS ICT levy should be GHS 200, agreed at the PTA meeting on 3 Oct.&quot;</p>
       <textarea aria-label="What should change and why" value={reason} onChange={(e) => setReason(e.target.value)} className="mt-3 h-28 w-full rounded-lg border border-line bg-surface p-2 text-sm" />
     </Modal>
   </>);
 }
 
-/** Cedi input that stores integer pesewas. */
-function MoneyInput({ value, onChange, disabled, label, className }: { value: number; onChange: (m: number) => void; disabled?: boolean; label: string; className?: string }) {
-  const [s, setS] = useState(value ? String(value / 100) : "0");
-  return <input aria-label={label} inputMode="decimal" disabled={disabled} className={cn(inputClass, "num text-right disabled:opacity-70", className)} value={s}
-    onFocus={(e) => e.target.select()}
+/** Cedi amount box; stores integer pesewas. Empty means 0. */
+function Amount({ value, onChange, label, className }: { value: number; onChange: (m: number) => void; label: string; className?: string }) {
+  const [s, setS] = useState(value ? String(value / 100) : "");
+  return <input aria-label={label} inputMode="decimal" placeholder="0" className={cn(box, "num text-right", className ?? "w-full min-w-[84px]")} value={s} onFocus={(e) => e.target.select()}
     onChange={(e) => { const v = e.target.value.replace(/,/g, ""); if (!/^\d*\.?\d{0,2}$/.test(v)) return; setS(v); onChange(Math.round(Number(v || 0) * 100)); }} />;
 }
 
-function TermEditor({ tf, onChange, canEdit, onSave, onDiscard, isNew }: { tf: TermFees; onChange: (tf: TermFees) => void; canEdit: boolean; onSave: (tf: TermFees) => void; onDiscard: () => void; isNew: boolean }) {
+// One table: a row per fee, a column per level. Boarding and feeding are rows too.
+function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => void; onSave: (tf: TermFees) => void }) {
   const { classes } = useFeeSchedule(); const toast = useToast();
-  const err = validateTermFees(tf, classes);
-  const setLevel = (lv: Level, patch: Partial<TermFees["levels"][Level]>) => onChange({ ...tf, levels: { ...tf.levels, [lv]: { ...tf.levels[lv], ...patch } } });
-  const setOverrides = (cid: string, items: FeeItem[]) => { const o = { ...tf.overrides }; if (items.length) o[cid] = items; else delete o[cid]; onChange({ ...tf, overrides: o }); };
+  const [g, setG] = useState<FeeGrid>(() => toGrid(tf)); const [tried, setTried] = useState(false);
+  const err = validateGrid(g, classes);
+  const setRow = (i: number, patch: Partial<FeeGrid["rows"][number]>) => setG({ ...g, rows: g.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  const total = (lv: Level) => g.rows.reduce((a, r) => a + (r.amounts[lv] || 0), 0);
+  const th = "px-2 py-2 text-right font-medium sm:px-3";
+  const save = () => { setTried(true); if (err) return; onSave(fromGrid({ ...g, rows: g.rows.filter((r) => r.label.trim()) }, tf.year, tf.term)); toast(`${tf.term} ${tf.year} fees saved`); };
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-3">
-        {LEVELS.map((lv) => { const l = tf.levels[lv]; return (
-          <Card key={lv}><CardHeader title={lv} sub={`${classes.filter((c) => c.level === lv).map((c) => c.name).join(", ")}`} action={<Badge tone="info">Day {money(sumItems(l.items))}</Badge>} />
-            <div className="space-y-2 px-4 pb-4">
-              {l.items.map((it, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input aria-label={`${lv} line ${i + 1} name`} disabled={!canEdit} className={cn(inputClass, "disabled:opacity-70")} value={it.label} onChange={(e) => setLevel(lv, { items: l.items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
-                  <MoneyInput label={`${lv} ${it.label || "line"} amount`} disabled={!canEdit} className="w-28 shrink-0" value={it.amount} onChange={(m) => setLevel(lv, { items: l.items.map((x, j) => (j === i ? { ...x, amount: m } : x)) })} />
-                  {canEdit && <button type="button" aria-label={`Remove ${it.label || "line"}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => setLevel(lv, { items: l.items.filter((_, j) => j !== i) })}><Trash2 size={14} /></button>}
-                </div>))}
-              {canEdit && <Button size="sm" variant="ghost" onClick={() => setLevel(lv, { items: [...l.items, { label: "", amount: 0 }] })}><Plus size={13} />Add line</Button>}
-              <div className="grid grid-cols-2 gap-3 border-t border-line pt-3">
-                <Field label="Boarding add-on" hint="0 = no boarders"><MoneyInput label={`${lv} boarding`} disabled={!canEdit} value={l.boarding} onChange={(m) => setLevel(lv, { boarding: m })} /></Field>
-                <Field label="Feeding" hint="Billed separately"><MoneyInput label={`${lv} feeding`} disabled={!canEdit} value={l.feeding} onChange={(m) => setLevel(lv, { feeding: m })} /></Field>
-              </div>
-            </div></Card>); })}
+      <Card><CardHeader title={`Fees for ${tf.term} ${tf.year}`} sub="Amounts in GHS for one student, per term. Leave a box empty if that level doesn't pay that fee." />
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left font-medium">Fee</th>{LEVELS.map((lv) => <th key={lv} className={th}><span className="hidden sm:inline">{lv}</span><span className="sm:hidden">{SHORT[lv]}</span></th>)}<th className="w-10" /></tr></thead>
+          <tbody className="divide-y divide-line">
+            {g.rows.map((r, i) => (
+              <tr key={i}>
+                <td className="px-4 py-2"><input aria-label={`Fee ${i + 1} name`} placeholder="Fee name" className={cn(box, "w-full min-w-[150px]")} value={r.label} onChange={(e) => setRow(i, { label: e.target.value })} /></td>
+                {LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><Amount label={`${r.label || "Fee"} for ${lv}`} value={r.amounts[lv]} onChange={(m) => setRow(i, { amounts: { ...r.amounts, [lv]: m } })} /></td>)}
+                <td className="pr-3"><button type="button" aria-label={`Remove ${r.label || "fee"}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => setG({ ...g, rows: g.rows.filter((_, j) => j !== i) })}><Trash2 size={15} /></button></td>
+              </tr>))}
+            <tr><td colSpan={5} className="px-4 py-2"><Button size="sm" variant="ghost" onClick={() => setG({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] })}><Plus size={13} />Add a fee</Button></td></tr>
+          </tbody>
+          <tbody className="border-t-2 border-line bg-surface-2/40">
+            <tr className="font-semibold"><td className="px-4 py-2.5">School fees total</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv))}</td>)}<td /></tr>
+            <tr><td className="px-4 py-2"><div className="font-medium">Boarding</div><div className="text-xs text-muted">Added for boarders only</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><Amount label={`Boarding for ${lv}`} value={g.boarding[lv]} onChange={(m) => setG({ ...g, boarding: { ...g.boarding, [lv]: m } })} /></td>)}<td /></tr>
+            <tr><td className="px-4 py-2"><div className="font-medium">Feeding</div><div className="text-xs text-muted">Billed separately</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><Amount label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
+          </tbody>
+        </table></div></Card>
+
+      <Card><CardHeader title="Activities" sub="Price per term. Billed separately when a student joins." />
+        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">{Object.entries(g.activities).map(([a, m]) => <label key={a} className="block text-sm"><span className="mb-1 block font-medium">{a}</span><Amount label={`${a} price`} value={m} onChange={(v) => setG({ ...g, activities: { ...g.activities, [a]: v } })} /></label>)}</div></Card>
+
+      <Exceptions g={g} setG={setG} classes={classes} />
+
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {tried && err && <p role="alert" className="mr-auto text-sm text-danger">{err}</p>}
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" onClick={save}>Save fees</Button>
       </div>
-
-      <ClassAdjustments tf={tf} classes={classes} canEdit={canEdit} onChange={setOverrides} />
-
-      <Card><CardHeader title="Extracurricular activities" sub="Price per term, billed on the Extracurricular account" />
-        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">{Object.entries(tf.activities).map(([a, m]) => <Field key={a} label={a}><MoneyInput label={`${a} price`} disabled={!canEdit} value={m} onChange={(v) => onChange({ ...tf, activities: { ...tf.activities, [a]: v } })} /></Field>)}</div></Card>
-
-      <ClassFeeTable tf={tf} classes={classes} title={`What each class pays — ${tf.term} ${tf.year}`} />
-
-      {canEdit && <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-end gap-3 rounded-xl border border-line bg-surface/95 p-3 shadow-lg backdrop-blur">
-        {err ? <p role="alert" className="mr-auto text-sm text-danger">{err}</p> : <p className="mr-auto text-sm text-muted">Fees can be changed until the first bill for {tf.term} is issued.</p>}
-        <Button onClick={onDiscard}><Undo2 size={14} />{isNew ? "Cancel" : "Discard changes"}</Button>
-        <Button variant="primary" disabled={!!err} onClick={() => { onSave(tf); toast(`${tf.term} ${tf.year} fees saved`); }}><Save size={14} />Save {tf.term} fees</Button>
-      </div>}
     </div>
   );
 }
 
-function ClassAdjustments({ tf, classes, canEdit, onChange }: { tf: TermFees; classes: ClassRef[]; canEdit: boolean; onChange: (cid: string, items: FeeItem[]) => void }) {
-  const [pick, setPick] = useState("");
-  const adjusted = classes.filter((c) => tf.overrides[c.id]);
-  const free = classes.filter((c) => !tf.overrides[c.id]);
+// Optional: one class pays a different amount for a fee, or an extra fee (e.g. JHS 3 BECE registration).
+function Exceptions({ g, setG, classes }: { g: FeeGrid; setG: (g: FeeGrid) => void; classes: ClassRef[] }) {
+  const [open, setOpen] = useState(g.exceptions.length > 0);
+  const set = (i: number, patch: Partial<FeeGrid["exceptions"][number]>) => setG({ ...g, exceptions: g.exceptions.map((e, j) => (j === i ? { ...e, ...patch } : e)) });
+  const add = () => setG({ ...g, exceptions: [...g.exceptions, { classId: "", label: "", amount: 0 }] });
+  if (!open) return <button type="button" className="text-sm font-medium text-info hover:underline" onClick={() => { setOpen(true); if (!g.exceptions.length) add(); }}>+ One class pays a different amount (optional)</button>;
   return (
-    <Card><CardHeader title="Class adjustments" sub="Change a level's line for one class (e.g. a higher exam fee for JHS 3), or add a line only that class pays. 0 removes the line for that class."
-      action={canEdit && free.length > 0 ? <div className="flex items-center gap-2"><select aria-label="Class to adjust" className="h-8 rounded-lg border border-line bg-surface px-2 text-xs" value={pick} onChange={(e) => setPick(e.target.value)}><option value="">Choose class…</option>{free.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <Button size="sm" disabled={!pick} onClick={() => { onChange(pick, [{ label: "", amount: 0 }]); setPick(""); }}><Plus size={13} />Adjust class</Button></div> : undefined} />
-      {adjusted.length === 0 ? <p className="border-t border-line px-4 py-3 text-sm text-muted">No class adjustments. Every class pays its level&apos;s fees.</p>
-        : adjusted.map((c) => { const over = tf.overrides[c.id]; const lvl = tf.levels[c.level]; const listId = `labels-${c.id}`; return (
-          <div key={c.id} className="border-t border-line px-4 py-3">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><b>{c.name} <span className="text-xs font-normal text-muted">{c.level}</span></b><span className="text-sm text-muted">Day total {money(sumItems(lvl.items))} → <b className="num text-fg">{money(sumItems(classFees(tf, c, false)))}</b></span></div>
-            <datalist id={listId}>{lvl.items.map((i) => <option key={i.label} value={i.label} />)}</datalist>
-            <div className="space-y-2">{over.map((o, i) => { const base = lvl.items.find((x) => x.label === o.label); return (
-              <div key={i} className="flex flex-wrap items-center gap-2">
-                <input list={listId} aria-label={`${c.name} adjustment ${i + 1} name`} placeholder="Line name" disabled={!canEdit} className={cn(inputClass, "max-w-xs disabled:opacity-70")} value={o.label} onChange={(e) => onChange(c.id, over.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
-                <MoneyInput label={`${c.name} ${o.label || "adjustment"} amount`} disabled={!canEdit} className="w-28" value={o.amount} onChange={(m) => onChange(c.id, over.map((x, j) => (j === i ? { ...x, amount: m } : x)))} />
-                <span className="text-xs text-muted">{o.label.trim() ? (base ? `replaces ${money(base.amount)}` : "added for this class only") : ""}</span>
-                {canEdit && <button type="button" aria-label={`Remove ${c.name} ${o.label || "adjustment"}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => onChange(c.id, over.filter((_, j) => j !== i))}><Trash2 size={14} /></button>}
-              </div>); })}
-              {canEdit && <Button size="sm" variant="ghost" onClick={() => onChange(c.id, [...over, { label: "", amount: 0 }])}><Plus size={13} />Add adjustment</Button>}</div>
-          </div>); })}
-    </Card>
+    <Card><CardHeader title="Class exceptions" sub="Use when one class pays a different amount for a fee, or a fee only it pays. Enter 0 to remove a fee for that class." />
+      <datalist id="fee-names">{g.rows.filter((r) => r.label.trim()).map((r) => <option key={r.label} value={r.label} />)}</datalist>
+      <div className="space-y-2 px-4 pb-4">
+        {g.exceptions.map((e, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <select aria-label={`Exception ${i + 1} class`} className={cn(box, "w-36")} value={e.classId} onChange={(x) => set(i, { classId: x.target.value })}><option value="">Class…</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            <input list="fee-names" aria-label={`Exception ${i + 1} fee`} placeholder="Fee, e.g. BECE Registration" className={cn(box, "min-w-[180px] flex-1")} value={e.label} onChange={(x) => set(i, { label: x.target.value })} />
+            <Amount className="w-28 flex-none" label={`Exception ${i + 1} amount`} value={e.amount} onChange={(m) => set(i, { amount: m })} />
+            <button type="button" aria-label={`Remove exception ${i + 1}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => setG({ ...g, exceptions: g.exceptions.filter((_, j) => j !== i) })}><Trash2 size={15} /></button>
+          </div>))}
+        <Button size="sm" variant="ghost" onClick={add}><Plus size={13} />Add exception</Button>
+      </div></Card>
   );
 }
 
-/** Read-only view of a saved term: level lines, adjustments, activities and per-class totals. */
-function FeesSummary({ tf, classes }: { tf: TermFees; classes: ClassRef[] }) {
-  return (
-    <div className="space-y-4">
-      <ClassFeeTable tf={tf} classes={classes} title={`What each class pays — ${tf.term} ${tf.year}`} />
-      <Card><CardHeader title="Extracurricular activities" sub="Price per term" /><div className="flex flex-wrap gap-x-6 gap-y-1 px-4 pb-4 text-sm">{Object.entries(tf.activities).map(([a, m]) => <span key={a}>{a} <b className="num">{money(m)}</b></span>)}</div></Card>
-    </div>
-  );
-}
-
-/** Per-class breakdown of one term's school fees, with day / boarding totals and the feeding rate. Shared with Fees → Fee structures. */
-export function ClassFeeTable({ tf, classes, title, sub }: { tf: TermFees; classes: ClassRef[]; title: string; sub?: string }) {
-  const rows = classes.map((c) => ({ c, day: classFees(tf, c, false), boarding: tf.levels[c.level].boarding, feeding: feedingRate(tf, c), adjusted: !!tf.overrides[c.id] }));
-  const labels = Array.from(new Set(rows.flatMap((r) => r.day.map((i) => i.label))));
+/** What each class pays in a term: school fees (with what's included), boarder total and feeding. Shared with Fees → Fee structures. */
+export function ClassFeeTable({ tf, classes, title, sub, action }: { tf: TermFees; classes: ClassRef[]; title: string; sub?: string; action?: React.ReactNode }) {
+  const rows = classes.map((c) => ({ c, day: classFees(tf, c, false), boarding: tf.levels[c.level].boarding, feeding: feedingRate(tf, c), extra: tf.overrides[c.id] ?? [] }));
   const anyBoarding = rows.some((r) => r.boarding > 0);
+  const short = (m: number) => (m / 100).toLocaleString("en-GH");
   return (
-    <Card><CardHeader title={title} sub={sub ?? "School fees per student. Feeding and extracurricular are billed on their own accounts."} />
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th>{labels.map((l) => <th key={l} className="whitespace-nowrap px-3 text-right">{l}</th>)}<th className="whitespace-nowrap px-3 text-right">Day total</th>{anyBoarding && <th className="whitespace-nowrap px-3 text-right">Boarding total</th>}<th className="whitespace-nowrap px-4 text-right">Feeding</th></tr></thead>
-        <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.c.id}><td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.c.name}{r.adjusted && <span className="ml-1.5"><Badge tone="info">adjusted</Badge></span>}</td>
-          {labels.map((l) => { const a = r.day.find((i) => i.label === l)?.amount; return <td key={l} className={cn(num, "whitespace-nowrap px-3")}>{a ? money(a) : "—"}</td>; })}
-          <td className={cn(num, "whitespace-nowrap px-3 font-medium")}>{money(sumItems(r.day))}</td>
-          {anyBoarding && <td className={cn(num, "whitespace-nowrap px-3 font-medium")}>{r.boarding ? money(sumItems(r.day) + r.boarding) : "—"}</td>}
-          <td className={cn(num, "whitespace-nowrap px-4")}>{money(r.feeding)}</td></tr>)}</tbody></table></div></Card>
+    <Card><CardHeader title={title} sub={sub ?? "School fees per student. Feeding and extracurricular are billed on their own accounts."} action={action} />
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GHS)</th><th className="whitespace-nowrap px-3 text-right">School fees</th>{anyBoarding && <th className="whitespace-nowrap px-4 text-right">Boarders pay</th>}</tr></thead>
+        <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.c.id} className="align-top">
+          <td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.c.name}</td>
+          <td className="hidden px-3 py-2.5 text-muted md:table-cell">{r.day.map((i) => { const odd = r.extra.some((e) => e.label === i.label); return <span key={i.label} className={cn("mr-3 inline-block", odd && "font-medium text-info")}>{i.label} {short(i.amount)}</span>; })}
+            <span className="mr-3 inline-block text-xs">· Feeding {short(r.feeding)} (separate)</span></td>
+          <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">{money(sumItems(r.day))}</td>
+          {anyBoarding && <td className="num whitespace-nowrap px-4 py-2.5 text-right">{r.boarding ? money(sumItems(r.day) + r.boarding) : "—"}</td>}</tr>)}</tbody></table></div>
+      {rows.some((r) => r.extra.length) && <p className="border-t border-line px-4 py-2 text-xs text-muted">Highlighted fees differ for that class only.</p>}</Card>
   );
 }
 
