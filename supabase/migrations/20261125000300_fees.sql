@@ -1,10 +1,10 @@
 -- =====================================================================================================
--- Fees: fee schedule, extracurricular enrolment, invoices (draft -> submitted -> Owner approves -> issued),
+-- Fees: fee schedule, Extra Classes enrolment, invoices (draft -> submitted -> Owner approves -> issued),
 -- adjustments, payments & receipts, document numbering, balances, class invoice sheets.
 --
 -- Money is integer minor units (pesewas). Two accounts, as parents receive them:
 --   'fees'  = school fees invoice (tuition, books, levies, PTA, exams, boarding, feeding)
---   'extra' = extracurricular invoice (music, STEM, extra classes)
+--   'extra' = Extra Classes invoice (music, STEM, extra classes): standalone, never added to school fees
 --
 -- Rules enforced here, not just in the screens:
 --   * Invoice lines can only change while the invoice is a draft.
@@ -344,21 +344,23 @@ grant execute on function app.invoice_total(uuid) to authenticated;
 revoke all on public.student_balances from anon;
 grant select on public.student_balances to authenticated;
 
--- ---------- Class invoice sheets (Invoices page: one sheet per class per term, edited freely) ----------
-create table public.class_invoice_sheets (
-  class_id uuid not null references public.classes(id) on delete cascade,
+-- ---------- Invoice sheets (Invoices page: one full invoice per class per term, plus one Extra Classes sheet) ----------
+-- Edited freely; standalone documents that change nothing else. The Extra Classes sheet prints 10 per A4.
+create table public.invoice_sheets (
+  id uuid primary key default gen_random_uuid(),
   term_id uuid not null references public.terms(id) on delete cascade,
+  kind text not null check (kind in ('class', 'extra_classes')),
+  class_id uuid references public.classes(id) on delete cascade,
   title text not null, period text not null, notes text not null default '',
-  lines jsonb not null default '[]',               -- [{description, amount}] front of the sheet
-  extra_title text not null default 'Extracurricular Activities',
-  extra_lines jsonb not null default '[]',         -- back of the sheet
+  lines jsonb not null default '[]',               -- [{description, amount}]; amount 0 prints as "—"
   updated_at timestamptz not null default now(),
-  primary key (class_id, term_id)
+  check ((kind = 'class') = (class_id is not null)),
+  unique nulls not distinct (term_id, kind, class_id)
 );
 
 select app.track(t) from unnest(array['public.term_fee_levels', 'public.term_fee_items', 'public.class_fee_overrides', 'public.activities',
   'public.activity_prices', 'public.student_activities', 'public.invoices', 'public.invoice_lines', 'public.invoice_adjustments',
-  'public.payments', 'public.class_invoice_sheets']::regclass[]) t;
+  'public.payments', 'public.invoice_sheets']::regclass[]) t;
 
 -- =====================================================================================================
 -- Policies
@@ -393,9 +395,9 @@ create policy request on public.invoice_adjustments for insert to authenticated 
 create policy read_finance on public.payments for select to authenticated using (app.has_role('owner', 'bursar', 'auditor'));
 create policy record on public.payments for insert to authenticated with check (app.has_role('owner', 'bursar'));
 
--- Class sheets: office reads; Owner/Bursar edit.
-create policy read_office on public.class_invoice_sheets for select to authenticated using (app.has_role('owner', 'admin', 'bursar', 'auditor'));
-create policy write_bursar on public.class_invoice_sheets for all to authenticated using (app.has_role('owner', 'bursar')) with check (app.has_role('owner', 'bursar'));
+-- Invoice sheets: office reads; Owner/Bursar edit.
+create policy read_office on public.invoice_sheets for select to authenticated using (app.has_role('owner', 'admin', 'bursar', 'auditor'));
+create policy write_bursar on public.invoice_sheets for all to authenticated using (app.has_role('owner', 'bursar')) with check (app.has_role('owner', 'bursar'));
 
 -- doc_counters: no policies at all; only the numbering function (SECURITY DEFINER) touches it.
 

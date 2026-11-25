@@ -13,6 +13,8 @@
 create extension if not exists pgcrypto;
 
 create schema if not exists app;
+-- Which migrations have been applied (written by the deploy script after each file).
+create table if not exists app.schema_migrations (version text primary key, applied_at timestamptz not null default now());
 revoke all on schema app from public, anon;
 grant usage on schema app to authenticated, service_role;
 

@@ -190,6 +190,14 @@ select pg_temp.check('kitchen (storekeeper) records any class; bursar cannot',
   pg_temp.err(:STORE, $q$ insert into public.meal_register (on_date, class_id, served) values ('2026-10-01', '00000000-0000-0000-0000-0000000000d2', 15) $q$) is null
   and pg_temp.err(:BURSAR, $q$ insert into public.meal_register (on_date, class_id, served) values ('2026-10-02', '00000000-0000-0000-0000-0000000000d2', 15) $q$) is not null);
 
+-- ---------- Invoice sheets ----------
+select pg_temp.check('bursar saves a class sheet and the Extra Classes sheet',
+  pg_temp.err(:BURSAR, $q$ insert into public.invoice_sheets (term_id, kind, class_id, title, period, lines) values ('00000000-0000-0000-0000-0000000000c2', 'class', '00000000-0000-0000-0000-0000000000d1', 'Primary 3 School Fees', 'Term 1', '[{"description":"Tuition","amount":240000}]') $q$) is null
+  and pg_temp.err(:BURSAR, $q$ insert into public.invoice_sheets (term_id, kind, title, period) values ('00000000-0000-0000-0000-0000000000c2', 'extra_classes', 'Extra Classes', 'Term 1') $q$) is null);
+select pg_temp.check('only one Extra Classes sheet per term, and it has no class', pg_temp.err(:OWNER, $q$ insert into public.invoice_sheets (term_id, kind, title, period) values ('00000000-0000-0000-0000-0000000000c2', 'extra_classes', 'x', 'x') $q$) is not null
+  and pg_temp.err(:OWNER, $q$ insert into public.invoice_sheets (term_id, kind, class_id, title, period) values ('00000000-0000-0000-0000-0000000000c2', 'extra_classes', '00000000-0000-0000-0000-0000000000d2', 'x', 'x') $q$) is not null);
+select pg_temp.check('teacher cannot see invoice sheets', pg_temp.n(:TEACHER, 'select * from public.invoice_sheets') = 0);
+
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from results;
