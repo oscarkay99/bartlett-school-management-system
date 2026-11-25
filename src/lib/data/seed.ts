@@ -221,7 +221,7 @@ feedingPlans.push({ studentId: ama.id, term: "2026/2027|Term 1", frequency: "Mon
     const rate = feedingLine(st.id); const gross = billedFees(st.id);
     let left = rate - payments.filter((p) => p.studentId === st.id && p.feedingPeriod && p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
     for (const p of payments.filter((x) => x.studentId === st.id && x.account === "fees" && x.feeding === undefined).sort((a, b) => a.date.localeCompare(b.date))) {
-      const share = gross > 0 ? Math.min(left, Math.round((p.amount * rate) / gross)) : 0;
+      const share = gross > 0 ? Math.min(left, Math.round((p.amount * rate) / gross / 100) * 100) : 0;   // whole cedis
       p.feeding = Math.max(0, share); if (p.status === "Confirmed") left -= p.feeding;
     }
   }

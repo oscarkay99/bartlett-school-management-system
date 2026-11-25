@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Users, Utensils, Wallet } from "lucide-react";
 import { AlertBanner, Badge, Button, Card, CardHeader, EmptyState, Kpi } from "@/components/ui/primitives";
-import { DataTable, Modal, MoneyInput, Select, Tabs, useToast, type Column } from "@/components/ui/interactive";
+import { DataTable, Modal, MoneyInput, QueryTabs, Select, useToast, type Column } from "@/components/ui/interactive";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
@@ -35,7 +35,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
     // Payment plan: how this family pays feeding, and whether they are keeping up with it.
     const freq: PlanFrequency = plans.planOn(s.id, key, today)?.frequency ?? "With school fees";
     const expected = td ? expectedByToday(rate, td, freq, today, s.dueOn) : 0;
-    return { ...s, classRate, ex, status: feedingStatus(ex), rate, freq, perPeriod: td && freq !== "With school fees" ? perPeriod(rate, td, freq) : 0, plan: planStatus(rate, s.paid, expected) };
+    return { ...s, classRate, ex, status: feedingStatus(ex), rate, freq, expected, perPeriod: td && freq !== "With school fees" ? perPeriod(rate, td, freq) : 0, plan: planStatus(rate, s.paid, expected) };
   }), [students, fs.classes, tf, feeding, key, plans, td, today]);
   const behind = rows.filter((r) => r.plan.label === "Behind");
   const byClass = fs.classes.map((c) => { const r = rows.filter((x) => x.classId === c.id); const on = r.filter((x) => x.rate > 0);
@@ -63,9 +63,10 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
   );
 
   return (
-    <Tabs tabs={[
+    <QueryTabs tabs={[
       { id: "overview", label: "Overview", content: overview },
-      { id: "students", label: "Students", badge: String(rows.length - onFeeding || ""), content: <StudentsTab rows={rows} canEdit={canEdit} td={td} today={today} onPlan={plans.setPlan} termLabel={`${term} ${year}`} onSave={(sid, ex) => feeding.updateException(sid, key, ex)} classes={fs.classes} termKey={key} /> },
+      { id: "students", label: "Students", badge: String(rows.length - onFeeding || ""), content: <StudentsTab rows={rows} canEdit={canEdit} termLabel={`${term} ${year}`} onSave={(sid, ex) => feeding.updateException(sid, key, ex)} classes={fs.classes} termKey={key} /> },
+      { id: "plans", label: "Payment plans", badge: behind.length ? String(behind.length) : undefined, content: <PlansTab rows={rows} canEdit={canEdit} td={td} today={today} termLabel={`${term} ${year}`} termKey={key} classes={fs.classes} history={plans.history} onPlan={plans.setPlan} /> },
       { id: "payments", label: "Payments", content: <PaymentsTab payments={payments} classes={fs.classes} /> },
       { id: "meals", label: "Meal register", content: <MealsTab byClass={byClass} meals={feeding.meals} canEdit={canMeals} today={today} onSave={feeding.saveMeals} /> },
       { id: "kitchen", label: "Kitchen stock", badge: low.length ? String(low.length) : undefined, content: <KitchenTab items={kitchen} /> },
@@ -73,12 +74,11 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
   );
 }
 
-type Row = FStudent & { classRate: number; ex?: FeedingException; status: string; rate: number; freq: PlanFrequency; perPeriod: number; plan: PlanStatus };
+type Row = FStudent & { classRate: number; ex?: FeedingException; status: string; rate: number; freq: PlanFrequency; expected: number; perPeriod: number; plan: PlanStatus };
 
-function StudentsTab({ rows, canEdit, td, today, onPlan, termLabel, onSave, classes, termKey: key }: { rows: Row[]; canEdit: boolean; td?: TermDates; today: string; onPlan: (p: FeedingPlan) => void; termLabel: string; onSave: (sid: string, ex: FeedingException | null) => void; classes: { id: string; name: string }[]; termKey: string }) {
+function StudentsTab({ rows, canEdit, termLabel, onSave, classes, termKey: key }: { rows: Row[]; canEdit: boolean; termLabel: string; onSave: (sid: string, ex: FeedingException | null) => void; classes: { id: string; name: string }[]; termKey: string }) {
   const [cls, setCls] = useState(""); const [st, setSt] = useState(""); const [edit, setEdit] = useState<Row | null>(null);
-  const [plan, setPlan] = useState(""); const [behindOnly, setBehindOnly] = useState(""); const [planFor, setPlanFor] = useState<Row | null>(null);
-  const data = rows.filter((r) => (!cls || r.classId === cls) && (!st || r.status === st) && (!plan || r.freq === plan) && (!behindOnly || r.plan.label === "Behind"));
+  const data = rows.filter((r) => (!cls || r.classId === cls) && (!st || r.status === st));
   const cols: Column<Row>[] = [
     { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div> },
     { key: "c", header: "Class", render: (x) => x.cls },
@@ -86,18 +86,13 @@ function StudentsTab({ rows, canEdit, td, today, onPlan, termLabel, onSave, clas
     { key: "r", header: "Charged", align: "right", sort: (x) => x.rate, render: (x) => (x.rate ? money(x.rate) : "—") },
     { key: "p", header: "Paid", align: "right", sort: (x) => x.paid, render: (x) => <span className="num text-ok">{money(x.paid)}</span> },
     { key: "o", header: "Owed", align: "right", sort: (x) => x.billed - x.paid, render: (x) => <span className={`num ${x.billed - x.paid > 0 ? "text-danger" : ""}`}>{money(Math.max(0, x.billed - x.paid))}</span> },
-    { key: "pl", header: "Plan", render: (x) => <div><div className="text-sm">{planLabel(x.freq)}</div>{x.perPeriod > 0 && <div className="num text-[11px] text-muted">{money(x.perPeriod)} / {periodWord(x.freq)}</div>}</div> },
-    { key: "ps", header: "Status", sort: (x) => x.plan.behind, render: (x) => <Badge tone={x.plan.label === "Behind" ? "danger" : x.plan.label === "Not on feeding" ? "neutral" : "ok"} dot>{x.plan.label === "Behind" ? `Behind ${money(x.plan.behind)}` : x.plan.label}</Badge> },
-    ...(canEdit ? [{ key: "e", header: "", render: (x: Row) => <div className="flex justify-end gap-1"><Button size="sm" variant="ghost" disabled={!td || !x.rate} onClick={() => setPlanFor(x)}>Plan</Button><Button size="sm" variant="ghost" onClick={() => setEdit(x)}>Change</Button></div> }] : []),
+    { key: "why", header: "Reason", hideOnMobile: true, render: (x) => <span className="text-xs text-muted">{x.ex?.reason ?? ""}</span> },
+    ...(canEdit ? [{ key: "e", header: "", render: (x: Row) => <Button size="sm" variant="ghost" onClick={() => setEdit(x)}>Change</Button> }] : []),
   ];
   return (<>
     <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} pageSize={12}
       filters={<><Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} />
-        <Select label="Plan" value={plan} onChange={setPlan} options={[{ value: "", label: "All plans" }, ...PLAN_FREQUENCIES.map((f) => ({ value: f, label: planLabel(f) }))]} />
-        <Select label="Behind" value={behindOnly} onChange={setBehindOnly} options={[{ value: "", label: "Everyone" }, { value: "1", label: "Behind only" }]} />
         <Select label="Feeding" value={st} onChange={setSt} options={[{ value: "", label: "Everyone" }, { value: "On feeding", label: "On feeding" }, { value: "Different rate", label: "Different rate" }, { value: "Not on feeding", label: "Not on feeding" }]} /></>} /></Card>
-    {planFor && td && <PlanDialog student={{ id: planFor.id, name: planFor.name }} current={planFor.freq} rate={planFor.rate} term={td} termLabel={termLabel} termKey={key} today={today}
-      onClose={() => setPlanFor(null)} onSave={(p) => { onPlan(p); setPlanFor(null); }} />}
     {edit && <ChangeFeeding row={edit} termLabel={termLabel} termKey={key} onClose={() => setEdit(null)} onSave={(ex) => { onSave(edit.id, ex); setEdit(null); }} />}
   </>);
 }
@@ -176,4 +171,34 @@ function PaymentsTab({ payments, classes }: { payments: FeedingPayment[]; classe
         filters={<><Select label="How it was paid" value={how} onChange={setHow} options={[{ value: "", label: "All payments" }, ...["With school fees", "Daily", "Weekly", "Monthly", "Term"].map((h) => ({ value: h, label: label(h) }))]} />
           <Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} /></>} /></Card>
   );
+}
+
+// Payment plans: how each family pays feeding this term, whether they are keeping up, and where plans are changed.
+function PlansTab({ rows, canEdit, td, today, termLabel, termKey: key, classes, history, onPlan }: { rows: Row[]; canEdit: boolean; td?: TermDates; today: string; termLabel: string; termKey: string;
+  classes: { id: string; name: string }[]; history: (studentId: string, term: string) => FeedingPlan[]; onPlan: (p: FeedingPlan) => void }) {
+  const [plan, setPlan] = useState(""); const [behindOnly, setBehindOnly] = useState(""); const [cls, setCls] = useState(""); const [planFor, setPlanFor] = useState<Row | null>(null);
+  const onFeeding = rows.filter((r) => r.rate > 0);
+  const data = onFeeding.filter((r) => (!plan || r.freq === plan) && (!behindOnly || r.plan.label === "Behind") && (!cls || r.classId === cls));
+  const cols: Column<Row>[] = [
+    { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={`/students/${x.id}?tab=feeding`}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
+    { key: "pl", header: "Plan", sort: (x) => x.freq, render: (x) => { const h = history(x.id, key); return <div><div className="font-medium">{planLabel(x.freq)}</div>
+      <div className="num text-[11px] text-muted">{x.perPeriod > 0 ? `${money(x.perPeriod)} per ${periodWord(x.freq)}` : "with the school fees invoice"}{h.length > 1 ? ` · ${h.length} changes` : ""}</div></div>; } },
+    { key: "ex", header: "Expected by today", align: "right", hideOnMobile: true, sort: (x) => x.expected, render: (x) => <span className="num">{money(x.expected)}</span> },
+    { key: "p", header: "Paid", align: "right", sort: (x) => x.paid, render: (x) => <span className="num text-ok">{money(x.paid)}</span> },
+    { key: "s", header: "Status", sort: (x) => x.plan.behind, render: (x) => <Badge tone={x.plan.label === "Behind" ? "danger" : "ok"} dot>{x.plan.label === "Behind" ? `Behind ${money(x.plan.behind)}` : x.plan.label}</Badge> },
+    ...(canEdit ? [{ key: "e", header: "", render: (x: Row) => <Button size="sm" variant="ghost" disabled={!td} onClick={() => setPlanFor(x)}>Change plan</Button> }] : []),
+  ];
+  const count = (f: string) => onFeeding.filter((r) => r.freq === f).length;
+  return (<>
+    <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{PLAN_FREQUENCIES.map((f) => (
+      <button key={f} onClick={() => setPlan(plan === f ? "" : f)} className={`rounded-xl border bg-surface px-3 py-2.5 text-left transition hover:shadow-md ${plan === f ? "border-info ring-1 ring-info" : "border-line"}`}>
+        <div className="text-xs text-muted">{planLabel(f)}</div><div className="text-xl font-semibold">{count(f)}</div></button>))}</div>
+    <Card><CardHeader title={`Feeding payment plans — ${termLabel}`} sub="When a parent switches (e.g. daily to weekly), change the plan here. The history is kept and payments already made still count." />
+      <DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} pageSize={12}
+        filters={<><Select label="Plan" value={plan} onChange={setPlan} options={[{ value: "", label: "All plans" }, ...PLAN_FREQUENCIES.map((f) => ({ value: f, label: planLabel(f) }))]} />
+          <Select label="Behind" value={behindOnly} onChange={setBehindOnly} options={[{ value: "", label: "Everyone" }, { value: "1", label: "Behind only" }]} />
+          <Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} /></>} /></Card>
+    {planFor && td && <PlanDialog student={{ id: planFor.id, name: planFor.name }} current={planFor.freq} rate={planFor.rate} term={td} termLabel={termLabel} termKey={key} today={today}
+      onClose={() => setPlanFor(null)} onSave={(p) => { onPlan(p); setPlanFor(null); }} />}
+  </>);
 }
