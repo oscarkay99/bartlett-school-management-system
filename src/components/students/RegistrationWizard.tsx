@@ -11,9 +11,19 @@ interface Link_ { key: string; guardian: { id?: string; name: string; phone: str
 const STEPS = ["Personal", "Academic", "Guardians", "Medical & Welfare", "Documents", "Review"];
 const DOCS = ["Birth certificate", "Admission form", "Previous school records", "Passport photograph", "Parental consent form"];
 
-export function RegistrationWizard({ guardians, classes, nextAdm }: { guardians: G[]; classes: { id: string; name: string }[]; nextAdm: string }) {
+/** What the form hands to the database (see register_student). */
+export interface RegistrationPayload {
+  first_name: string; middle_name: string; last_name: string; date_of_birth: string; gender: string; nationality: string; address: string; place_of_birth: string;
+  admitted_on: string; previous_school: string; emergency_contact_name: string; emergency_contact_phone: string; class_id: string; student_code: string; entry_assessment: string;
+  allergies: string; medical_alert: string; emergency_instructions: string; no_guardian_reason: string;
+  guardians: { id?: string; name: string; phone: string; email: string; relationship: string; primary: boolean; legal: boolean; emergency: boolean; pickup: boolean; financial: boolean; reminders: boolean; academic: boolean }[];
+}
+/** `onRegister`: saves to the database (live site); returns the admission number and new id, or an error. Without it the form is a preview. */
+export function RegistrationWizard({ guardians, classes, nextAdm, onRegister }: { guardians: G[]; classes: { id: string; name: string }[]; nextAdm: string;
+  onRegister?: (p: RegistrationPayload) => Promise<{ adm?: string; id?: string; error?: string }> }) {
+  const [saving, setSaving] = useState(false); const [saved, setSaved] = useState<{ adm: string; id: string } | null>(null); const [saveErr, setSaveErr] = useState("");
   const [step, setStep] = useState(0);
-  const [f, setF] = useState({ first: "", middle: "", last: "", dob: "", gender: "", nationality: "Ghanaian", address: "", pob: "", admitted: "2026-10-12", prevSchool: "", ecName: "", ecPhone: "", year: "2026/2027", classId: "", code: "", entry: "", allergies: "", alert: "", instructions: "" });
+  const [f, setF] = useState({ first: "", middle: "", last: "", dob: "", gender: "", nationality: "Ghanaian", address: "", pob: "", admitted: onRegister ? new Date().toISOString().slice(0, 10) : "2026-10-12", prevSchool: "", ecName: "", ecPhone: "", year: "2026/2027", classId: "", code: "", entry: "", allergies: "", alert: "", instructions: "" });
   const [links, setLinks] = useState<Link_[]>([]);
   const [q, setQ] = useState(""); const [adding, setAdding] = useState(false);
   const [np, setNp] = useState({ name: "", phone: "", email: "" });
@@ -45,10 +55,10 @@ export function RegistrationWizard({ guardians, classes, nextAdm }: { guardians:
 
   if (done) return (
     <Card className="mx-auto max-w-xl p-8 text-center"><CheckCircle2 className="mx-auto text-ok" size={44} />
-      <h2 className="mt-3 text-xl font-semibold">{f.first} {f.last} registered</h2><p className="mt-1 text-muted">Admission number <b className="num text-fg">{nextAdm}</b> · {classes.find((c) => c.id === f.classId)?.name}</p>
+      <h2 className="mt-3 text-xl font-semibold">{f.first} {f.last} registered</h2><p className="mt-1 text-muted">Admission number <b className="num text-fg">{saved?.adm ?? nextAdm}</b> · {classes.find((c) => c.id === f.classId)?.name}</p>
       <p className="mt-1 text-muted">{links.length} guardian link{links.length === 1 ? "" : "s"} saved in the same transaction. The term invoice can now be generated.</p>
-      <div className="mt-5 flex justify-center gap-2"><LinkButton href="/students">All students</LinkButton><LinkButton href="/fees" variant="primary">Generate term invoice</LinkButton></div>
-      <p className="mt-4 text-xs text-muted">Front-end preview: nothing is persisted until the backend is connected.</p></Card>
+      <div className="mt-5 flex justify-center gap-2"><LinkButton href="/students">All students</LinkButton>{saved ? <LinkButton href={`/students/view?id=${saved.id}`} variant="primary">Open student record</LinkButton> : <LinkButton href="/fees" variant="primary">Generate term invoice</LinkButton>}</div>
+      <p className="mt-4 text-xs text-muted">{saved ? "Saved to the school database." : "Front-end preview: nothing is persisted until the backend is connected."}</p></Card>
   );
 
   return (
@@ -135,9 +145,20 @@ export function RegistrationWizard({ guardians, classes, nextAdm }: { guardians:
       </Card>
       <div className="mt-4 flex justify-between">
         <Button onClick={() => (step === 0 ? history.back() : setStep(step - 1))}><ChevronLeft size={15} />{step === 0 ? "Cancel" : "Back"}</Button>
-        {step < 5 ? <Button variant="primary" onClick={next}>Continue<ChevronRight size={15} /></Button> : <Button variant="success" onClick={() => { setDone(true); toast(`${f.first} ${f.last} registered`); }}><Check size={15} />Register student</Button>}
+        {step < 5 ? <Button variant="primary" onClick={next}>Continue<ChevronRight size={15} /></Button> : <Button variant="success" disabled={saving} onClick={async () => {
+          if (!onRegister) { setDone(true); toast(`${f.first} ${f.last} registered`); return; }
+          setSaving(true); setSaveErr("");
+          const r = await onRegister({ first_name: f.first, middle_name: f.middle, last_name: f.last, date_of_birth: f.dob, gender: f.gender, nationality: f.nationality, address: f.address, place_of_birth: f.pob,
+            admitted_on: f.admitted, previous_school: f.prevSchool, emergency_contact_name: f.ecName, emergency_contact_phone: f.ecPhone, class_id: f.classId, student_code: f.code, entry_assessment: f.entry,
+            allergies: f.allergies, medical_alert: f.alert, emergency_instructions: f.instructions, no_guardian_reason: links.length ? "" : exceptionReason,
+            guardians: links.map((l) => ({ id: l.guardian.isNew ? undefined : l.guardian.id, name: l.guardian.name, phone: l.guardian.phone, email: l.guardian.email, relationship: l.relationship, primary: l.primary, legal: l.legal, emergency: l.emergency, pickup: l.pickup, financial: l.financial, reminders: l.reminders, academic: l.academic })) });
+          setSaving(false);
+          if (r.error || !r.adm || !r.id) { setSaveErr(r.error || "The student could not be saved."); return; }
+          setSaved({ adm: r.adm, id: r.id }); setDone(true); toast(`${f.first} ${f.last} registered — ${r.adm}`);
+        }}><Check size={15} />{saving ? "Saving…" : "Register student"}</Button>}
       </div>
-      <ConfirmDialog open={exceptionOpen} onClose={() => setExceptionOpen(false)} needReason title="Request guardian exception" body="Registering a student without a guardian requires Headmaster authorisation and will be logged. Describe why no guardian can be linked now." confirmLabel="Submit exception" onConfirm={(r) => { setException(true); setExceptionReason(r ?? ""); setExceptionOpen(false); toast("Exception recorded (pending authorisation)"); void exceptionReason; }} />
+      <ConfirmDialog open={exceptionOpen} onClose={() => setExceptionOpen(false)} needReason title="Request guardian exception" body="Registering a student without a guardian requires Headmaster authorisation and will be logged. Describe why no guardian can be linked now." confirmLabel="Submit exception" onConfirm={(r) => { setException(true); setExceptionReason(r ?? ""); setExceptionOpen(false); toast("Exception recorded (pending authorisation)"); }} />
+      {saveErr && <p role="alert" className="mt-3 rounded-lg border border-danger/30 bg-danger/8 px-3 py-2 text-sm text-danger">Not saved: {saveErr}</p>}
       <p className="mt-3 text-center text-xs text-muted"><Link href="/students" className="hover:underline">Back to students</Link></p>
     </div>
   );

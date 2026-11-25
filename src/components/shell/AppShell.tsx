@@ -3,13 +3,18 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BookOpen, BookOpenCheck, FileText, Utensils, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Shapes, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, BookOpenCheck, LogOut, FileText, Utensils, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Shapes, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
 import { PeriodSelect, useCalendar } from "./CalendarContext";
 import { createPortal } from "react-dom";
 import { termOfDate } from "@/lib/calendar";
+import { useAuth } from "@/lib/live/auth";
+import { LIVE } from "@/lib/live/config";
+
+/** Modules already reading and writing the live database. The rest still show demo data on the live site. */
+const LIVE_READY = ["/students"];
 import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, canVisit, type MoneyAccess, type Op, type Resource } from "@/lib/permissions";
 export { ROLES };
 
@@ -51,7 +56,11 @@ export function AppShell({ children, school }: { children: ReactNode; school: { 
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
-  const [role, setRole] = useState(DEFAULT_ROLE); const [ready, setReady] = useState(false);
+  const [demoRole, setRole] = useState(DEFAULT_ROLE); const [demoReady, setReady] = useState(false);
+  // Live site: the role is the signed-in staff member's role in the database. Demo: the "preview as role" choice.
+  const auth = useAuth(); const router = useRouter();
+  const role = LIVE ? normalizeRole(auth.account?.role ?? null) : demoRole;
+  const ready = LIVE ? auth.ready && !!auth.account : demoReady;
   // Read persisted prefs after mount so server and client markup match.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { try { setCollapsed(localStorage.getItem("sb") === "1"); setRole(normalizeRole(localStorage.getItem("role"))); } catch {} setReady(true); }, []);
@@ -60,8 +69,12 @@ export function AppShell({ children, school }: { children: ReactNode; school: { 
   const allowed = ROLES[role].nav;
   const ctx = useMemo(() => ({ role, ready, money: ROLES[role].money, can: (k: string) => allowed.includes(k), allow: (r: Resource, o: Op) => allowedOp(role, r, o) }), [role, ready, allowed]);
   const blocked = ready && !canVisit(role, path);
-  const standalone = path.startsWith("/print") || path === "/login";
+  const standalone = path.startsWith("/print") || path.startsWith("/login");
+  const signedOut = LIVE && auth.ready && !auth.account && !standalone;
+  useEffect(() => { if (signedOut) router.replace("/login"); }, [signedOut, router]);
   if (standalone) return <>{children}</>;
+  if (LIVE && !ready) return <div className="grid min-h-screen place-items-center text-sm text-muted">{signedOut ? "Redirecting to sign-in…" : "Loading…"}</div>;
+  const demoHere = LIVE && !LIVE_READY.some((p) => path.startsWith(p));
 
   const sidebar = (
     <div className="flex h-full flex-col bg-navy text-navy-fg">
@@ -98,13 +111,16 @@ export function AppShell({ children, school }: { children: ReactNode; school: { 
       {mobile && <div className="no-print fixed inset-0 z-50 lg:hidden" onClick={() => setMobile(false)}><div className="absolute inset-0 bg-black/50" /><aside className="anim-slide relative h-full w-[260px]" style={{ animationName: "none" }} onClick={(e) => e.stopPropagation()}>{sidebar}<button className="absolute right-2 top-4 text-white" onClick={() => setMobile(false)} aria-label="Close menu"><X /></button></aside></div>}
       <div className={cn("transition-[padding]", collapsed ? "lg:pl-[68px]" : "lg:pl-[250px]")}>
         <Topbar school={school} onMenu={() => setMobile(true)} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
-        <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">{blocked ? <NoAccess label={ROLES[role].label} /> : children}</main>
+        <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">
+          {demoHere && !blocked && <div className="no-print mb-4 rounded-lg border border-warn/40 bg-warn/10 px-4 py-2 text-sm"><b>Not connected yet:</b> this module still shows demo data. Students is connected to the school database; the other modules follow.</div>}
+          {blocked ? <NoAccess label={ROLES[role].label} /> : children}</main>
       </div>
     </RoleCtx.Provider>
   );
 }
 
 function Topbar({ school, onMenu, role, setRole }: { school: { name: string }; onMenu: () => void; role: string; setRole: (r: string) => void }) {
+  const auth = useAuth();
   const [open, setOpen] = useState<null | "search" | "notif" | "quick" | "user">(null);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setOpen("search"); } if (e.key === "Escape") setOpen(null); };
@@ -135,11 +151,13 @@ function Topbar({ school, onMenu, role, setRole }: { school: { name: string }; o
       </div>
       <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{mounted && theme === "dark" ? <Sun size={19} /> : mounted ? <Moon size={19} /> : <Monitor size={19} />}</button>
       <div className="relative">
-        <button onClick={() => setOpen(open === "user" ? null : "user")} className="flex items-center gap-2 rounded-lg p-1 hover:bg-surface-2" aria-label="User menu"><Avatar name={ROLES[role].person} size={32} /></button>
+        <button onClick={() => setOpen(open === "user" ? null : "user")} className="flex items-center gap-2 rounded-lg p-1 hover:bg-surface-2" aria-label="User menu"><Avatar name={LIVE ? (auth.account?.name ?? "") : ROLES[role].person} size={32} /></button>
         {open === "user" && <div className={pop}>
+          {LIVE ? <><div className="px-3 py-2"><div className="font-medium">{auth.account?.name}</div><div className="text-xs text-muted">{ROLES[role].label} · {auth.account?.email}</div></div>
+            <button onClick={() => { setOpen(null); auth.signOut(); }} className="flex w-full items-center gap-2 rounded-lg border-t border-line px-3 py-2 text-left hover:bg-surface-2"><LogOut size={14} />Sign out</button></> : <>
           <div className="px-3 py-2"><div className="font-medium">{ROLES[role].person}</div><div className="text-xs text-muted">{ROLES[role].label}</div></div>
           <div className="border-t border-line px-3 py-2 text-xs font-semibold uppercase text-muted">Preview as role</div>
-          {Object.entries(ROLES).map(([k, r]) => <button key={k} onClick={() => { setRole(k); setOpen(null); }} className={cn("flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left hover:bg-surface-2", k === role && "font-semibold text-info")}>{r.label}{k === role && <ShieldCheck size={14} />}</button>)}
+          {Object.entries(ROLES).map(([k, r]) => <button key={k} onClick={() => { setRole(k); setOpen(null); }} className={cn("flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left hover:bg-surface-2", k === role && "font-semibold text-info")}>{r.label}{k === role && <ShieldCheck size={14} />}</button>)}</>}
         </div>}
       </div>
       {open === "search" && <CommandSearch onClose={() => setOpen(null)} />}

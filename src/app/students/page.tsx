@@ -2,9 +2,13 @@ import { Download, UserPlus } from "lucide-react";
 import { Card, LinkButton, PageHeader } from "@/components/ui/primitives";
 import { StudentsTable, type StudentRow } from "@/components/students/StudentsTable";
 import * as Q from "@/lib/data/queries";
+import { LIVE } from "@/lib/live/config";
+import { LiveStudents } from "@/components/students/LiveStudents";
 
 export const metadata = { title: "Students — EduFlow" };
 export default function StudentsPage() {
+  const header = (sub: string) => <PageHeader title="Students" sub={sub} actions={<><LinkButton href="/reports"><Download size={15} />Export</LinkButton><LinkButton href="/students/new" variant="primary"><UserPlus size={15} />Register student</LinkButton></>} />;
+  if (LIVE) return <>{header("Enrolled learners from the school database")}<LiveStudents /></>;
   const rows: StudentRow[] = Q.students.map((s) => {
     const f = Q.feeSummary(s.id);
     return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId).name, classId: s.classId, status: s.status, fee: f.status, balance: f.balance, medical: !!s.medicalAlert,

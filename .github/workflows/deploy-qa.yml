@@ -28,11 +28,24 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - name: Build static site
-        run: npm run build
+      # Demo version (built-in demo data, no sign-in) at /demo, for walkthroughs.
+      - name: Build demo site (/demo)
+        run: npm run build && mv out out-demo
+        env:
+          GITHUB_PAGES: "true"
+          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}/demo
+      # Main address: the live school database. Needs the repository secret SUPABASE_ANON_KEY (and QA_LOGINS for the
+      # tap-a-role sign-in buttons); without the key it falls back to the demo so the site never breaks.
+      - name: Build main site (live database)
+        run: |
+          if [ -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]; then export NEXT_PUBLIC_DATA_MODE=live; else echo "::warning::SUPABASE_ANON_KEY secret not set: main site built with demo data"; fi
+          npm run build
+          mv out-demo out/demo
         env:
           GITHUB_PAGES: "true"
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_QA_LOGINS: ${{ secrets.QA_LOGINS }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -6,7 +6,7 @@ import { Avatar, Badge, StatusBadge } from "@/components/ui/primitives";
 import { money } from "@/lib/money";
 
 export interface StudentRow { id: string; name: string; adm: string; cls: string; classId: string; status: string; fee: string; balance: number; guardians: string; guardianCount: number; medical: boolean }
-export function StudentsTable({ rows, classes }: { rows: StudentRow[]; classes: { id: string; name: string }[] }) {
+export function StudentsTable({ rows, classes, hrefFor = (id) => `/students/${id}` }: { rows: StudentRow[]; classes: { id: string; name: string }[]; hrefFor?: (id: string) => string }) {
   const r = useRouter(); const [cls, setCls] = useState(""); const [fee, setFee] = useState(""); const [st, setSt] = useState(""); const [gd, setGd] = useState("");
   const data = useMemo(() => rows.filter((x) => (!cls || x.classId === cls) && (!fee || x.fee === fee) && (!st || x.status === st)), [rows, cls, fee, st]);
   const cols: Column<StudentRow>[] = [
@@ -17,7 +17,7 @@ export function StudentsTable({ rows, classes }: { rows: StudentRow[]; classes: 
     { key: "fee", header: "Fees", render: (x) => <StatusBadge status={x.fee} /> },
     { key: "bal", header: "Balance", align: "right", sort: (x) => x.balance, render: (x) => <span className={x.balance > 0 ? "text-danger font-medium" : ""}>{money(x.balance)}</span> },
   ];
-  return <DataTable rows={data} columns={cols} rowId={(x) => x.id} pageSize={12} onRowClick={(x) => r.push(`/students/${x.id}`)} searchText={(x) => `${x.name} ${x.adm} ${x.guardians}`}
+  return <DataTable rows={data} columns={cols} rowId={(x) => x.id} pageSize={12} onRowClick={(x) => r.push(hrefFor(x.id))} searchText={(x) => `${x.name} ${x.adm} ${x.guardians}`}
     filters={<><Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} />
       <Select label="Fee status" value={fee} onChange={setFee} options={[{ value: "", label: "Any fee status" }, ...["Paid in Full", "Partially Paid", "Outstanding"].map((v) => ({ value: v, label: v }))]} />
       <Select label="Guardian" value={gd} onChange={setGd} options={[{ value: "", label: "Any guardians" }, { value: "none", label: "No guardian linked" }, { value: "multi", label: "2+ guardians" }]} />
