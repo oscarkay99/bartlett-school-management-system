@@ -39,7 +39,7 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
   const directory = Q.guardians.map((g) => ({ id: g.id, title: g.title, name: g.name, phone: g.phone, email: g.email, children: Q.studentsOfGuardian(g.id).length }));
   const payStudentFor = (account: FeeAccount) => { const af = Q.accountSummary(s.id, account); return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: cls.name, balance: af.balance, feedingOwed: account === "fees" ? Math.max(0, Q.feedingAccount(s.id).balance) : 0, feedingRate: account === "fees" ? Q.feedingAccount(s.id).billed : 0, invoices: Q.invoicesOf(s.id, account).map((i) => ({ no: i.no, balance: af.balance })) }; };
   const usedRefs = Q.payments.map((p) => p.ref.toUpperCase());
-  const tone = f.status === "Paid in Full" ? "ok" : f.status === "Overdue" ? "danger" : f.status === "Credit Balance" ? "info" : "warn";
+  const tone = f.status === "Paid in Full" ? "ok" : "warn";
   const dl = (rows: [string, React.ReactNode][]) => <dl className="grid gap-x-8 sm:grid-cols-2">{rows.map(([k, v]) => <div key={k} className="flex justify-between gap-4 border-b border-line py-2"><dt className="text-muted">{k}</dt><dd className="text-right font-medium">{v}</dd></div>)}</dl>;
 
   const tabs = [

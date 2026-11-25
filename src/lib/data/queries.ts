@@ -18,7 +18,8 @@ export const getStaff = (id: string) => staff.find((s) => s.id === id);
 export const fullName = (s: Student) => [s.first, s.middle, s.last].filter(Boolean).join(" ");
 export const shortName = (s: Student) => `${s.first} ${s.last}`;
 
-export type FeeStatus = "Paid in Full" | "Partially Paid" | "Outstanding" | "Overdue" | "Credit Balance";
+/** Fee status shown everywhere. Overpaying counts as Paid in Full; a late balance is still Partially Paid / Outstanding. */
+export type FeeStatus = "Paid in Full" | "Partially Paid" | "Outstanding";
 export interface FeeSummary { billed: Minor; discount: Minor; paid: Minor; balance: Minor; dueOn: string; status: FeeStatus; overdue: boolean; enrolled: boolean }
 
 // Each account is settled independently: feeding payments never reduce the school-fee balance and vice versa.
@@ -44,7 +45,7 @@ export function accountSummary(studentId: string, account: FeeAccount): FeeSumma
   const balance = billed - paid;
   const dueOn = inv.map((i) => i.dueOn).sort()[0] ?? D.TODAY;
   const overdue = balance > 0 && dueOn < D.TODAY;
-  const status: FeeStatus = balance < 0 ? "Credit Balance" : balance === 0 ? "Paid in Full" : overdue ? "Overdue" : paid > 0 ? "Partially Paid" : "Outstanding";
+  const status: FeeStatus = balance <= 0 ? "Paid in Full" : paid > 0 ? "Partially Paid" : "Outstanding";
   const r = { billed, discount, paid, balance, dueOn, status, overdue, enrolled: inv.length > 0 };
   feeCache.set(key, r); return r;
 }

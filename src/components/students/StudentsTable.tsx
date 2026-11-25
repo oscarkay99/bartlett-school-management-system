@@ -19,7 +19,7 @@ export function StudentsTable({ rows, classes }: { rows: StudentRow[]; classes: 
   ];
   return <DataTable rows={data} columns={cols} rowId={(x) => x.id} pageSize={12} onRowClick={(x) => r.push(`/students/${x.id}`)} searchText={(x) => `${x.name} ${x.adm} ${x.guardians}`}
     filters={<><Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} />
-      <Select label="Fee status" value={fee} onChange={setFee} options={[{ value: "", label: "Any fee status" }, ...["Paid in Full", "Partially Paid", "Outstanding", "Overdue", "Credit Balance"].map((v) => ({ value: v, label: v }))]} />
+      <Select label="Fee status" value={fee} onChange={setFee} options={[{ value: "", label: "Any fee status" }, ...["Paid in Full", "Partially Paid", "Outstanding"].map((v) => ({ value: v, label: v }))]} />
       <Select label="Guardian" value={gd} onChange={setGd} options={[{ value: "", label: "Any guardians" }, { value: "none", label: "No guardian linked" }, { value: "multi", label: "2+ guardians" }]} />
       <Select label="Status" value={st} onChange={setSt} options={[{ value: "", label: "Any status" }, ...["Active", "Withdrawn", "Graduated"].map((v) => ({ value: v, label: v }))]} /></>}
     toolbar={<Badge>{data.length} students</Badge>} />;

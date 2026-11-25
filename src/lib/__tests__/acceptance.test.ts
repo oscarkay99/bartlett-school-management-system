@@ -143,3 +143,10 @@ describe("Two accounts: school fees and standalone Extra Classes", () => {
     expect(Q.subledgerRecon().diff).toBe(0);
   });
 });
+
+describe("Fee statuses", () => {
+  it("only Paid in Full, Partially Paid and Outstanding (no Overdue or Credit Balance)", () => {
+    const seen = new Set(Q.students.flatMap((s) => Q.ACCOUNT_IDS.map((a) => Q.accountSummary(s.id, a).status)));
+    for (const st of seen) expect(["Paid in Full", "Partially Paid", "Outstanding"]).toContain(st);
+  });
+});
