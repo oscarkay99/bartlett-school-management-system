@@ -76,9 +76,12 @@ body {
   body { background: #fff; color: #000; }
   main { padding: 0 !important; }
 }
-/* Invoices page: print only the open invoice (html.print-invoice is set just while printing). */
+/* Invoices page: only the print copy of the open sheet is printed — front and back as two A4 pages.
+   html.print-invoice is set just while printing. */
+.print-root { display: none; }
 @media print {
-  html.print-invoice body * { visibility: hidden !important; }
-  html.print-invoice .invoice-doc, html.print-invoice .invoice-doc * { visibility: visible !important; }
-  html.print-invoice .invoice-doc { position: fixed; inset: 0; padding: 14mm; font-size: 12px; }
+  html.print-invoice body > *:not(.print-root) { display: none !important; }
+  html.print-invoice .print-root { display: block; }
+  .print-root .invoice-sheet { padding: 14mm; font-size: 12px; break-after: page; }
+  .print-root .invoice-sheet:last-child { break-after: auto; }
 }
