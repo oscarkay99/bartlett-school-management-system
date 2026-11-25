@@ -13,7 +13,7 @@ import { money } from "@/lib/money";
 /** A student who can be billed in this account. `billed` maps a term key ("2026/2027|Term 1") to the lines they already have that term. */
 export interface BillCandidate { id: string; name: string; adm: string; classId: string; cls: string; boarding: boolean; scholarship: boolean; billed: Record<string, string[]> }
 
-// Issue an extracurricular invoice (the second invoice parents receive) for one student, for the term selected in the top bar.
+// Issue an Extra Classes invoice (standalone, never added to school fees) for one student, for the term selected in the top bar.
 // Prices come from that term's fee schedule. Front-end preview: the backend assigns the real number.
 export function IssueBillDialog({ open, onClose, account, candidates }: { open: boolean; onClose: () => void; account: FeeAccount; candidates: BillCandidate[] }) {
   const A = ACCOUNTS[account]; const toast = useToast();

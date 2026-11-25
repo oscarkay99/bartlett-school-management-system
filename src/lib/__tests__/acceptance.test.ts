@@ -64,7 +64,7 @@ describe("Every student is tied to a guardian", () => {
   });
 });
 
-// What the client asked for: parents get two invoices — school fees (with feeding on it) and extracurricular.
+// What the client asked for: parents get the school fees invoice (with feeding on it); Extra Classes is a standalone invoice.
 describe("School fees invoice: books and feeding on one invoice", () => {
   it("every school-fee invoice carries Books and Feeding", () => {
     for (const i of Q.invoices.filter((x) => x.account === "fees")) {
@@ -95,9 +95,9 @@ describe("School fees invoice: books and feeding on one invoice", () => {
   });
 });
 
-describe("Two accounts: school fees and extracurricular", () => {
+describe("Two accounts: school fees and standalone Extra Classes", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-  it("only school fees and extracurricular exist; each has its own invoice and receipt numbering", () => {
+  it("only school fees and Extra Classes exist; each has its own invoice and receipt numbering", () => {
     expect(Q.ACCOUNT_IDS).toEqual(["fees", "extra"]);
     const prefix = { fees: ["INV-", "RCT-"], extra: ["EXC-", "XRC-"] } as const;
     for (const i of Q.invoices) expect(i.no.startsWith(prefix[i.account][0]), i.no).toBe(true);
@@ -110,7 +110,7 @@ describe("Two accounts: school fees and extracurricular", () => {
     const id = ama().id;
     expect(Q.feeSummary(id).balance).toBe(ghs(1650));
     const ex = Q.accountSummary(id, "extra"); expect([ex.billed, ex.paid, ex.balance]).toEqual([ghs(400), 0, ghs(400)]);
-    expect(Q.totalOwed(id)).toBe(ghs(2050));
+    expect(Q.totalOwed(id)).toBe(ghs(1650)); // school fees only: Extra Classes is never added
   });
   it("a payment only reduces the balance of its own account", () => {
     for (const s of Q.students) for (const acc of Q.ACCOUNT_IDS) {
@@ -119,21 +119,21 @@ describe("Two accounts: school fees and extracurricular", () => {
       expect(f.paid).toBe(paid);
     }
   });
-  it("extracurricular invoices only contain Music (Piano), STEM or Extra Classes; KG only Music", () => {
+  it("Extra Classes invoices only contain Music (Piano), STEM or Extra Classes; KG only Music", () => {
     for (const i of Q.invoices.filter((x) => x.account === "extra")) {
       const kg = Q.getClass(Q.getStudent(i.studentId)!.classId).level === "Kindergarten";
       for (const it of i.items) expect(kg ? ["Music (Piano)"] : ["Music (Piano)", "STEM", "Extra Classes"]).toContain(it.label);
     }
   });
-  it("extracurricular reminders mention extracurricular, not school fees", () => {
+  it("Extra Classes reminders mention extra classes, not school fees", () => {
     const row = Q.reminderRows({ account: "extra" })[0];
-    expect(Q.buildReminder(row, Q.SCHOOL, "extra")).toMatch(/extracurricular/);
+    expect(Q.buildReminder(row, Q.SCHOOL, "extra")).toMatch(/extra classes/);
   });
   it("GL still posts feeding income to its own account (from the school fees invoice) and reconciles", () => {
     const tb = Q.trialBalance();
     const feeding = Q.invoices.filter((i) => i.account === "fees").reduce((a, i) => a + (i.items.find((x) => x.label === "Feeding")?.amount ?? 0), 0);
     expect(feeding).toBeGreaterThan(0); expect(tb.find((t) => t.account === "4200 Feeding Fees")!.cr).toBe(feeding);
-    expect(tb.some((t) => t.account === "4500 Extracurricular Fees")).toBe(true);
+    expect(tb.some((t) => t.account === "4500 Extra Classes Fees")).toBe(true);
     expect(Q.subledgerRecon().diff).toBe(0);
   });
 });

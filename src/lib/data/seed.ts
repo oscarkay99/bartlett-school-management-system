@@ -44,7 +44,7 @@ export const subjectsByLevel: Record<string, string[]> = {
 };
 
 // ---------- Fee schedule (per academic year + term, minor units) ----------
-// School fees invoice: tuition, books, levies, PTA, exams, boarding and feeding. Extracurricular is billed on a second invoice.
+// School fees invoice: tuition, books, levies, PTA, exams, boarding and feeding. Extra classes are billed on their own standalone invoice.
 // The school does not charge the ICT & Development Levy yet (planned in about two years): it is kept at 0 so invoices show "—".
 // Fees are set per level; a class can override or add lines (see `overrides`). Edited in Settings → Fee schedule.
 const lvl = (tuition: number, books: number, levy: number, exam: number, boarding: number, feeding: number): LevelFees => ({
@@ -185,7 +185,7 @@ payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fee
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s31", amount: ghs(800), method: "Online Gateway", date: "2026-10-09", ref: "GW-PENDING-7790", status: "Pending", staff: "System" });
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s44", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
 
-// ---------- Extracurricular (second invoice, receipted separately) ----------
+// ---------- Extra Classes (standalone invoice, receipted separately) ----------
 // Own PRNG so this account does not reshuffle the rest of the demo data.
 let s2 = 20261123;
 const rnd2 = () => { s2 |= 0; s2 = (s2 + 0x6d2b79f5) | 0; let t = Math.imul(s2 ^ (s2 >>> 15), 1 | s2); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -201,7 +201,7 @@ const settle = (st: T.Student, total: Minor) => {
 };
 students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
-  // Extracurricular is opt-in. Kindergarten only offers Music (Piano).
+  // Extra classes are opt-in. Kindergarten only offers Music (Piano).
   const offered: Activity[] = cls.level === "Kindergarten" ? ["Music (Piano)"] : [...ACTIVITIES];
   const taken = offered.filter(() => rnd2() < (cls.level === "Kindergarten" ? 0.3 : 0.28));
   if (taken.length) {
@@ -210,7 +210,7 @@ students.forEach((st) => {
     settle(st, items.reduce((a, b) => a + b.amount, 0));
   }
 });
-// Demo: Ama Mensah — Music (Piano) GHS 400 on the extracurricular invoice, unpaid.
+// Demo: Ama Mensah — Music (Piano) GHS 400 on the Extra Classes invoice, unpaid.
 {
   for (let i = invoices.length - 1; i >= 0; i--) if (invoices[i].studentId === ama.id && invoices[i].account !== "fees") invoices.splice(i, 1);
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id && payments[i].account !== "fees") payments.splice(i, 1);

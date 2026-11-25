@@ -5,6 +5,6 @@ import { billingProps } from "@/lib/data/fees-view";
 
 export const metadata = { title: "School Fees — EduFlow" };
 export default function FeesPage() {
-  return (<><PageHeader title="School Fees" sub="Tuition, books, levies, PTA, exams and feeding on one invoice — extracurricular is billed and receipted separately" />
+  return (<><PageHeader title="School Fees" sub="Tuition, books, levies, PTA, exams and feeding on one invoice — extra classes are billed and receipted on their own" />
     <Suspense fallback={null}><FeesRoute {...billingProps("fees")} /></Suspense></>);
 }

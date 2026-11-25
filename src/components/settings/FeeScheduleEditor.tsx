@@ -41,7 +41,7 @@ export function FeeScheduleEditor() {
 
       {editing ? <GridEditor key={key} tf={editing} onCancel={() => setDraft(null)} onSave={(tf) => { fs.save(tf); setDraft(null); }} />
         : saved ? <>
-            <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term, feeding included. Activities go on a second invoice."
+            <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term, feeding included. Extra classes are billed separately."
               action={canEdit && !locked ? <Button size="sm" variant="primary" onClick={() => edit(structuredClone(saved))}><Pencil size={13} />Edit fees</Button> : undefined} />
             <p className="text-sm text-muted">Activities this term: {Object.entries(saved.activities).map(([a, m]) => `${a} ${money(m)}`).join(" · ")}</p></>
         : <Card><EmptyState icon={FilePlus2} title={`No fees set for ${term} ${year}`}
@@ -138,7 +138,7 @@ export function ClassFeeTable({ tf, classes, title, sub, action }: { tf: TermFee
   const anyBoarding = rows.some((r) => r.boarding > 0);
   const short = (m: number) => (m / 100).toLocaleString("en-GH");
   return (
-    <Card><CardHeader title={title} sub={sub ?? "School fees per student, feeding included. Extracurricular is billed on a second invoice."} action={action} />
+    <Card><CardHeader title={title} sub={sub ?? "School fees per student, feeding included. Extra classes are billed separately."} action={action} />
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GHS)</th><th className="whitespace-nowrap px-3 text-right">School fees</th>{anyBoarding && <th className="whitespace-nowrap px-4 text-right">Boarders pay</th>}</tr></thead>
         <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.c.id} className="align-top">
           <td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.c.name}</td>

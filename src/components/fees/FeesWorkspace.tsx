@@ -12,7 +12,9 @@ import { useRole } from "@/components/shell/AppShell";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { TermFeeStructure } from "@/components/settings/FeeScheduleEditor";
-import { invoiceStem, termKey } from "@/lib/fees";
+import { feedingRate, invoiceStem, termKey } from "@/lib/fees";
+import { studentFeedingRate } from "@/lib/feeding";
+import { useFeeding } from "@/components/feeding/useFeeding";
 import { buildTermInvoices, generatedTotal, type GeneratedInvoice } from "@/lib/generated-invoices";
 import { GeneratedInvoiceDialog, useGeneratedInvoices } from "./GeneratedInvoices";
 import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
@@ -221,7 +223,9 @@ function GenerateInvoices({ candidates, already, startSeq, onGenerate, onClose }
   const key = termKey(year, term);
   const todo = candidates.filter((c) => !c.billed[key]?.length && !already.has(c.id));
   const termStart = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term)?.start ?? new Date().toISOString().slice(0, 10);
-  const built = tf ? buildTermInvoices(todo, fs.classes, tf, termStart, startSeq) : [];
+  // Feeding follows the Feeding module: students not on feeding get no Feeding line; different rates are applied.
+  const feeding = useFeeding();
+  const built = tf ? buildTermInvoices(todo, fs.classes, tf, termStart, startSeq, (sid) => { const ex = feeding.exceptionFor(sid, key); const cls = fs.classes.find((c) => c.id === todo.find((t) => t.id === sid)?.classId); return ex && cls ? studentFeedingRate(feedingRate(tf, cls), ex) : undefined; }) : [];
   const byClass = fs.classes.map((cls) => { const l = built.filter((x) => x.classId === cls.id); return { cls, n: l.length, total: l.reduce((a, x) => a + generatedTotal(x), 0) }; }).filter((r) => r.n > 0);
   const total = byClass.reduce((a, r) => a + r.total, 0);
   return (
@@ -229,7 +233,7 @@ function GenerateInvoices({ candidates, already, startSeq, onGenerate, onClose }
       {!tf ? <div className="space-y-2"><p>{term} {year} has no fees set, so invoices can&apos;t be generated yet.</p><Link className="text-sm font-medium text-info hover:underline" href="/settings?tab=fees">Set {term} fees in Settings →</Link></div>
         : built.length === 0 ? <><p>All <b>{candidates.length}</b> active students in the current filter already have a {term} invoice.</p><p className="mt-2 text-sm text-muted">Each student can only have one invoice per term, so running this again never creates duplicates. New students admitted later are picked up automatically.</p></>
         : <div className="space-y-3">
-            <p><b>{built.length}</b> students have no {term} invoice yet. Each is billed their class&apos;s {term} fees from the fee schedule, including feeding, plus boarding for boarders.</p>
+            <p><b>{built.length}</b> students have no {term} invoice yet. Each is billed their class&apos;s {term} fees from the fee schedule, plus boarding for boarders and feeding as set in the Feeding module.</p>
             <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-3 py-2 text-left">Class</th><th className="px-3 text-right">Students</th><th className="px-3 text-right">Total</th></tr></thead>
               <tbody className="divide-y divide-line">{byClass.map((r) => <tr key={r.cls.id}><td className="px-3 py-2">{r.cls.name}</td><td className="num px-3 text-right">{r.n}</td><td className="num px-3 text-right">{money(r.total)}</td></tr>)}</tbody>
               <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-3 py-2">Total</td><td className="num px-3 text-right">{built.length}</td><td className="num px-3 text-right">{money(total)}</td></tr></tfoot></table></div>
@@ -265,7 +269,7 @@ function ItemBreakdown({ students, sections }: { students: SRow[]; sections: { k
   );
 }
 
-// Extracurricular: one card per activity (enrolment and billed), plus the full roster.
+// Extra Classes: one card per class/activity (enrolment and billed), plus the full roster.
 function Activities({ students }: { students: SRow[] }) {
   const [act, setAct] = useState(""); const r = useRouter();
   const per = ACTIVITIES.map((a) => { const kids = students.filter((s) => s.items.some((i) => i.label === a)); return { a, kids: kids.length, billed: kids.reduce((x, s) => x + (s.items.find((i) => i.label === a)?.amount ?? 0), 0) }; });

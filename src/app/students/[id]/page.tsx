@@ -80,13 +80,14 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
       <MoneyGate level="balances">
       <div className="mb-3 rounded-xl border border-line bg-surface px-4 py-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><div className="text-xs text-muted">Total for {tc.term} {tc.year}</div><div className="num text-2xl font-semibold">{money(tc.total)}</div></div>
-          <div className="text-right"><div className="text-xs text-muted">Still owed, all accounts</div><div className={`num text-lg font-semibold ${owedAll > 0 ? "text-danger" : "text-ok"}`}>{money(owedAll)}</div></div>
+          <div><div className="text-xs text-muted">School fees for {tc.term} {tc.year}</div><div className="num text-2xl font-semibold">{money(tc.total)}</div>
+            {tc.parts[0].discount > 0 && <div className="text-xs text-muted">after {money(tc.parts[0].discount)} {Q.discountLabel(s.id).toLowerCase()}</div>}</div>
+          <div className="text-right"><div className="text-xs text-muted">School fees still owed</div><div className={`num text-lg font-semibold ${owedAll > 0 ? "text-danger" : "text-ok"}`}>{money(owedAll)}</div></div>
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">{tc.parts.filter((p) => p.billed).map((p, i) => <span key={p.account}>{i > 0 && <span className="mr-2">+</span>}{p.label} <b className="num text-fg">{money(p.net)}</b>{p.discount > 0 && <span className="text-xs"> (after {money(p.discount)} {Q.discountLabel(s.id).toLowerCase()})</span>}</span>)}
-          <span className="basis-full text-xs">Each is billed and receipted separately; a payment only reduces the account it was made to.</span></div>
+        {tc.extra.billed && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm"><span className="text-muted">Extra Classes <span className="text-xs">(separate invoice, not added to school fees)</span></span>
+          <span><b className="num">{money(tc.extra.net)}</b> <span className="text-xs text-muted">· owed {money(Math.max(0, Q.accountSummary(s.id, "extra").balance))}</span></span></div>}
       </div>
-      <div className="mb-3 grid gap-2 sm:grid-cols-3">{accts.map(({ id: acc, a, f: af }) => <Link key={acc} href={`/students/${s.id}?tab=${acc}`} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">{a.label}</span><span className={`num font-semibold ${af.balance > 0 ? "text-danger" : ""}`}>{af.enrolled ? money(Math.max(0, af.balance)) : "Not enrolled"}</span></span>{af.enrolled && <StatusBadge status={af.status} />}</Link>)}</div>
+      <div className="mb-3 grid gap-2 sm:grid-cols-2">{accts.map(({ id: acc, a, f: af }) => <Link key={acc} href={`/students/${s.id}?tab=${acc}`} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">{a.label}</span><span className={`num font-semibold ${af.balance > 0 ? "text-danger" : ""}`}>{af.enrolled ? money(Math.max(0, af.balance)) : "Not enrolled"}</span></span>{af.enrolled && <StatusBadge status={af.status} />}</Link>)}</div>
       {f.balance > 0 ? (
         <div role="alert" className={`mb-5 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${f.overdue ? "border-danger/30 bg-danger/8" : "border-warn/30 bg-warn/10"}`}>
           <AlertTriangle className={f.overdue ? "text-danger" : "text-warn"} />

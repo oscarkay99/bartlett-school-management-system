@@ -99,10 +99,10 @@ describe("Fee schedule — locking and saved edits", () => {
 
 describe("What a parent owes for the term", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-  it("term total = school fees invoice (feeding included) + extracurricular invoice, each net of discounts", () => {
+  it("term total is school fees only (feeding included); Extra Classes is reported separately, never added", () => {
     const tc = Q.termCharges(ama().id, "2026/2027", "Term 1");
     expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3950)], ["extra", ghs(400)]]);
-    expect(tc.total).toBe(ghs(4350));
+    expect(tc.total).toBe(ghs(3950)); expect(tc.extra.net).toBe(ghs(400));
     expect(Q.termCharges(ama().id, "2026/2027", "Term 2").total).toBe(0); // nothing billed for Term 2 yet
   });
   it("a scholarship is its own named line, taken off tuition only", () => {

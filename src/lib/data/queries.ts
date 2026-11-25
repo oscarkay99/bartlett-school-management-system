@@ -27,7 +27,7 @@ export const paymentsOf = (studentId: string, account: FeeAccount): Payment[] =>
 export const accountPayments = (account: FeeAccount) => payments.filter((p) => p.account === account);
 
 const feeCache = new Map<string, FeeSummary>();
-/** School-fees balance (tuition, books, levies…). Use accountSummary for feeding / extracurricular. */
+/** School-fees balance (tuition, books, levies…). Use accountSummary for Extra Classes. */
 export const feeSummary = (studentId: string) => accountSummary(studentId, "fees");
 export function accountSummary(studentId: string, account: FeeAccount): FeeSummary {
   const key = `${account}:${studentId}`; const hit = feeCache.get(key); if (hit) return hit;
@@ -44,8 +44,8 @@ export function accountSummary(studentId: string, account: FeeAccount): FeeSumma
   feeCache.set(key, r); return r;
 }
 /**
- * What one term costs for a student: each account's bills for that term (net of discounts), and the sum.
- * Accounts are still billed, receipted and settled separately; this is the one figure a parent asks for.
+ * What one term costs for a student: each account's bills for that term (net of discounts).
+ * `total` is SCHOOL FEES ONLY. Extra Classes is standalone and is never added to it (see `extra`).
  */
 export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SCHOOL.term) {
   const parts = ACCOUNT_IDS.map((account) => {
@@ -53,12 +53,12 @@ export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SC
     const gross = inv.reduce((a, i) => a + i.items.reduce((x, y) => x + y.amount, 0), 0); const discount = inv.reduce((a, i) => a + i.discount, 0);
     return { account, label: ACCOUNTS[account].label, billed: inv.length > 0, gross, discount, net: gross - discount };
   });
-  return { year, term, parts, total: parts.reduce((a, p) => a + p.net, 0) };
+  return { year, term, parts, total: parts.find((p) => p.account === "fees")!.net, extra: parts.find((p) => p.account === "extra")! };
 }
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
 export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };
-/** Total owed across all three accounts (never netted: a credit in one account does not pay another). */
-export const totalOwed = (studentId: string) => ACCOUNT_IDS.reduce((a, acc) => a + Math.max(0, accountSummary(studentId, acc).balance), 0);
+/** School fees still owed. Extra Classes is standalone: its balance is shown separately and never added here. */
+export const totalOwed = (studentId: string) => Math.max(0, accountSummary(studentId, "fees").balance);
 
 // Chronological, append-only ledger for one account with running balance.
 export function accountLedger(studentId: string, account: FeeAccount) {
@@ -209,7 +209,7 @@ export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverv
 export const OPENING_CASH: Minor = 18_450_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
 // Feeding is a line on the school fees invoice, but its income is still posted to its own account.
-const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extracurricular Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : label === "Boarding" ? "4300 Boarding Fees" : "4400 Levies & Other Fees");
+const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extra Classes Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : label === "Boarding" ? "4300 Boarding Fees" : "4400 Levies & Other Fees");
 const expenseAccount = (c: string) => `5${({ Salaries: "100", Utilities: "200", Internet: "250", Repairs: "300", Stationery: "350", "Food Supplies": "400", Transport: "450", "Inventory Purchases": "500", Software: "550", Building: "600", Maintenance: "650" } as Record<string, string>)[c] ?? "900"} ${c}`;
 export function generalLedger(): GLLine[] {
   const L: GLLine[] = [{ date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "1100 Bank & Cash", dr: OPENING_CASH, cr: 0 }, { date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "3100 Accumulated Fund", dr: 0, cr: OPENING_CASH }];

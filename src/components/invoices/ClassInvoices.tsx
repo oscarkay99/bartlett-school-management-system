@@ -5,19 +5,20 @@ import { Eye, Pencil, Plus, Printer, RotateCcw, Trash2 } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui/primitives";
 import { Modal, MoneyInput, useToast } from "@/components/ui/interactive";
 import { useRole } from "@/components/shell/AppShell";
-import { cleanInvoice, INVOICE_TABS, invoiceTotal, mergeInvoices, PER_PAGE, type ClassInvoice } from "@/lib/class-invoices";
+import { cleanInvoice, INVOICE_TABS, invoiceTotal, isSmall, linesTotal, mergeInvoices, PER_PAGE, type ClassInvoice, type InvoiceLine } from "@/lib/class-invoices";
+import { SchoolLogo } from "@/components/SchoolLogo";
 import { money } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-const KEY = "class-invoices-v3";
-type School = { name: string; phone: string; email: string };
+const KEY = "class-invoices-v4";
+type School = { name: string; city: string; phone: string; email: string };
 const box = "h-9 rounded-lg border border-line bg-surface px-2.5 text-sm placeholder:text-muted/60 focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30";
 /** 0 prints as a dash: the line is on the invoice but not charged (e.g. ICT levy, not billed yet). */
 const amt = (m: number) => (m ? money(m) : "—");
-// One small invoice = one cell of a 2 × 5 grid on A4 (210 × 297 mm).
+// One small (Extra Classes) invoice = one cell of a 2 × 5 grid on A4 (210 × 297 mm).
 const W = "105mm", H = "59.4mm";
 
-// Invoices page: a tab per class plus Extracurricular. Each holds one small invoice; printing puts 10 copies on an A4 page.
+// Invoices page: a tab per class (full A4 school fees invoice) plus Extra Classes (small invoice, 10 per A4 page).
 // Edits are kept in this browser until the backend stores them.
 export function ClassInvoices({ defaults, school }: { defaults: Record<string, ClassInvoice>; school: School }) {
   const [invoices, setInvoices] = useState(defaults);
@@ -51,12 +52,12 @@ export function ClassInvoices({ defaults, school }: { defaults: Record<string, C
           {inv.lines.length === 0 && <li className="py-0.5 text-muted">No lines. Open the invoice to add them.</li>}
           <li className="mt-1 flex justify-between gap-3 border-t border-line pt-1.5 font-semibold"><span>Total</span><span className="num">{money(invoiceTotal(inv))}</span></li></ul>
       </Card>
-      {open && <InvoiceDialog key={tab} label={t.label} invoice={inv} original={defaults[tab]} school={school} onClose={() => setOpen(false)} onSave={(v) => persist({ ...invoices, [tab]: v })} />}
+      {open && <InvoiceDialog key={tab} small={isSmall(t)} label={t.label} invoice={inv} original={defaults[tab]} school={school} onClose={() => setOpen(false)} onSave={(v) => persist({ ...invoices, [tab]: v })} />}
     </div>
   );
 }
 
-function InvoiceDialog({ label, invoice, original, school, onClose, onSave }: { label: string; invoice: ClassInvoice; original: ClassInvoice; school: School; onClose: () => void; onSave: (inv: ClassInvoice) => void }) {
+function InvoiceDialog({ small, label, invoice, original, school, onClose, onSave }: { small: boolean; label: string; invoice: ClassInvoice; original: ClassInvoice; school: School; onClose: () => void; onSave: (inv: ClassInvoice) => void }) {
   const { allow } = useRole(); const canEdit = allow("invoices", "create"); const toast = useToast();
   const [draft, setDraft] = useState<ClassInvoice | null>(null); const [rev, setRev] = useState(0);
   const print = () => {
@@ -68,15 +69,17 @@ function InvoiceDialog({ label, invoice, original, school, onClose, onSave }: { 
       <Button variant="ghost" className="mr-auto" onClick={() => { setDraft(structuredClone(original)); setRev((r) => r + 1); }}><RotateCcw size={14} />Reset to current fees</Button>
       <Button onClick={() => setDraft(null)}>Cancel</Button>
       <Button variant="primary" onClick={() => { onSave(cleanInvoice(draft)); setDraft(null); toast(`${label} invoice saved`); }}>Save invoice</Button></>
-    : <>{canEdit && <Button className="mr-auto" onClick={() => setDraft(structuredClone(invoice))}><Pencil size={14} />Edit figures</Button>}<Button onClick={onClose}>Close</Button><Button variant="primary" onClick={print}><Printer size={14} />Print {PER_PAGE} per A4</Button></>;
+    : <>{canEdit && <Button className="mr-auto" onClick={() => setDraft(structuredClone(invoice))}><Pencil size={14} />Edit figures</Button>}<Button onClick={onClose}>Close</Button><Button variant="primary" onClick={print}><Printer size={14} />{small ? `Print ${PER_PAGE} per A4` : "Print / Save PDF"}</Button></>;
 
   return (
     <Modal open onClose={onClose} title={`${label} invoice`} wide footer={footer}>
-      {draft ? <Editor key={rev} draft={draft} setDraft={setDraft} school={school} />
-        : <div className="space-y-2"><Preview school={school} inv={invoice} /><p className="text-center text-xs text-muted">Actual size is about 10.5 × 6 cm. Printing puts {PER_PAGE} copies on one A4 page with cut lines.</p></div>}
-      {/* Print copy: one A4 page of 10 identical small invoices. Only this prints (see .print-root in globals.css). */}
+      {small
+        ? (draft ? <Editor key={rev} draft={draft} setDraft={setDraft} school={school} />
+          : <div className="space-y-2"><Preview school={school} inv={invoice} /><p className="text-center text-xs text-muted">Actual size is about 10.5 × 6 cm. Printing puts {PER_PAGE} copies on one A4 page with cut lines.</p></div>)
+        : <FullSheet key={rev} school={school} doc={draft ?? invoice} setDoc={draft ? setDraft : undefined} />}
+      {/* Print copy, only this prints (see .print-root in globals.css): 10 small invoices per page, or the full invoice. */}
       {createPortal(<div className="print-root"><style>{"@page { size: A4; margin: 0; }"}</style>
-        <div className="mini-page">{Array.from({ length: PER_PAGE }, (_, i) => <MiniInvoice key={i} school={school} inv={invoice} />)}</div></div>, document.body)}
+        {small ? <div className="mini-page">{Array.from({ length: PER_PAGE }, (_, i) => <MiniInvoice key={i} school={school} inv={invoice} />)}</div> : <FullSheet school={school} doc={invoice} />}</div>, document.body)}
     </Modal>
   );
 }
@@ -86,7 +89,7 @@ function Preview({ school, inv }: { school: School; inv: ClassInvoice }) {
   return <div className="flex justify-center overflow-hidden rounded-lg bg-surface-2 p-4"><div style={{ zoom: 1.45 }} className="shadow-md"><MiniInvoice school={school} inv={inv} /></div></div>;
 }
 
-/** One small invoice, sized in millimetres so the screen preview and the A4 print match exactly. No crest, no class name. */
+/** One small Extra Classes invoice, sized in millimetres so the screen preview and the A4 print match exactly. No crest. */
 export function MiniInvoice({ school, inv }: { school: School; inv: ClassInvoice }) {
   return (
     <article className="mini-invoice flex flex-col overflow-hidden bg-white text-neutral-900" style={{ width: W, height: H, padding: "3.5mm 4.5mm", fontSize: "7.4pt", lineHeight: 1.3 }}>
@@ -127,5 +130,39 @@ function Editor({ draft, setDraft, school }: { draft: ClassInvoice; setDraft: (d
       <label className="block text-sm"><span className="mb-1 block font-medium">Note at the bottom</span><textarea aria-label="Notes" className="h-16 w-full rounded-lg border border-line bg-surface p-2 text-sm" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></label>
       <div><div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Preview</div><Preview school={school} inv={draft} /></div>
     </div>
+  );
+}
+
+// ---------- Full A4 school fees invoice (classes) ----------
+function FullSheet({ school, doc: d, setDoc }: { school: School; doc: ClassInvoice; setDoc?: (d: ClassInvoice) => void }) {
+  const [rev, setRev] = useState(0);
+  const setLines = (lines: InvoiceLine[]) => setDoc?.({ ...d, lines });
+  return (
+    <article className="invoice-sheet bg-white text-[13px] leading-relaxed text-neutral-900">
+      <header className="flex items-center justify-between gap-3 border-b-2 border-neutral-900 pb-3">
+        <div className="flex items-center gap-3"><SchoolLogo size={60} /><div><div className="text-base font-bold">{school.name}</div><div className="text-[11px] text-neutral-600">{school.city}</div><div className="text-[11px] text-neutral-600">{school.phone} · {school.email}</div></div></div>
+        <div className="text-right text-xl font-bold tracking-wide">INVOICE</div>
+      </header>
+      <div className="mt-4 space-y-1">
+        {setDoc ? <>
+          <input aria-label="Invoice title" className={cn(box, "w-full font-semibold")} value={d.title} onChange={(e) => setDoc({ ...d, title: e.target.value })} />
+          <input aria-label="Term and year" className={cn(box, "w-full")} value={d.period} onChange={(e) => setDoc({ ...d, period: e.target.value })} />
+        </> : <><div className="text-[15px] font-semibold">{d.title}</div><div className="text-neutral-600">{d.period}</div></>}
+      </div>
+      <table className="mt-3 w-full border-collapse">
+        <thead><tr className="bg-neutral-100 text-left"><th className="border border-neutral-300 p-2">Description</th><th className="w-40 border border-neutral-300 p-2 text-right">Amount (GHS)</th>{setDoc && <th className="w-10 border border-neutral-300" />}</tr></thead>
+        <tbody>
+          {d.lines.map((l, i) => <tr key={`${rev}-${i}`}>
+            <td className="border border-neutral-300 p-2">{setDoc ? <input aria-label={`Line ${i + 1} description`} placeholder="Description" className={cn(box, "w-full")} value={l.description} onChange={(e) => setLines(d.lines.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} /> : l.description}</td>
+            <td className="num border border-neutral-300 p-2 text-right">{setDoc ? <MoneyInput label={`Line ${i + 1} amount`} value={l.amount} onChange={(m) => setLines(d.lines.map((x, j) => (j === i ? { ...x, amount: m } : x)))} /> : amt(l.amount)}</td>
+            {setDoc && <td className="border border-neutral-300 text-center"><button type="button" aria-label={`Remove line ${i + 1}`} className="rounded p-1.5 text-neutral-500 hover:text-red-600" onClick={() => { setLines(d.lines.filter((_, j) => j !== i)); setRev((r) => r + 1); }}><Trash2 size={14} /></button></td>}
+          </tr>)}
+          {setDoc && <tr><td colSpan={3} className="border border-neutral-300 p-1.5"><Button size="sm" variant="ghost" onClick={() => setLines([...d.lines, { description: "", amount: 0 }])}><Plus size={13} />Add line</Button></td></tr>}
+        </tbody>
+        <tfoot><tr className="font-bold"><td className="border border-neutral-300 p-2 text-right">Total</td><td className="num border border-neutral-300 p-2 text-right">{money(linesTotal(d.lines))}</td>{setDoc && <td className="border border-neutral-300" />}</tr></tfoot>
+      </table>
+      <div className="mt-4">{setDoc ? <textarea aria-label="Notes" className="h-20 w-full rounded-lg border border-line bg-surface p-2 text-sm" value={d.notes} onChange={(e) => setDoc({ ...d, notes: e.target.value })} />
+        : d.notes && <p className="text-[11px] text-neutral-600">{d.notes}</p>}</div>
+    </article>
   );
 }

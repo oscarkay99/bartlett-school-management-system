@@ -1,4 +1,4 @@
-// Builds the props for the billing pages (School Fees, Feeding, Extracurricular) from the data layer.
+// Builds the props for the billing pages (School Fees, Extra Classes) from the data layer.
 // Amounts to bill come from the fee schedule on the client (Settings → Fee schedule), for the selected term.
 import * as Q from "./queries";
 import type { FeeAccount } from "../accounts";

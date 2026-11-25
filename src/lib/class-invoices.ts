@@ -1,12 +1,12 @@
-// Class invoices: the small invoice the school hands parents each term, one per class (KG 1 … JHS 3),
-// plus one Extracurricular invoice (music, STEM…) listed after JHS 3. Printed 10 to an A4 sheet and cut.
-// No crest and no class name on the invoice itself. Standalone documents: they start as a copy of the
-// current fees and editing them changes nothing else. Pure helpers, safe on client and server.
+// Class invoices: one full A4 school fees invoice per class (KG 1 … JHS 3), plus one small Extra Classes
+// invoice (music, STEM…) listed after JHS 3 that prints 10 to an A4 sheet for cutting.
+// Standalone documents: they start as a copy of the current fees and editing them changes nothing else.
+// Pure helpers, safe on client and server.
 import type { Minor } from "./money";
 
 export interface InvoiceLine { description: string; amount: Minor }
 export interface ClassInvoice { title: string; period: string; lines: InvoiceLine[]; notes: string }
-/** A class tab has a classId; the Extracurricular tab does not. */
+/** A class tab has a classId; the Extra Classes tab does not. */
 export interface InvoiceTab { id: string; label: string; classId?: string }
 
 /** Tab order. Primary classes are called "Class 1 … Class 6" here, as the school does on its invoices. */
@@ -14,12 +14,16 @@ export const INVOICE_TABS: InvoiceTab[] = [
   { id: "kg1", label: "KG 1", classId: "c1" }, { id: "kg2", label: "KG 2", classId: "c2" },
   ...[1, 2, 3, 4, 5, 6].map((n) => ({ id: `class${n}`, label: `Class ${n}`, classId: `c${n + 2}` })),
   { id: "jhs1", label: "JHS 1", classId: "c9" }, { id: "jhs2", label: "JHS 2", classId: "c10" }, { id: "jhs3", label: "JHS 3", classId: "c11" },
-  { id: "extra", label: "Extracurricular" },
+  { id: "extra", label: "Extra Classes" },
 ];
 
-/** How many small invoices print on one A4 page (2 across × 5 down). */
+/** How many small (Extra Classes) invoices print on one A4 page (2 across × 5 down). */
 export const PER_PAGE = 10;
-export const DEFAULT_NOTES = "Pay by Mobile Money or bank transfer, quoting the student's name and class. Always collect an official receipt.";
+export const DEFAULT_NOTES = "Payment by Mobile Money or bank transfer. Use the student's name and class as the reference, and always collect an official receipt.";
+/** Shorter note for the small Extra Classes invoice. */
+export const SMALL_NOTES = "Pay by Mobile Money or bank transfer, quoting the student's name and class. Always collect an official receipt.";
+/** Only the Extra Classes invoice (no classId) uses the small 10-per-A4 format. */
+export const isSmall = (t: InvoiceTab) => !t.classId;
 /** The school does not charge this yet (planned in about two years), so it starts at 0 and prints as "—". */
 export const NOT_YET_BILLED = ["ICT & Development Levy"];
 

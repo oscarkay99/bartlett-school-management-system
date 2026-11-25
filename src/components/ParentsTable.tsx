@@ -37,7 +37,7 @@ export function ParentsTable({ rows: initial }: { rows: PRow[] }) {
     { key: "n", header: "Parent / guardian", sort: (x) => x.name, render: (x) => <div className="flex items-center gap-2.5"><Avatar name={x.name} size={32} /><div><div className="font-medium">{x.title} {x.name}</div><div className="text-xs text-muted">{x.phone}</div></div></div> },
     { key: "k", header: "Linked children", sort: (x) => x.kids.length, render: (x) => x.kids.length === 0 ? <Badge tone="warn">None yet</Badge> : <div><Badge tone={x.kids.length > 1 ? "info" : "neutral"}>{x.kids.length}</Badge> <span className="text-xs text-muted">{x.kids.slice(0, 3).join(", ")}</span></div> },
     { key: "e", header: "Email", hideOnMobile: true, render: (x) => x.email ?? <span className="text-muted">—</span> }, { key: "c", header: "Preferred", hideOnMobile: true, render: (x) => x.preferred },
-    { key: "o", header: "Outstanding", align: "right", sort: (x) => x.owed, render: (x) => <span className={x.owed > 0 ? "font-medium text-danger" : ""}>{money(x.owed)}</span> },
+    { key: "o", header: "School fees owed", align: "right", sort: (x) => x.owed, render: (x) => <span className={x.owed > 0 ? "font-medium text-danger" : ""}>{money(x.owed)}</span> },
     { key: "a", header: "", align: "right", render: (x) => <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
       {allow("parents", "edit") && <Button size="sm" variant="ghost" aria-label={`Edit ${x.name}`} onClick={() => setForm({ mode: "edit", row: x })}><Pencil size={14} /></Button>}
       {allow("parents", "delete") && <Button size="sm" variant="ghost" aria-label={`Delete ${x.name}`} onClick={() => setDel(x)}><Trash2 size={14} className="text-danger" /></Button>}</div> },
