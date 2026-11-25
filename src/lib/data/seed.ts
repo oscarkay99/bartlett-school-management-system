@@ -88,7 +88,8 @@ const mkGuardian = (last: string, i: number): T.Guardian => {
 
 let sn = 0, gn = 0;
 classes.forEach((cls) => {
-  const count = cls.level === "Kindergarten" ? 12 : 17;
+  // Kept small so the school can find its way around: 1 student per KG class, 2 per Primary/JHS class (20 in all).
+  const count = cls.level === "Kindergarten" ? 1 : 2;
   for (let k = 0; k < count; k++) {
     const male = rnd() > 0.5;
     sn++;
@@ -121,7 +122,7 @@ classes.forEach((cls) => {
       financial: rnd() > 0.2, financialShare: 50, receivesFeeReminders: rnd() > 0.3, receivesAcademic: true, verified: true,
     });
     // a couple of cases: unverified / restricted guardian
-    if (sn % 37 === 0) st.guardians.push({ guardianId: g.id === "g5" ? "g6" : "g5", relationship: "Uncle", primary: false, legal: false, emergency: false, pickup: false, financial: false, receivesFeeReminders: false, receivesAcademic: false, verified: false, restriction: "No pickup without written consent from primary guardian." });
+    if (sn === 7) st.guardians.push({ guardianId: g.id === "g5" ? "g6" : "g5", relationship: "Uncle", primary: false, legal: false, emergency: false, pickup: false, financial: false, receivesFeeReminders: false, receivesAcademic: false, verified: false, restriction: "No pickup without written consent from primary guardian." });
     if (sn === 9) { st.status = "Withdrawn"; }
     students.push(st);
     guardianStudents.set(g.id, [...(guardianStudents.get(g.id) ?? []), st.id]);
@@ -132,7 +133,8 @@ const mensah = guardians[0];
 mensah.name = "Kwabena Mensah"; mensah.title = "Mr."; mensah.preferred = "WhatsApp"; mensah.consent = { SMS: true, WhatsApp: true, Email: true }; mensah.hasAccount = true; mensah.email = "kwabena.mensah@mail.com";
 const demoKids: [string, string, string, "Male" | "Female"][] = [["Ama", "Mensah", "c5", "Female"], ["Kofi", "Mensah", "c3", "Male"], ["Abena", "Mensah", "c1", "Female"]];
 demoKids.forEach(([f, l, c], i) => {
-  const st = i === 2 ? students[0] : students.find((x) => x.classId === c && x.guardians.length === 1 && x.guardians[0].guardianId !== mensah.id)!;
+  // Any student of that class who is not already a Mensah child (their guardians are replaced just below).
+  const st = i === 2 ? students[0] : students.find((x) => x.classId === c && !x.guardians.some((g) => g.guardianId === mensah.id))!;
   st.first = f; st.last = l; st.gender = f === "Kofi" ? "Male" : "Female"; st.middle = undefined; st.status = "Active"; st.scholarship = undefined; st.classId = c;
   st.guardians = [{ guardianId: mensah.id, relationship: "Father", primary: true, legal: true, emergency: true, pickup: true, financial: true, financialShare: 100, receivesFeeReminders: true, receivesAcademic: true, verified: true }];
 });
@@ -149,9 +151,19 @@ export const invoices: T.Invoice[] = [];
 export const payments: T.Payment[] = [];
 const staffNames = ["Efua Quansah (Bursar)", "Daniel Ofori (Accounts)", "Esi Tetteh (Accounts)"];
 let inv = 0, pay = 0, rc = 0;
+// Feeding payment plans, decided before invoicing: families who pay feeding "small small" (daily / weekly / monthly)
+// do NOT have feeding on their school fees invoice; everyone else pays it with the school fees. Own PRNG (r3) so this
+// does not reshuffle the rest of the demo data. Ama Mensah (monthly) is set up in the demo block below.
+let k3 = 4242; const r3 = () => { k3 = (k3 * 48271) % 2147483647; return k3 / 2147483647; };
+const mensahKids = new Set(students.filter((x) => x.guardians.some((g) => g.guardianId === guardians[0].id)).map((x) => x.id));
+const planOf = new Map<string, "Daily" | "Weekly" | "Monthly">();
+for (const st of students) {
+  if (mensahKids.has(st.id) || st.status !== "Active" || r3() > 0.3) continue;
+  planOf.set(st.id, (["Daily", "Weekly", "Monthly"] as const)[Math.floor(r3() * 3)]);
+}
 students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
-  const items = feeFor(cls);
+  const items = feeFor(cls).filter((x) => !(planOf.has(st.id) && x.label === "Feeding"));   // plan payers: feeding billed separately
   const discount = st.scholarship ? Math.round(items[0].amount * 0.25) : 0;
   const i: T.Invoice = { id: `inv${++inv}`, no: `INV-2627-T1-${pad(inv, 4)}`, account: "fees", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount, billedOn: "2026-09-01", dueOn: st.id === "s3" || inv % 5 === 0 ? "2026-10-05" : "2026-10-30" };
   invoices.push(i);
@@ -165,14 +177,15 @@ students.forEach((st) => {
     payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: st.id, guardianId: g, amount: amt, method: pick<T.PayMethod>(["Mobile Money", "Mobile Money", "Cash", "Bank Transfer", "Card", "Cheque"]), date: day > TODAY ? TODAY : day, ref: `REF${int(100000, 999999)}`, status: "Confirmed", staff: pick(staffNames) });
   });
 });
-// Demo: Ama Mensah — school fees GH₵ 3,700 billed (feeding included), GH₵ 2,300 paid => 1,400 outstanding.
+// Demo: Ama Mensah — pays feeding monthly, so it is NOT on her school fees invoice:
+// school fees GH₵ 3,100 billed, GH₵ 2,000 paid => 1,100 outstanding; feeding GH₵ 600, GH₵ 300 paid (monthly).
 const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
 {
   const ai = invoices.find((x) => x.studentId === ama.id)!;
-  ai.items = [{ label: "Tuition", amount: ghs(2800) }, { label: "Books", amount: ghs(250) }, { label: "PTA", amount: ghs(50) }, { label: "Feeding", amount: ghs(600) }];
+  ai.items = [{ label: "Tuition", amount: ghs(2800) }, { label: "Books", amount: ghs(250) }, { label: "PTA", amount: ghs(50) }];
   ai.discount = 0; ai.dueOn = "2026-10-30";
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id) payments.splice(i, 1);
-  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0], feeding: 0 }); // school fees only; feeding paid separately below
+  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0], feeding: 0 }); // school fees only
   payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(300), method: "Cash", date: "2026-09-21", ref: "CASH-0921", status: "Confirmed", staff: staffNames[0], feeding: ghs(300), feedingPeriod: "Monthly" });
   // Ama: feeding on a monthly plan (paid separately from her school fees). Pushed once feedingPlans exists, below.
 }
@@ -184,42 +197,38 @@ for (const [first, paid, day, ref] of [["Kofi", 1500, "2026-09-18", "MM88241194"
 }
 // Exceptions for reconciliation
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s20", amount: ghs(500), method: "Online Gateway", date: "2026-10-10", ref: "GW-PENDING-7781", status: "Pending", staff: "System" });
-payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s31", amount: ghs(800), method: "Online Gateway", date: "2026-10-09", ref: "GW-PENDING-7790", status: "Pending", staff: "System" });
-payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s44", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
+payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s14", amount: ghs(800), method: "Online Gateway", date: "2026-10-09", ref: "GW-PENDING-7790", status: "Pending", staff: "System" });
+payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s17", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
 
 // ---------- Feeding payments & payment plans ----------
 /** Feeding payment plans: families who pay feeding on its own (daily / weekly / monthly). Everyone else pays it with the school fees. */
 export const feedingPlans: FeedingPlan[] = [];
 feedingPlans.push({ studentId: ama.id, term: "2026/2027|Term 1", frequency: "Monthly", from: "2026-09-07", note: "Pays feeding monthly in cash" });
-// Feeding is billed on the school fees invoice. Some families pay it with the school fees at once; others pay feeding
-// separately, daily, weekly or monthly. Own PRNG so this does not reshuffle the rest of the demo data.
 {
-  let k = 4242; const r3 = () => { k = (k * 48271) % 2147483647; return k / 2147483647; };
-  const feedingLine = (sid: string) => invoices.find((i) => i.studentId === sid && i.account === "fees")?.items.find((x) => x.label === "Feeding")?.amount ?? 0;
-  const paidSoFar = (sid: string) => payments.filter((p) => p.studentId === sid && p.account === "fees" && p.status === "Confirmed").reduce((a, p) => a + p.amount, 0);
-  const billedFees = (sid: string) => { const i = invoices.find((x) => x.studentId === sid && x.account === "fees")!; return i.items.reduce((a, x) => a + x.amount, 0) - i.discount; };
+  const T1 = { start: "2026-09-07", end: "2026-12-18" };
+  const classRate = (st: T.Student) => feedingFor(classes.find((c) => c.id === st.classId)!);
   // n-th school day (Mon–Fri) from the start of term.
-  const schoolDay = (n: number) => { let d = "2026-09-07", left = n; while (left > 0) { d = addDays(d, 1); const w = new Date(d + "T00:00:00Z").getUTCDay(); if (w !== 0 && w !== 6) left--; } return d; };
-  const mensahKids = new Set(students.filter((x) => x.guardians.some((g) => g.guardianId === mensah.id)).map((x) => x.id));
+  const schoolDay = (n: number) => { let d = T1.start, left = n; while (left > 0) { d = addDays(d, 1); const w = new Date(d + "T00:00:00Z").getUTCDay(); if (w !== 0 && w !== 6) left--; } return d; };
+  // Plan payers pay feeding small small, separately from school fees (these payments never reduce the school fees balance).
   for (const st of students) {
-    if (mensahKids.has(st.id) || st.status !== "Active" || r3() > 0.3) continue;
-    const rate = feedingLine(st.id); const room = Math.min(rate, billedFees(st.id) - paidSoFar(st.id)); if (room <= 0) continue;
-    const period = (["Daily", "Weekly", "Monthly"] as const)[Math.floor(r3() * 3)];
-    const each = perPeriod(rate, { start: "2026-09-07", end: "2026-12-18" }, period);   // the plan's amount per period
-    feedingPlans.push({ studentId: st.id, term: "2026/2027|Term 1", frequency: period, from: "2026-09-07" });
+    const period = planOf.get(st.id); if (!period) continue;
+    const rate = classRate(st); const each = perPeriod(rate, T1, period);   // the plan's amount per period
+    feedingPlans.push({ studentId: st.id, term: "2026/2027|Term 1", frequency: period, from: T1.start });
     const times = period === "Daily" ? 5 + Math.floor(r3() * 20) : period === "Weekly" ? 1 + Math.floor(r3() * 5) : 1 + Math.floor(r3() * 2);
-    let left = room;
+    let left = rate;
     for (let n = 0; n < times && left >= each && each > 0; n++) {
-      const day = period === "Daily" ? schoolDay(n) : addDays("2026-09-07", period === "Weekly" ? n * 7 : n * 30); if (day > TODAY) break;
+      const day = period === "Daily" ? schoolDay(n) : addDays(T1.start, period === "Weekly" ? n * 7 : n * 30); if (day > TODAY) break;
       payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: st.id, guardianId: st.guardians[0].guardianId, amount: each,
         method: r3() < 0.6 ? "Cash" : "Mobile Money", date: day, ref: `FD-${pad(pay * 7, 6)}`, status: "Confirmed", staff: staffNames[Math.floor(r3() * staffNames.length)], feeding: each, feedingPeriod: period });
       left -= each;
     }
   }
-  // Every other school fees payment covers feeding in proportion: paying the whole invoice at once pays feeding in full.
+  // Families who pay feeding WITH the school fees: each school fees payment covers feeding in proportion,
+  // so paying the whole invoice at once pays feeding in full.
   for (const st of students) {
-    const rate = feedingLine(st.id); const gross = billedFees(st.id);
-    let left = rate - payments.filter((p) => p.studentId === st.id && p.feedingPeriod && p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
+    const inv = invoices.find((i) => i.studentId === st.id && i.account === "fees"); if (!inv) continue;
+    const rate = inv.items.find((x) => x.label === "Feeding")?.amount ?? 0; const gross = inv.items.reduce((a, x) => a + x.amount, 0) - inv.discount;
+    let left = rate;
     for (const p of payments.filter((x) => x.studentId === st.id && x.account === "fees" && x.feeding === undefined).sort((a, b) => a.date.localeCompare(b.date))) {
       const share = gross > 0 ? Math.min(left, Math.round((p.amount * rate) / gross / 100) * 100) : 0;   // whole cedis
       p.feeding = Math.max(0, share); if (p.status === "Confirmed") left -= p.feeding;
@@ -287,18 +296,14 @@ export const gradeOf = (total: number) => gradeScale.find((g) => total >= g.min)
 
 // ---------- Inventory ----------
 const itemDefs: [string, string, string, string, number, number, number, T.InventoryItem["kind"]][] = [
-  ["Mathematics Textbook (P4)", "Textbooks", "copy", "Main Store", 38, 40, 300, "Reusable"], ["English Textbook (P4)", "Textbooks", "copy", "Main Store", 36, 40, 300, "Reusable"],
-  ["Mathematics Textbook (JHS)", "Textbooks", "copy", "Main Store", 45, 30, 200, "Reusable"], ["Exercise Book (80pg)", "Exercise Books", "pcs", "Main Store", 3.5, 500, 4000, "Consumable"],
-  ["School Uniform — Shirt", "Uniforms", "pcs", "Uniform Store", 55, 60, 400, "Consumable"], ["School Uniform — Shorts/Skirt", "Uniforms", "pcs", "Uniform Store", 60, 60, 400, "Consumable"],
-  ["Whiteboard Marker (box)", "Stationery", "box", "Main Store", 28, 25, 150, "Consumable"], ["A4 Photocopy Paper (ream)", "Stationery", "ream", "Main Store", 48, 30, 200, "Consumable"],
-  ["Chalk (box)", "Classroom Supplies", "box", "Main Store", 12, 40, 200, "Consumable"], ["Lab Beaker Set", "Laboratory Supplies", "set", "Science Lab", 85, 10, 60, "Reusable"],
-  ["Bleach (5L)", "Cleaning Materials", "can", "Janitorial", 32, 15, 80, "Consumable"], ["Liquid Soap (5L)", "Cleaning Materials", "can", "Janitorial", 40, 15, 80, "Consumable"],
-  ["Football (size 5)", "Sports Equipment", "pcs", "Sports Store", 90, 6, 30, "Reusable"], ["Laptop — Lenovo ThinkPad", "ICT Equipment", "unit", "ICT Room", 4200, 2, 20, "Asset"],
-  ["Projector — Epson", "ICT Equipment", "unit", "ICT Room", 3100, 1, 8, "Asset"], ["Student Desk & Chair", "Furniture", "set", "Main Store", 320, 10, 120, "Asset"],
-  ["Rice (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 520, 12, 60, "Consumable"], ["Cooking Oil (20L)", "Kitchen & Feeding", "jerry", "Kitchen", 380, 6, 30, "Consumable"],
-  ["Paracetamol (blister)", "Laboratory Supplies", "pcs", "Sick Bay", 4, 50, 300, "Consumable"], ["Paint (20L, white)", "Maintenance Supplies", "tin", "Maintenance", 260, 4, 24, "Consumable"],
-  ["Science Textbook (P4)", "Textbooks", "copy", "Main Store", 40, 40, 300, "Reusable"], ["English Textbook (JHS)", "Textbooks", "copy", "Main Store", 46, 30, 200, "Reusable"], ["Story Reader (KG)", "Textbooks", "copy", "Main Store", 22, 30, 150, "Reusable"],
-  ["Beans (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 480, 8, 40, "Consumable"], ["Gari (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 210, 10, 50, "Consumable"], ["Cooking Gas (14.5kg)", "Kitchen & Feeding", "cyl", "Kitchen", 180, 4, 20, "Consumable"],
+  ["Mathematics Textbook (P4)", "Textbooks", "copy", "Main Store", 38, 40, 300, "Reusable"],
+  ["English Textbook (P4)", "Textbooks", "copy", "Main Store", 36, 40, 300, "Reusable"],
+  ["Exercise Book (80pg)", "Exercise Books", "pcs", "Main Store", 3.5, 500, 4000, "Consumable"],
+  ["Chalk (box)", "Classroom Supplies", "box", "Main Store", 12, 40, 200, "Consumable"],
+  ["Football (size 5)", "Sports Equipment", "pcs", "Sports Store", 90, 6, 30, "Reusable"],
+  ["Rice (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 520, 12, 60, "Consumable"],
+  ["Cooking Oil (20L)", "Kitchen & Feeding", "jerry", "Kitchen", 380, 6, 30, "Consumable"],
+  ["Beans (50kg bag)", "Kitchen & Feeding", "bag", "Kitchen", 480, 8, 40, "Consumable"],
 ];
 export const inventory: T.InventoryItem[] = itemDefs.map(([name, category, unit, location, cost, reorder, max, kind], i) => ({
   id: `i${i + 1}`, sku: `SKU-${pad(i + 1, 4)}`, name, category, unit, location, supplier: pick(["Kumasi Books Ltd", "Ashanti Stationers", "Gold Coast Uniforms", "TechPoint Ghana", "Adom Supplies"]),
@@ -329,7 +334,7 @@ inventory.forEach((it) => {
 });
 export const studentIssues = (() => {
   const out: { studentId: string; item: string; qty: number; date: string; returnRequired: boolean; returned: boolean; staff: string }[] = [];
-  students.slice(0, 40).forEach((st) => {
+  students.slice(0, 4).forEach((st) => {
     out.push({ studentId: st.id, item: "Mathematics Textbook", qty: 1, date: "2026-09-09", returnRequired: true, returned: false, staff: "Kojo Danso" });
     out.push({ studentId: st.id, item: "English Textbook", qty: 1, date: "2026-09-09", returnRequired: true, returned: false, staff: "Kojo Danso" });
     out.push({ studentId: st.id, item: "Exercise Book (80pg)", qty: 5, date: "2026-09-09", returnRequired: false, returned: false, staff: "Kojo Danso" });
@@ -339,33 +344,30 @@ export const studentIssues = (() => {
 
 // ---------- Expenses & budgets ----------
 const expCats: [string, string, string, number][] = [
-  ["Salaries", "Payroll — September", "Administration", 92000], ["Utilities", "ECG Electricity", "Operations", 6800], ["Utilities", "Ghana Water", "Operations", 1900],
-  ["Internet", "Vodafone Fibre", "Operations", 1200], ["Repairs", "Roof repair — Block B", "Operations", 8400], ["Stationery", "Ashanti Stationers", "Administration", 3300],
-  ["Food Supplies", "Kitchen restocking", "Kitchen", 24500], ["Transport", "Bus fuel", "Operations", 5200], ["Inventory Purchases", "Kumasi Books Ltd", "Stores", 15800],
-  ["Software", "School platform subscription", "Administration", 2400], ["Building", "Perimeter fence", "Operations", 31000], ["Maintenance", "Generator service", "Operations", 2100],
+  ["Salaries", "Payroll — September", "Administration", 9200],
+  ["Utilities", "ECG Electricity", "Operations", 680],
+  ["Utilities", "Ghana Water", "Operations", 190],
+  ["Repairs", "Roof repair — Block B", "Operations", 840],
 ];
 export const expenses: T.Expense[] = expCats.map(([category, vendor, department, amt], i) => ({
   id: `e${i + 1}`, no: `EXP-${pad(i + 1, 4)}`, date: addDays("2026-09-05", i * 3), category, vendor, amount: ghs(amt), method: pick(["Bank Transfer", "Cash", "Mobile Money", "Cheque"]), department,
-  status: i === 10 ? "Pending Approval" : i === 4 ? "Pending Approval" : i % 3 === 0 ? "Paid" : "Approved", approver: amt > 20000 ? "Owner" : amt > 5000 ? "Administrator" : "Finance Officer", description: `${vendor} — ${category}`,
+  status: i === 3 ? "Pending Approval" : i % 2 === 0 ? "Paid" : "Approved", approver: amt > 20000 ? "Owner" : amt > 5000 ? "Administrator" : "Finance Officer", description: `${vendor} — ${category}`,
 }));
 export const budget: T.BudgetLine[] = [
-  ["Salaries", 300000], ["Utilities", 28000], ["Internet", 5000], ["Repairs", 20000], ["Stationery", 12000], ["Food Supplies", 80000], ["Transport", 20000], ["Inventory Purchases", 50000], ["Software", 8000], ["Building", 60000], ["Maintenance", 9000],
+  ["Salaries", 30000], ["Utilities", 2800], ["Internet", 500], ["Repairs", 2000], ["Stationery", 1200], ["Food Supplies", 8000], ["Transport", 2000], ["Inventory Purchases", 5000], ["Software", 800], ["Building", 6000], ["Maintenance", 900],
 ].map(([category, b]) => ({ category: category as string, budget: ghs(b as number), actual: expenses.filter((e) => e.category === category && e.status !== "Rejected").reduce((a, e) => a + e.amount, 0) }));
 
 // ---------- Messaging, approvals, audit, events, applicants ----------
-export const messages: T.Message[] = Array.from({ length: 24 }, (_, i) => {
+export const messages: T.Message[] = Array.from({ length: 4 }, (_, i) => {
   const g = guardians[(i * 5) % guardians.length];
   const sts = students.filter((x) => x.guardians.some((y) => y.guardianId === g.id));
   const status = i % 9 === 0 ? "Failed" : i % 7 === 0 ? "Awaiting Approval" : i % 5 === 0 ? "Queued" : i % 2 ? "Delivered" : "Sent";
   return { id: `msg${i}`, date: addDays("2026-09-25", Math.floor(i / 2)), guardianId: g.id, studentIds: sts.map((x) => x.id), channel: pick<T.Channel>(["SMS", "WhatsApp", "Email"]), template: i % 4 === 0 ? "Attendance Alert" : "Fee Reminder", amount: ghs(int(300, 3000)), status, sender: i % 3 === 0 ? "Automation (7 days before due)" : staffNames[i % 3], failure: status === "Failed" ? "Number not reachable" : undefined } as T.Message;
 });
 export const approvals: T.Approval[] = [
-  { id: "a1", kind: "Expense", title: "Perimeter fence — Phase 2", requester: "Operations", amount: ghs(31000), date: "2026-10-09", module: "finance" },
-  { id: "a2", kind: "Expense", title: "Roof repair — Block B", requester: "Operations", amount: ghs(8400), date: "2026-10-08", module: "finance" },
+  { id: "a2", kind: "Expense", title: "Roof repair — Block B", requester: "Operations", amount: ghs(840), date: "2026-10-08", module: "finance" },
   { id: "a3", kind: "Refund", title: "Refund — duplicate Momo payment (Primary 2)", requester: "Esi Tetteh", amount: ghs(600), date: "2026-10-10", module: "fees" },
   { id: "a4", kind: "Grade batch", title: "JHS 2 — Mathematics (Term 1 CA)", requester: "Isaac Danso", date: "2026-10-11", module: "academics" },
-  { id: "a5", kind: "Purchase request", title: "200 exercise books + 40 marker boxes", requester: "Kojo Danso", amount: ghs(1800), date: "2026-10-07", module: "inventory" },
-  { id: "a6", kind: "Stock adjustment", title: "Write-off: 4 damaged beaker sets", requester: "Kojo Danso", amount: ghs(340), date: "2026-10-06", module: "inventory" },
 ];
 export const audit: T.AuditEvent[] = [
   ["Efua Quansah", "Recorded payment RCT-00412 (GH₵ 2,000)", "Ama Mensah", "Fees"], ["Daniel Ofori", "Reversed payment BNK-2210", "Student s44", "Fees"], ["Adwoa Asante", "Linked guardian Kwabena Mensah", "Kofi Mensah", "Students"],
@@ -377,8 +379,7 @@ export const events: T.SchoolEvent[] = [
   { id: "ev3", date: "2026-11-30", title: "End-of-term examinations begin", kind: "Exam" }, { id: "ev4", date: "2026-12-18", title: "Term 1 ends", kind: "Holiday" }, { id: "ev5", date: "2026-10-23", title: "Inter-house sports", kind: "Event" },
 ];
 export const applicants: T.Applicant[] = [
-  ["Nana Yaw Boadu", "Primary 1", "Submitted"], ["Esi Nyarko", "KG 1", "Documents Reviewed"], ["Kwame Ampofo", "JHS 1", "Assessment"], ["Akosua Boateng", "Primary 3", "Accepted"],
-  ["Yaw Ofori-Atta", "Primary 5", "Accepted"], ["Maame Serwaa", "KG 2", "Registered"], ["Kojo Bonsu", "JHS 2", "Submitted"], ["Afia Pokuaa", "Primary 2", "Assessment"], ["Ebo Quartey", "Primary 4", "Enrolled"],
+  ["Nana Yaw Boadu", "Primary 1", "Submitted"], ["Esi Nyarko", "KG 1", "Documents Reviewed"], ["Kwame Ampofo", "JHS 1", "Assessment"],
 ].map(([name, classApplied, stage], i) => ({ id: `ap${i}`, name, classApplied, stage: stage as T.Applicant["stage"], date: addDays("2026-09-20", i * 2), guardian: `${pick(maleF)} ${name.split(" ").pop()}` }));
 
 export const attendanceTrend = Array.from({ length: 20 }, (_, i) => ({ date: addDays("2026-09-14", i + Math.floor(i / 5) * 2), rate: Math.round((93 + Math.sin(i / 2.5) * 3 + (rnd() - 0.5) * 2) * 10) / 10 }));

@@ -226,6 +226,13 @@ select pg_temp.check('teacher and storekeeper cannot see or set plans', pg_temp.
 select pg_temp.check('auditor reads plans but cannot set them', pg_temp.n(:AUDITOR, 'select * from public.feeding_plans') = 2
   and pg_temp.err(:AUDITOR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Monthly', '2026-11-02') $q$) is not null);
 
+-- ---------- Feeding paid small small is not part of school fees ----------
+-- Yaw (f4, Primary 3) pays feeding weekly: a plan, no Feeding line on his school fees invoice.
+select pg_temp.err(:BURSAR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2', 'Weekly', '2026-09-07') $q$);
+select pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f4', 4000, 'Cash', 4000, 'Weekly') $q$);
+select pg_temp.check('a weekly feeding payment does not count towards school fees', not exists (select 1 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and paid > 0));
+select pg_temp.check('plan family: feeding billed at the rate (600), paid 40, owed 560', (select billed = 60000 and paid = 4000 and balance = 56000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f4'));
+
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from results;

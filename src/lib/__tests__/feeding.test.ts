@@ -42,17 +42,19 @@ describe("Feeding module", () => {
   });
   it("feeding payments: never more feeding paid than billed; paying in full pays feeding in full", () => {
     for (const st of Q.students) { const f = Q.feedingAccount(st.id); expect(f.paid, st.admissionNo).toBeLessThanOrEqual(f.billed); }
-    const fullPayers = Q.students.filter((s) => Q.feeSummary(s.id).balance === 0);
+    // Families paying feeding WITH the school fees: settling the invoice settles feeding too.
+    const withFees = (id: string) => Q.invoicesOf(id, "fees").some((i) => i.items.some((x) => x.label === "Feeding"));
+    const fullPayers = Q.students.filter((s) => Q.feeSummary(s.id).balance === 0 && withFees(s.id));
     expect(fullPayers.length).toBeGreaterThan(0);
     for (const s of fullPayers) { const f = Q.feedingAccount(s.id); expect(f.paid, s.admissionNo).toBe(f.billed); }
   });
-  it("some families pay feeding on its own, daily / weekly / monthly, on school days; it reduces the school fees balance", () => {
+  it("some families pay feeding on its own, daily / weekly / monthly, on school days; it never touches school fees", () => {
     const own = Q.payments.filter((p) => p.feedingPeriod);
     expect(new Set(own.map((p) => p.feedingPeriod))).toEqual(new Set(["Daily", "Weekly", "Monthly"]));
     for (const p of own) { expect(p.account).toBe("fees"); expect(p.feeding).toBe(p.amount); }
     for (const p of own.filter((x) => x.feedingPeriod === "Daily")) expect([0, 6], p.receiptNo).not.toContain(new Date(p.date + "T00:00:00Z").getUTCDay());
     const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-    const fa = Q.feedingAccount(ama.id); expect([fa.billed, fa.paid, fa.balance]).toEqual([ghs(600), ghs(300), ghs(300)]);
+    const fa = Q.feedingAccount(ama.id); expect([fa.billed, fa.paid, fa.balance, fa.separate]).toEqual([ghs(600), ghs(300), ghs(300), true]);
     expect(fa.payments[0].feedingPeriod).toBe("Monthly");
   });
   it("everyone is enrolled in extra classes", () => {
@@ -98,6 +100,30 @@ describe("Feeding module", () => {
       const plan = currentPlan(Q.feedingPlans, ama.id, "2026/2027|Term 1", Q.TODAY)!; expect(plan.frequency).toBe("Monthly");
       const fa = Q.feedingAccount(ama.id);
       expect(planStatus(fa.billed, fa.paid, expectedByToday(fa.billed, t1, plan.frequency, Q.TODAY)).label).toBe("On track");
+    });
+  });
+  describe("feeding paid small small is not part of school fees", () => {
+    const planPayers = Q.activeStudents().filter((s) => Q.feedingPlans.some((p) => p.studentId === s.id && p.frequency !== "With school fees"));
+    it("plan families have no Feeding line on their school fees invoice; everyone else does", () => {
+      expect(planPayers.length).toBeGreaterThanOrEqual(3);
+      for (const s of Q.activeStudents()) {
+        const hasLine = Q.invoicesOf(s.id, "fees").some((i) => i.items.some((x) => x.label === "Feeding"));
+        expect(hasLine, s.admissionNo).toBe(!planPayers.includes(s));
+      }
+    });
+    it("feeding plan payments never count towards school fees", () => {
+      for (const s of planPayers) {
+        const feesPaid = Q.payments.filter((p) => p.studentId === s.id && p.account === "fees" && !p.feedingPeriod && p.status === "Confirmed").reduce((a, p) => a + p.amount, 0);
+        expect(Q.feeSummary(s.id).paid, s.admissionNo).toBe(feesPaid);
+      }
+    });
+    it("school fees paid in full shows Paid in full, even when feeding is not fully paid", () => {
+      const cases = planPayers.filter((s) => Q.feeSummary(s.id).balance <= 0 && Q.feedingAccount(s.id).balance > 0);
+      expect(cases.length).toBeGreaterThan(0);
+      for (const s of cases) expect(Q.feeSummary(s.id).status, s.admissionNo).toBe("Paid in Full");
+    });
+    it("plan families' feeding is billed at the class rate and tracked separately", () => {
+      for (const s of planPayers) { const f = Q.feedingAccount(s.id); expect(f.separate).toBe(true); expect(f.billed, s.admissionNo).toBe(Q.feeStructure.find((x) => x.classId === s.classId)!.feeding); }
     });
   });
 });

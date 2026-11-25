@@ -34,7 +34,7 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
   void row;
 
   const accts = ACCOUNT_IDS.map((id) => ({ id, a: ACCOUNTS[id], f: Q.accountSummary(s.id, id) }));
-  const tc = Q.termCharges(s.id); const owedAll = Q.totalOwed(s.id);
+  const tc = Q.termCharges(s.id); const owedAll = Q.totalOwed(s.id); const fa = Q.feedingAccount(s.id);
 
   const directory = Q.guardians.map((g) => ({ id: g.id, title: g.title, name: g.name, phone: g.phone, email: g.email, children: Q.studentsOfGuardian(g.id).length }));
   const payStudentFor = (account: FeeAccount) => { const af = Q.accountSummary(s.id, account); return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: cls.name, balance: af.balance, feedingOwed: account === "fees" ? Math.max(0, Q.feedingAccount(s.id).balance) : 0, feedingRate: account === "fees" ? Q.feedingAccount(s.id).billed : 0, invoices: Q.invoicesOf(s.id, account).map((i) => ({ no: i.no, balance: af.balance })) }; };
@@ -89,6 +89,8 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
             {tc.parts[0].discount > 0 && <div className="text-xs text-muted">after {money(tc.parts[0].discount)} {Q.discountLabel(s.id).toLowerCase()}</div>}</div>
           <div className="text-right"><div className="text-xs text-muted">School fees still owed</div><div className={`num text-lg font-semibold ${owedAll > 0 ? "text-danger" : "text-ok"}`}>{money(owedAll)}</div></div>
         </div>
+        {fa.separate && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm"><span className="text-muted">Feeding <span className="text-xs">(paid separately on a plan, not part of school fees)</span></span>
+          <span><b className="num">{money(fa.billed)}</b> <span className="text-xs text-muted">· owed {money(Math.max(0, fa.balance))}</span></span></div>}
         {tc.extra.billed && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm"><span className="text-muted">Extra Classes <span className="text-xs">(separate invoice, not added to school fees)</span></span>
           <span><b className="num">{money(tc.extra.net)}</b> <span className="text-xs text-muted">· owed {money(Math.max(0, Q.accountSummary(s.id, "extra").balance))}</span></span></div>}
       </div>

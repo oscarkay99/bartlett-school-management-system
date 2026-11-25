@@ -23,8 +23,13 @@ export interface FeeSummary { billed: Minor; discount: Minor; paid: Minor; balan
 
 // Each account is settled independently: feeding payments never reduce the school-fee balance and vice versa.
 export const invoicesOf = (studentId: string, account: FeeAccount): Invoice[] => invoices.filter((i) => i.studentId === studentId && i.account === account);
-export const paymentsOf = (studentId: string, account: FeeAccount): Payment[] => payments.filter((p) => p.studentId === studentId && p.account === account);
-export const accountPayments = (account: FeeAccount) => payments.filter((p) => p.account === account);
+/**
+ * Feeding paid "small small" (daily / weekly / monthly / termly plan). It is NOT part of the school fees invoice,
+ * so it never counts towards school fees balances, collections or reminders — only towards feeding.
+ */
+export const isFeedingPlanPayment = (p: Payment) => p.account === "fees" && !!p.feedingPeriod;
+export const paymentsOf = (studentId: string, account: FeeAccount): Payment[] => payments.filter((p) => p.studentId === studentId && p.account === account && !isFeedingPlanPayment(p));
+export const accountPayments = (account: FeeAccount) => payments.filter((p) => p.account === account && !isFeedingPlanPayment(p));
 
 const feeCache = new Map<string, FeeSummary>();
 /** School-fees balance (tuition, books, levies…). Use accountSummary for Extra Classes. */
@@ -60,10 +65,14 @@ export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SC
  * confirmed school fees payments, whether paid with the fees at once or daily/weekly/monthly) and still owed.
  */
 export function feedingAccount(studentId: string) {
-  const billed = invoicesOf(studentId, "fees").reduce((a, i) => a + (i.items.find((x) => x.label === "Feeding")?.amount ?? 0), 0);
-  const pays = paymentsOf(studentId, "fees").filter((p) => (p.feeding ?? 0) > 0).sort((a, b) => b.date.localeCompare(a.date));
+  // On the school fees invoice ("with school fees") → the Feeding line; on a plan → the class feeding rate for the term.
+  const onInvoice = invoicesOf(studentId, "fees").reduce((a, i) => a + (i.items.find((x) => x.label === "Feeding")?.amount ?? 0), 0);
+  const st = getStudent(studentId);
+  const onPlan = feedingPlans.some((p) => p.studentId === studentId && p.frequency !== "With school fees");
+  const billed = onInvoice || (onPlan && st ? feeStructure.find((f) => f.classId === st.classId)?.feeding ?? 0 : 0);
+  const pays = payments.filter((p) => p.studentId === studentId && p.account === "fees" && (p.feeding ?? 0) > 0).sort((a, b) => b.date.localeCompare(a.date));
   const paid = pays.filter((p) => p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
-  return { billed, paid, balance: billed - paid, payments: pays };
+  return { billed, paid, balance: billed - paid, payments: pays, separate: !onInvoice && onPlan };
 }
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
 export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };
@@ -197,7 +206,7 @@ export function inventoryByCategory() {
 
 // ---- Finance ----
 export const totalExpenditure = () => expenses.filter((e) => e.status === "Approved" || e.status === "Paid").reduce((a, e) => a + e.amount, 0);
-export const cashPosition = () => 18_450_000 + D.payments.filter((p) => p.status === "Confirmed").reduce((a, p) => a + p.amount, 0) - totalExpenditure();
+export const cashPosition = () => 1_845_000 + D.payments.filter((p) => p.status === "Confirmed").reduce((a, p) => a + p.amount, 0) - totalExpenditure();
 export function expenseBreakdown() {
   const m = new Map<string, number>(); expenses.filter((e) => e.status !== "Rejected").forEach((e) => m.set(e.category, (m.get(e.category) ?? 0) + e.amount / 100));
   return [...m].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -209,14 +218,14 @@ export function incomeVsExpense() {
   ];
 }
 export const enrollmentTrend = [
-  { year: "2022/23", students: 139 }, { year: "2023/24", students: 152 }, { year: "2024/25", students: 168 }, { year: "2025/26", students: 177 }, { year: "2026/27", students: activeStudents().length },
+  { year: "2022/23", students: 15 }, { year: "2023/24", students: 16 }, { year: "2024/25", students: 18 }, { year: "2025/26", students: 19 }, { year: "2026/27", students: activeStudents().length },
 ];
 export const unreconciled = () => payments.filter((p) => p.status === "Pending");
 /** Billed / collected / outstanding for each account, school-wide (for the owner's dashboard). */
 export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverview(undefined, id); return { id, label: ACCOUNTS[id].label, href: ACCOUNTS[id].href, billed: o.billed, paid: o.paid, outstanding: o.outstanding, rate: o.rate, students: o.rows.length, owing: o.owingCount }; });
 
 // ---- General ledger (derived; double-entry) ----
-export const OPENING_CASH: Minor = 18_450_000;
+export const OPENING_CASH: Minor = 1_845_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
 // Feeding is a line on the school fees invoice, but its income is still posted to its own account.
 const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extra Classes Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : "4400 Levies & Other Fees");
@@ -229,7 +238,8 @@ export function generalLedger(): GLLine[] {
     i.items.forEach((it) => L.push({ date: i.billedOn, ref: i.no, memo: it.label, account: incomeAccount(i.account, it.label), dr: 0, cr: it.amount }));
     if (i.discount) { L.push({ date: i.billedOn, ref: i.no, memo: "Scholarship discount", account: "4900 Discounts & Scholarships", dr: i.discount, cr: 0 }); L.push({ date: i.billedOn, ref: i.no, memo: "Scholarship discount", account: "1200 Fee Receivables", dr: 0, cr: i.discount }); }
   });
-  payments.filter((p) => p.status === "Confirmed").forEach((p) => { L.push({ date: p.date, ref: p.receiptNo, memo: `${ACCOUNTS[p.account].label} receipt ${p.method}`, account: "1100 Bank & Cash", dr: p.amount, cr: 0 }); L.push({ date: p.date, ref: p.receiptNo, memo: "Receipt applied", account: "1200 Fee Receivables", dr: 0, cr: p.amount }); });
+  payments.filter((p) => p.status === "Confirmed" && isFeedingPlanPayment(p)).forEach((p) => { L.push({ date: p.date, ref: p.receiptNo, memo: `Feeding (${p.feedingPeriod}) ${p.method}`, account: "1100 Bank & Cash", dr: p.amount, cr: 0 }); L.push({ date: p.date, ref: p.receiptNo, memo: "Feeding paid separately", account: "4200 Feeding Fees", dr: 0, cr: p.amount }); });
+  payments.filter((p) => p.status === "Confirmed" && !isFeedingPlanPayment(p)).forEach((p) => { L.push({ date: p.date, ref: p.receiptNo, memo: `${ACCOUNTS[p.account].label} receipt ${p.method}`, account: "1100 Bank & Cash", dr: p.amount, cr: 0 }); L.push({ date: p.date, ref: p.receiptNo, memo: "Receipt applied", account: "1200 Fee Receivables", dr: 0, cr: p.amount }); });
   expenses.filter((e) => e.status === "Approved" || e.status === "Paid").forEach((e) => { L.push({ date: e.date, ref: e.no, memo: e.description, account: expenseAccount(e.category), dr: e.amount, cr: 0 }); L.push({ date: e.date, ref: e.no, memo: e.description, account: "1100 Bank & Cash", dr: 0, cr: e.amount }); });
   return L;
 }

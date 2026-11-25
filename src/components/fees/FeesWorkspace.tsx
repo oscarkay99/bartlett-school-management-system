@@ -15,6 +15,7 @@ import { TermFeeStructure } from "@/components/settings/FeeScheduleEditor";
 import { feedingRate, invoiceStem, termKey } from "@/lib/fees";
 import { studentFeedingRate } from "@/lib/feeding";
 import { useFeeding } from "@/components/feeding/useFeeding";
+import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
 import { buildTermInvoices, generatedTotal, type GeneratedInvoice } from "@/lib/generated-invoices";
 import { GeneratedInvoiceDialog, useGeneratedInvoices } from "./GeneratedInvoices";
 import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
@@ -226,7 +227,9 @@ function GenerateInvoices({ candidates, already, startSeq, onGenerate, onClose }
   const termStart = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term)?.start ?? new Date().toISOString().slice(0, 10);
   // Feeding follows the Feeding module: students not on feeding get no Feeding line; different rates are applied.
   const feeding = useFeeding();
-  const built = tf ? buildTermInvoices(todo, fs.classes, tf, termStart, startSeq, (sid) => { const ex = feeding.exceptionFor(sid, key); const cls = fs.classes.find((c) => c.id === todo.find((t) => t.id === sid)?.classId); return ex && cls ? studentFeedingRate(feedingRate(tf, cls), ex) : undefined; }) : [];
+  // Families paying feeding small small (on a plan) do not get feeding on the school fees invoice.
+  const plans = useFeedingPlans(); const onPlan = (sid: string) => { const p = plans.planOn(sid, key, termStart); return !!p && p.frequency !== "With school fees"; };
+  const built = tf ? buildTermInvoices(todo, fs.classes, tf, termStart, startSeq, (sid) => { if (onPlan(sid)) return 0; const ex = feeding.exceptionFor(sid, key); const cls = fs.classes.find((c) => c.id === todo.find((t) => t.id === sid)?.classId); return ex && cls ? studentFeedingRate(feedingRate(tf, cls), ex) : undefined; }) : [];
   const byClass = fs.classes.map((cls) => { const l = built.filter((x) => x.classId === cls.id); return { cls, n: l.length, total: l.reduce((a, x) => a + generatedTotal(x), 0) }; }).filter((r) => r.n > 0);
   const total = byClass.reduce((a, r) => a + r.total, 0);
   return (

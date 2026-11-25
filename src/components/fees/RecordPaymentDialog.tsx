@@ -54,7 +54,8 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
         <div className="space-y-3 text-center"><CheckCircle2 className="mx-auto text-ok" size={40} />
           <p>{A.label} receipt <b className="num">{done.receipt}</b> issued for <b>{money(minor)}</b>.</p>
           {isFees && feeding > 0 && <p className="text-sm">{purpose === "feeding" ? `Feeding payment (${period.toLowerCase()})` : `Of which feeding: ${money(feeding)}`}</p>}
-          <p className="text-muted">{st?.name}&apos;s {A.label.toLowerCase()} balance is now <b className={done.after > 0 ? "text-warn" : "text-ok"}>{money(Math.max(0, done.after))}</b>{done.after < 0 && ` (credit ${money(-done.after)})`}.</p>
+          {isFees && purpose === "feeding" ? <p className="text-muted">{st?.name}&apos;s feeding still owed is now <b>{money(Math.max(0, feedingOwed - minor))}</b>. School fees balance unchanged.</p>
+              : <p className="text-muted">{st?.name}&apos;s {A.label.toLowerCase()} balance is now <b className={done.after > 0 ? "text-warn" : "text-ok"}>{money(Math.max(0, done.after))}</b>{done.after < 0 && ` (credit ${money(-done.after)})`}.</p>}
           <Button onClick={() => window.print()}><Printer size={14} />Print receipt</Button>
           <p className="text-xs text-muted">Front-end preview — the ledger and dashboards update once the backend posts this transaction.</p></div>
       ) : (
@@ -68,7 +69,7 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
             <legend className="px-1 text-sm font-medium">This payment is for</legend>
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
               <label className="flex items-center gap-2"><input type="radio" checked={purpose === "fees"} onChange={() => setPurpose("fees")} />School fees (feeding included)</label>
-              <label className="flex items-center gap-2"><input type="radio" checked={purpose === "feeding"} onChange={() => setPurpose("feeding")} />Feeding only</label>
+              <label className="flex items-center gap-2"><input type="radio" checked={purpose === "feeding"} onChange={() => setPurpose("feeding")} />Feeding only <span className="text-xs text-muted">(paid separately, not part of school fees)</span></label>
             </div>
             {purpose === "fees" ? <div className="mt-3 flex flex-wrap items-center gap-3 text-sm"><span>Of which feeding</span>
                 <MoneyInput key={`${sid}-${feedPart === null ? minor : "edited"}`} className="w-36" label="Of which feeding (GH₵)" value={feedPart ?? Math.min(minor, feedingOwed)} onChange={setFeedPart} />
@@ -82,7 +83,8 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
           <Field label="External reference" hint="Momo transaction ID, bank ref or cheque no."><input className={inputClass} value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
           <Field label="Payment date"><input type="date" className={inputClass} value={date} max="2026-10-12" onChange={(e) => setDate(e.target.value)} /></Field>
           <div className="sm:col-span-2"><Field label="Notes"><input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} /></Field></div>
-          {alloc.length > 0 && <div className="sm:col-span-2 rounded-lg border border-line p-3 text-sm"><div className="mb-1 font-medium">Allocation preview <Badge>oldest invoice first</Badge></div>{alloc.filter((a) => a.applied > 0).map((a) => <div key={a.no} className="flex justify-between py-0.5"><span>{a.no}</span><span className="num">{money(a.applied)}</span></div>)}
+          {isFees && purpose === "feeding" && st && minor > 0 && <div className="sm:col-span-2 flex justify-between rounded-lg border border-line p-3 text-sm"><span>Feeding still owed after this payment <span className="text-xs text-muted">(school fees balance unchanged)</span></span><b className="num">{money(Math.max(0, feedingOwed - minor))}</b></div>}
+          {!(isFees && purpose === "feeding") && alloc.length > 0 && <div className="sm:col-span-2 rounded-lg border border-line p-3 text-sm"><div className="mb-1 font-medium">Allocation preview <Badge>oldest invoice first</Badge></div>{alloc.filter((a) => a.applied > 0).map((a) => <div key={a.no} className="flex justify-between py-0.5"><span>{a.no}</span><span className="num">{money(a.applied)}</span></div>)}
             {st && <div className="mt-1 flex justify-between border-t border-line pt-1.5 font-medium"><span>Balance after payment</span><span className="num">{money(Math.max(0, st.balance - minor))}</span></div>}</div>}
           {err && sid && minor > 0 && <p role="alert" className="sm:col-span-2 text-sm text-danger">{err}</p>}
         </div>)}

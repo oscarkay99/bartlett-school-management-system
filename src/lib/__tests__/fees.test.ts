@@ -46,7 +46,8 @@ describe("Fee schedule — what a class pays in a term", () => {
     const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!.id;
     for (const i of Q.invoices.filter((x) => x.account === "fees" && x.studentId !== ama)) {
       const s = Q.getStudent(i.studentId)!; const tf = findTerm(Q.feeSchedule, i.year, i.term)!;
-      expect(i.items, i.no).toEqual(termBillLines(tf, cls(Q.getClass(s.classId).name)));
+      const onPlan = Q.feedingPlans.some((p) => p.studentId === s.id && p.frequency !== "With school fees");
+      expect(i.items, i.no).toEqual(termBillLines(tf, cls(Q.getClass(s.classId).name)).filter((x) => !(onPlan && x.label === "Feeding")));
     }
   });
 });
@@ -98,10 +99,10 @@ describe("Fee schedule — locking and saved edits", () => {
 
 describe("What a parent owes for the term", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-  it("term total is school fees only (feeding included); Extra Classes is reported separately, never added", () => {
+  it("term total is school fees only (feeding included only if paid with the fees); Extra Classes is reported separately", () => {
     const tc = Q.termCharges(ama().id, "2026/2027", "Term 1");
-    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3700)], ["extra", ghs(750)]]);
-    expect(tc.total).toBe(ghs(3700)); expect(tc.extra.net).toBe(ghs(750));
+    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3100)], ["extra", ghs(750)]]);
+    expect(tc.total).toBe(ghs(3100)); // Ama pays feeding monthly, so it is not on her school fees invoice expect(tc.extra.net).toBe(ghs(750));
     expect(Q.termCharges(ama().id, "2026/2027", "Term 2").total).toBe(0); // nothing billed for Term 2 yet
   });
   it("a scholarship is its own named line, taken off tuition only", () => {
