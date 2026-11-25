@@ -19,7 +19,7 @@ import { useFeeding } from "@/components/feeding/useFeeding";
 import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
 import { buildTermInvoices, generatedTotal, type GeneratedInvoice } from "@/lib/generated-invoices";
 import { GeneratedInvoiceDialog, useGeneratedInvoices } from "./GeneratedInvoices";
-import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
+import { ACCOUNTS, activitiesOf, type FeeAccount } from "@/lib/accounts";
 import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
@@ -91,7 +91,7 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   if (!ready) return null;
   const breakdown = account === "fees"
     ? { id: "books", label: "Books & feeding", node: <ItemBreakdown students={ss} sections={[{ key: "Books", title: "Books", sub: "Textbooks and learning materials, on the school fees invoice" }, { key: "Feeding", title: "Feeding", sub: "Meals per term, on the school fees invoice" }]} /> }
-    : { id: "activities", label: "Activities", node: <Activities students={ss} /> };
+    : { id: "activities", label: "Activities", node: <Activities students={ss} account={account} /> };
   type Tab = { id: string; label: string; content: React.ReactNode; badge?: string };
   const tabs = ([
     full && { id: "overview", label: "Dashboard", content: overview },
@@ -202,7 +202,7 @@ function Invoices({ students, candidates, account, canBill, onIssue }: { student
         {canBill && <DiscardGenerated count={gen.length} term={term} onDiscard={generated.clear} />}</div>}
       <DataTable rows={rows} empty={<EmptyState icon={FileText} title={`No ${A.label.toLowerCase()} invoices for ${term} ${year} yet`} body={account === "fees" ? "Generate this term's invoices once its fees are set." : "Issue bills to students as they enrol."} />} columns={[
         { key: "i", header: "Invoice", render: (x) => <b className="num">{x.invoice}</b> }, { key: "n", header: "Student", sort: (x) => x.name, render: (x) => x.name }, { key: "c", header: "Class", render: (x) => x.cls },
-        ...(account === "extra" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: InvRow) => x.activities }] : []),
+        ...(account !== "fees" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: InvRow) => x.activities }] : []),
         { key: "b", header: "Total", align: "right", sort: (x) => x.total, render: (x) => money(x.total) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
         { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
         { key: "pdf", header: "", render: (x) => x.gen ? <button className="text-info hover:underline" onClick={() => setView(x)}>View</button> : <Link className="text-info" href={`/print/invoice/${x.invoice}`}>PDF</Link> },
@@ -278,15 +278,16 @@ function ItemBreakdown({ students, sections }: { students: SRow[]; sections: { k
   );
 }
 
-// Extracurricular: one card per class/activity (enrolment and billed), plus the full roster.
-function Activities({ students }: { students: SRow[] }) {
+// Extracurricular / Extra Classes: one card per activity (enrolment and billed), plus the full roster.
+function Activities({ students, account }: { students: SRow[]; account: FeeAccount }) {
+  const ACTIVITIES = activitiesOf(account);
   const [act, setAct] = useState(""); const r = useRouter();
   const per = ACTIVITIES.map((a) => { const kids = students.filter((s) => s.items.some((i) => i.label === a)); return { a, kids: kids.length, billed: kids.reduce((x, s) => x + (s.items.find((i) => i.label === a)?.amount ?? 0), 0) }; });
   const rows = students.filter((s) => !act || s.items.some((i) => i.label === act));
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">{per.map((p) => <button key={p.a} onClick={() => setAct(act === p.a ? "" : p.a)} className={`rounded-xl border bg-surface p-4 text-left transition hover:shadow-md ${act === p.a ? "border-info ring-1 ring-info" : "border-line"}`}><div className="text-xs text-muted">{p.a}</div><div className="mt-1 text-2xl font-semibold">{p.kids} <span className="text-sm font-normal text-muted">students</span></div><div className="num mt-1 text-sm">Billed {money(p.billed)}</div></button>)}</div>
-      <Card><DataTable rows={rows} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(`/students/${x.id}?tab=extra`)} pageSize={12}
+      <Card><DataTable rows={rows} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(`/students/${x.id}?tab=${account}`)} pageSize={12}
         filters={<Select label="Activity" value={act} onChange={setAct} options={[{ value: "", label: "All activities" }, ...ACTIVITIES.map((a) => ({ value: a, label: a }))]} />}
         columns={[
           { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div> },

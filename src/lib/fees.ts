@@ -135,12 +135,15 @@ export function mergeSchedule(seed: TermFees[], saved: unknown, locked: string[]
   if (!Array.isArray(saved)) return seed;
   let out = seed;
   for (const raw of saved as TermFees[]) {
-    // The old "Extra Classes" activity is called STEM again; carry saved prices across.
-    const t = raw && raw.activities && OLD_STEM in raw.activities
+    // Saved before STEM got its name back, "Extra Classes" meant STEM: carry that price across.
+    const t = raw && raw.activities && OLD_STEM in raw.activities && !("STEM" in raw.activities)
       ? { ...raw, activities: Object.fromEntries(Object.entries(raw.activities).map(([k, v]) => [k === OLD_STEM ? "STEM" : k, v])) } : raw;
     if (!t || typeof t.year !== "string" || typeof t.term !== "string" || !t.levels || !t.overrides || !t.activities) continue;
     if (locked.includes(termKey(t.year, t.term)) || validateTermFees(t, classes)) continue;
-    out = [...out.filter((x) => termKey(x.year, x.term) !== termKey(t.year, t.term)), t];
+    // Activities added since it was saved (e.g. Extra Classes) keep the seed's price.
+    const seedTerm = seed.find((x) => termKey(x.year, x.term) === termKey(t.year, t.term));
+    const full = { ...t, activities: { ...(seedTerm?.activities ?? {}), ...t.activities } };
+    out = [...out.filter((x) => termKey(x.year, x.term) !== termKey(t.year, t.term)), full];
   }
   return out;
 }

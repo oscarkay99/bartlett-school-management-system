@@ -18,7 +18,7 @@ export interface StudentGuardian {
 }
 export interface Student {
   id: string; admissionNo: string; first: string; middle?: string; last: string; dob: string;
-  gender: "Male" | "Female"; classId: string; house: string;
+  gender: "Male" | "Female"; classId: string;
   status: "Active" | "Withdrawn" | "Graduated" | "Suspended"; admittedOn: string; nationality: string;
   address: string; previousSchool?: string; guardians: StudentGuardian[];
   medicalAlert?: string; scholarship?: string;

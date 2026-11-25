@@ -199,13 +199,13 @@ select pg_temp.check('only one Extracurricular sheet per term, and it has no cla
 select pg_temp.check('teacher cannot see invoice sheets', pg_temp.n(:TEACHER, 'select * from public.invoice_sheets') = 0);
 
 -- ---------- Extracurricular enrolment & feeding payments ----------
-insert into public.activities (name, kindergarten_allowed) values ('Music (Piano)', true), ('STEM', false) on conflict (name) do nothing;
+insert into public.activities (name, kindergarten_allowed, account) values ('Music (Piano)', true, 'extra'), ('STEM', false, 'extra'), ('Extra Classes', false, 'classes') on conflict (name) do nothing;
 insert into public.classes (id, name, level, position) values ('00000000-0000-0000-0000-0000000000d3', 'KG 1', 'Kindergarten', 0);
 insert into public.students (id, admission_no, first_name, last_name, class_id) values
   ('00000000-0000-0000-0000-0000000000f3', 'A3', 'Esi', 'KG', '00000000-0000-0000-0000-0000000000d3'),
   ('00000000-0000-0000-0000-0000000000f4', 'A4', 'Yaw', 'P3', '00000000-0000-0000-0000-0000000000d1');
 select pg_temp.check('a new KG student is auto-enrolled in Music only', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f3') = array['Music (Piano)']);
-select pg_temp.check('a new Primary student is auto-enrolled in Music and STEM', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f4') = array['Music (Piano)', 'STEM']);
+select pg_temp.check('a new Primary student is auto-enrolled in Music, STEM and Extra Classes', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f4') = array['Extra Classes', 'Music (Piano)', 'STEM']);
 select pg_temp.check('bursar records a weekly feeding payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 50000, 'Weekly') $q$) is null);
 select pg_temp.check('a feeding-only payment must be all feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 100, 'Daily') $q$) is not null);
 select pg_temp.check('the feeding part cannot exceed the payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('fees', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 200) $q$) is not null);
@@ -232,6 +232,20 @@ select pg_temp.err(:BURSAR, $q$ insert into public.feeding_plans (student_id, te
 select pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f4', 4000, 'Cash', 4000, 'Weekly') $q$);
 select pg_temp.check('a weekly feeding payment does not count towards school fees', not exists (select 1 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and paid > 0));
 select pg_temp.check('plan family: feeding billed at the rate (600), paid 40, owed 560', (select billed = 60000 and paid = 4000 and balance = 56000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f4'));
+
+-- ---------- Extra Classes: its own account, separate from Extracurricular ----------
+select pg_temp.check('bursar records an Extra Classes and an Extracurricular payment',
+  pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('classes', '00000000-0000-0000-0000-0000000000f4', 30000, 'Cash') $q$) is null
+  and pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('extra', '00000000-0000-0000-0000-0000000000f4', 40000, 'Cash') $q$) is null);
+-- (read back in a separate statement: a statement does not see rows inserted by functions it called)
+select pg_temp.check('…each gets its own receipt series (XCR / XRC)',
+  (select receipt_no like 'XCR-%' from public.payments where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'classes')
+  and (select receipt_no like 'XRC-%' from public.payments where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'extra'));
+select pg_temp.check('an Extra Classes payment does not reduce the Extracurricular or school fees balance',
+  (select paid = 30000 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'classes')
+  and (select paid = 40000 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'extra')
+  and not exists (select 1 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'fees' and paid > 0));
+select pg_temp.check('no activity can be billed on the school fees account', pg_temp.err(:OWNER, $q$ insert into public.activities (name, account) values ('Bogus', 'fees') $q$) is not null);
 
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;

@@ -100,11 +100,11 @@ describe("School fees invoice: books and feeding on one invoice", () => {
   });
 });
 
-describe("Two accounts: school fees and standalone Extracurricular", () => {
+describe("Three accounts: school fees, plus standalone Extracurricular and Extra Classes", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-  it("only school fees and Extracurricular exist; each has its own invoice and receipt numbering", () => {
-    expect(Q.ACCOUNT_IDS).toEqual(["fees", "extra"]);
-    const prefix = { fees: ["INV-", "RCT-"], extra: ["EXC-", "XRC-"] } as const;
+  it("school fees, Extracurricular and Extra Classes each have their own invoice and receipt numbering", () => {
+    expect(Q.ACCOUNT_IDS).toEqual(["fees", "extra", "classes"]);
+    const prefix = { fees: ["INV-", "RCT-"], extra: ["EXC-", "XRC-"], classes: ["XCL-", "XCR-"] } as const;
     for (const i of Q.invoices) expect(i.no.startsWith(prefix[i.account][0]), i.no).toBe(true);
     for (const p of Q.payments) expect(p.receiptNo.startsWith(prefix[p.account][1]), p.receiptNo).toBe(true);
     expect(new Set(Q.invoices.map((i) => i.no)).size).toBe(Q.invoices.length);
@@ -116,6 +116,16 @@ describe("Two accounts: school fees and standalone Extracurricular", () => {
     expect(Q.feeSummary(id).balance).toBe(ghs(1100));
     const ex = Q.accountSummary(id, "extra"); expect([ex.billed, ex.paid, ex.balance]).toEqual([ghs(750), 0, ghs(750)]);
     expect(Q.totalOwed(id)).toBe(ghs(1100)); // school fees only: Extracurricular is never added
+  });
+  it("Ama: Extra Classes (GH₵ 300) is a third, separate bill, not added to school fees or Extracurricular", () => {
+    const id = ama().id; const xc = Q.accountSummary(id, "classes");
+    expect([xc.billed, xc.paid, xc.balance]).toEqual([ghs(300), 0, ghs(300)]);
+    expect(Q.totalOwed(id)).toBe(ghs(1100)); expect(Q.accountSummary(id, "extra").balance).toBe(ghs(750));
+  });
+  it("Extra Classes: Primary and JHS only, one Extra Classes line; Kindergarten is not billed", () => {
+    const inv = Q.invoices.filter((x) => x.account === "classes"); expect(inv.length).toBeGreaterThan(0);
+    for (const i of inv) { expect(Q.getClass(Q.getStudent(i.studentId)!.classId).level, i.no).not.toBe("Kindergarten"); expect(i.items.map((x) => x.label), i.no).toEqual(["Extra Classes"]); }
+    expect(Q.trialBalance().some((t) => t.account === "4600 Extra Classes Fees")).toBe(true);
   });
   it("a payment only reduces the balance of its own account", () => {
     for (const s of Q.students) for (const acc of Q.ACCOUNT_IDS) {

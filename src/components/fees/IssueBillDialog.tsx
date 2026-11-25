@@ -13,7 +13,7 @@ import { money } from "@/lib/money";
 /** A student who can be billed in this account. `billed` maps a term key ("2026/2027|Term 1") to the lines they already have that term. */
 export interface BillCandidate { id: string; name: string; adm: string; classId: string; cls: string; scholarship: boolean; billed: Record<string, string[]> }
 
-// Issue an Extracurricular invoice (standalone, never added to school fees) for one student, for the term selected in the top bar.
+// Issue an Extracurricular or Extra Classes invoice (standalone, never added to school fees) for one student, for the term selected in the top bar.
 // Prices come from that term's fee schedule. Front-end preview: the backend assigns the real number.
 export function IssueBillDialog({ open, onClose, account, candidates }: { open: boolean; onClose: () => void; account: FeeAccount; candidates: BillCandidate[] }) {
   const A = ACCOUNTS[account]; const toast = useToast();
@@ -22,7 +22,7 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
   const st = candidates.find((c) => c.id === sid);
   const cls = st && fs.classes.find((c) => c.id === st.classId);
   const billed = st?.billed[termKey(year, term)] ?? [];
-  const offered: string[] = cls ? activitiesFor(cls.level) : [];
+  const offered: string[] = cls ? activitiesFor(cls.level, account) : [];
   const items = ((): { label: string; amount: number }[] => {
     if (!st || !cls || !tf) return [];
     return acts.filter((a) => !billed.includes(a)).map((a) => ({ label: a, amount: tf.activities[a] ?? 0 }));
@@ -45,7 +45,7 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
         <div className="space-y-4">
           <div><Field label="Student *"><input className={inputClass} placeholder="Search name or admission no." value={st ? st.name : filter} onChange={(e) => { setSid(""); setActs([]); setFilter(e.target.value); }} /></Field>
             {!st && filter && <ul className="mt-1 rounded-lg border border-line">{list.map((c) => { const has = c.billed[termKey(year, term)] ?? []; return <li key={c.id}><button className="flex w-full justify-between px-3 py-2 text-left hover:bg-surface-2" onClick={() => setSid(c.id)}><span>{c.name} <span className="text-xs text-muted">{c.cls} · {c.adm}</span></span>{has.length > 0 && <span className="text-xs text-muted">has {has.join(", ")}</span>}</button></li>; })}{list.length === 0 && <li className="px-3 py-2 text-sm text-muted">No matching students</li>}</ul>}</div>
-          {st && account === "extra" && <fieldset><legend className="mb-1.5 text-sm font-medium">Activities</legend><div className="grid gap-2 sm:grid-cols-3">{offered.map((a) => { const has = billed.includes(a); return (
+          {st && account !== "fees" && <fieldset><legend className="mb-1.5 text-sm font-medium">Activities</legend><div className="grid gap-2 sm:grid-cols-3">{offered.map((a) => { const has = billed.includes(a); return (
             <label key={a} className={`flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm ${has ? "opacity-50" : "cursor-pointer hover:bg-surface-2"}`}><span className="flex items-center gap-2"><input type="checkbox" disabled={has} checked={has || acts.includes(a)} onChange={(e) => setActs(e.target.checked ? [...acts, a] : acts.filter((x) => x !== a))} />{a}</span><span className="num text-xs text-muted">{has ? "billed" : money(tf.activities[a] ?? 0)}</span></label>); })}</div>
             {cls?.level === "Kindergarten" && <p className="mt-1 text-xs text-muted">Kindergarten pupils can only take Music (Piano).</p>}</fieldset>}
           {items.length > 0 && <div className="rounded-lg border border-line p-3 text-sm"><div className="mb-1 font-medium">{A.invoiceTitle} preview · {term} {year}</div>{items.map((i) => <div key={i.label} className="flex justify-between py-0.5"><span>{i.label}</span><span className="num">{money(i.amount)}</span></div>)}<div className="mt-1 flex justify-between border-t border-line pt-1.5 font-medium"><span>Total</span><span className="num">{money(total)}</span></div></div>}

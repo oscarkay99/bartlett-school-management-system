@@ -18,7 +18,7 @@ const amt = (m: number) => (m ? money(m) : "—");
 // One small (Extracurricular) invoice = one cell of a 2 × 5 grid on A4 (210 × 297 mm).
 const W = "105mm", H = "59.4mm";
 
-// Invoices page: a tab per class (full A4 school fees invoice) plus Extracurricular (small invoice, 10 per A4 page).
+// Invoices page: a tab per class (full A4 school fees invoice) plus Extracurricular and Extra Classes (small invoices, 10 per A4 page).
 // Edits are kept in this browser until the backend stores them.
 export function ClassInvoices({ defaults, school }: { defaults: Record<string, ClassInvoice>; school: School }) {
   const [invoices, setInvoices] = useState(defaults);

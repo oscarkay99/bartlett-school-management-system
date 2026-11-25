@@ -7,7 +7,7 @@ import { ACCOUNTS, ACCOUNT_IDS } from "@/lib/accounts";
 export function generateStaticParams() { return Q.students.map((s) => ({ id: s.id })); }
 export const dynamicParams = false;
 
-// One statement, two separately settled sections: School Fees (feeding included) and Extracurricular.
+// One statement, separately settled sections: School Fees (feeding included), Extracurricular and Extra Classes.
 export default async function StatementPrint({ params }: PageProps<"/print/statement/[id]">) {
   const { id } = await params; const s = Q.getStudent(id); if (!s) notFound();
   const sections = ACCOUNT_IDS.map((acc) => ({ acc, a: ACCOUNTS[acc], f: Q.accountSummary(id, acc), rows: Q.accountLedger(id, acc) })).filter((x) => x.f.enrolled);
@@ -26,7 +26,7 @@ export default async function StatementPrint({ params }: PageProps<"/print/state
           <p className="mt-2 text-right">{x.a.label} balance due: <b>{money(Math.max(0, x.f.balance))}</b></p>
         </section>
       ))}
-      <p className="mt-6 text-[11px] text-neutral-600">School fees (feeding included) and extracurricular activities are billed and receipted separately. A payment only settles the account it was made for.</p>
+      <p className="mt-6 text-[11px] text-neutral-600">School fees (feeding included), extracurricular activities and extra classes are billed and receipted separately. A payment only settles the account it was made for.</p>
     </PrintFrame>
   );
 }

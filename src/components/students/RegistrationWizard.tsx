@@ -11,9 +11,9 @@ interface Link_ { key: string; guardian: { id?: string; name: string; phone: str
 const STEPS = ["Personal", "Academic", "Guardians", "Medical & Welfare", "Documents", "Review"];
 const DOCS = ["Birth certificate", "Admission form", "Previous school records", "Passport photograph", "Parental consent form"];
 
-export function RegistrationWizard({ guardians, classes, houses, nextAdm }: { guardians: G[]; classes: { id: string; name: string }[]; houses: string[]; nextAdm: string }) {
+export function RegistrationWizard({ guardians, classes, nextAdm }: { guardians: G[]; classes: { id: string; name: string }[]; nextAdm: string }) {
   const [step, setStep] = useState(0);
-  const [f, setF] = useState({ first: "", middle: "", last: "", dob: "", gender: "", nationality: "Ghanaian", address: "", pob: "", admitted: "2026-10-12", prevSchool: "", ecName: "", ecPhone: "", year: "2026/2027", classId: "", stream: "", house: "", code: "", entry: "", allergies: "", alert: "", instructions: "" });
+  const [f, setF] = useState({ first: "", middle: "", last: "", dob: "", gender: "", nationality: "Ghanaian", address: "", pob: "", admitted: "2026-10-12", prevSchool: "", ecName: "", ecPhone: "", year: "2026/2027", classId: "", code: "", entry: "", allergies: "", alert: "", instructions: "" });
   const [links, setLinks] = useState<Link_[]>([]);
   const [q, setQ] = useState(""); const [adding, setAdding] = useState(false);
   const [np, setNp] = useState({ name: "", phone: "", email: "" });
@@ -78,8 +78,6 @@ export function RegistrationWizard({ guardians, classes, houses, nextAdm }: { gu
         {step === 1 && <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Academic year of admission"><select className={inputClass} value={f.year} onChange={(e) => set("year", e.target.value)}><option>2026/2027</option><option>2025/2026</option></select></Field>
           <Field label="Class *" error={errors.classId}><select className={inputClass} value={f.classId} onChange={(e) => set("classId", e.target.value)}><option value="">Select class…</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-          <Field label="Section / stream"><select className={inputClass} value={f.stream} onChange={(e) => set("stream", e.target.value)}><option value="">None</option><option>A</option><option>B</option></select></Field>
-          <Field label="House"><select className={inputClass} value={f.house} onChange={(e) => set("house", e.target.value)}><option value="">Unassigned</option>{houses.map((h) => <option key={h}>{h}</option>)}</select></Field>
           <Field label="Student identification code"><input className={inputClass} value={f.code} onChange={(e) => set("code", e.target.value)} /></Field>
           <Field label="Entry assessment result (optional)"><input className={inputClass} value={f.entry} onChange={(e) => set("entry", e.target.value)} placeholder="e.g. 72%" /></Field>
           <p className="sm:col-span-2 text-xs text-muted">Subjects are assigned automatically from the class level and can be changed on the student profile.</p>
@@ -129,7 +127,7 @@ export function RegistrationWizard({ guardians, classes, houses, nextAdm }: { gu
         {step === 5 && <div className="space-y-4">
           <h3 className="font-semibold">Review & submit</h3>
           <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-sm">
-            {[["Name", `${f.first} ${f.middle} ${f.last}`], ["Admission no.", nextAdm], ["Date of birth", f.dob ? `${f.dob} (${ageFrom(f.dob)} yrs)` : "—"], ["Gender", f.gender], ["Class", classes.find((c) => c.id === f.classId)?.name ?? "—"], ["House", f.house || "Unassigned"], ["Documents", `${Object.keys(docs).length} / ${DOCS.length} uploaded`]].map(([k, v]) => <div key={k} className="flex justify-between border-b border-line py-1.5"><dt className="text-muted">{k}</dt><dd className="font-medium">{v}</dd></div>)}
+            {[["Name", `${f.first} ${f.middle} ${f.last}`], ["Admission no.", nextAdm], ["Date of birth", f.dob ? `${f.dob} (${ageFrom(f.dob)} yrs)` : "—"], ["Gender", f.gender], ["Class", classes.find((c) => c.id === f.classId)?.name ?? "—"], ["Documents", `${Object.keys(docs).length} / ${DOCS.length} uploaded`]].map(([k, v]) => <div key={k} className="flex justify-between border-b border-line py-1.5"><dt className="text-muted">{k}</dt><dd className="font-medium">{v}</dd></div>)}
           </dl>
           <div><div className="mb-1 font-medium">Guardians ({links.length})</div>{links.map((l) => <div key={l.key} className="flex flex-wrap items-center gap-2 border-b border-line py-1.5 text-sm"><span className="font-medium">{l.guardian.name}</span><span className="text-muted">{l.relationship}</span>{l.primary && <Badge tone="info">Primary</Badge>}{l.financial && <Badge tone="ok">Financial</Badge>}{l.guardian.isNew && <Badge>New record</Badge>}</div>)}{links.length === 0 && <p className="text-warn">No guardian linked (exception).</p>}</div>
           <p className="text-xs text-muted">On submit the student and all guardian relationships are saved together in a single transaction.</p>

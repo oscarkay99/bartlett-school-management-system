@@ -93,7 +93,7 @@ describe("Fee schedule — locking and saved edits", () => {
   it("a price saved under the old name \"Extra Classes\" carries over to STEM", () => {
     const old = structuredClone(t2) as typeof t2; const { STEM: price, ...rest } = old.activities; old.activities = { ...rest, ["Extra Classes"]: ghs(420) }; void price;
     const m = mergeSchedule(Q.feeSchedule, [old], locked, classes);
-    expect(findTerm(m, "2026/2027", "Term 2")!.activities).toEqual({ "Music (Piano)": old.activities["Music (Piano)"], STEM: ghs(420) });
+    expect(findTerm(m, "2026/2027", "Term 2")!.activities).toEqual({ "Music (Piano)": old.activities["Music (Piano)"], STEM: ghs(420), "Extra Classes": t2.activities["Extra Classes"] });
   });
   it("invoice numbers follow the term", () => {
     expect(invoiceStem("INV", "2026/2027", "Term 2")).toBe("INV-2627-T2");
@@ -104,9 +104,9 @@ describe("Fee schedule — locking and saved edits", () => {
 
 describe("What a parent owes for the term", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-  it("term total is school fees only (feeding included only if paid with the fees); Extracurricular is reported separately", () => {
+  it("term total is school fees only (feeding included only if paid with the fees); Extracurricular and Extra Classes are reported separately", () => {
     const tc = Q.termCharges(ama().id, "2026/2027", "Term 1");
-    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3100)], ["extra", ghs(750)]]);
+    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3100)], ["extra", ghs(750)], ["classes", ghs(300)]]);
     expect(tc.total).toBe(ghs(3100)); // Ama pays feeding monthly, so it is not on her school fees invoice expect(tc.extra.net).toBe(ghs(750));
     expect(Q.termCharges(ama().id, "2026/2027", "Term 2").total).toBe(0); // nothing billed for Term 2 yet
   });

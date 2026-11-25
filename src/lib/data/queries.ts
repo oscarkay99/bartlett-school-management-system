@@ -53,7 +53,7 @@ export function accountSummary(studentId: string, account: FeeAccount): FeeSumma
 }
 /**
  * What one term costs for a student: each account's bills for that term (net of discounts).
- * `total` is SCHOOL FEES ONLY. Extracurricular is standalone and is never added to it (see `extra`).
+ * `total` is SCHOOL FEES ONLY. Extracurricular and Extra Classes are standalone and never added to it (see `extra`, `classes`).
  */
 export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SCHOOL.term) {
   const parts = ACCOUNT_IDS.map((account) => {
@@ -61,7 +61,7 @@ export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SC
     const gross = inv.reduce((a, i) => a + i.items.reduce((x, y) => x + y.amount, 0), 0); const discount = inv.reduce((a, i) => a + i.discount, 0);
     return { account, label: ACCOUNTS[account].label, billed: inv.length > 0, gross, discount, net: gross - discount };
   });
-  return { year, term, parts, total: parts.find((p) => p.account === "fees")!.net, extra: parts.find((p) => p.account === "extra")! };
+  return { year, term, parts, total: parts.find((p) => p.account === "fees")!.net, extra: parts.find((p) => p.account === "extra")!, classes: parts.find((p) => p.account === "classes")! };
 }
 /**
  * Feeding for one student: billed (the Feeding line on their school fees invoices), paid (the feeding part of their
@@ -79,7 +79,7 @@ export function feedingAccount(studentId: string) {
 }
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
 export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };
-/** School fees still owed. Extracurricular is standalone: its balance is shown separately and never added here. */
+/** School fees still owed. Extracurricular and Extra Classes are standalone: its balance is shown separately and never added here. */
 export const totalOwed = (studentId: string) => Math.max(0, accountSummary(studentId, "fees").balance);
 
 // Chronological, append-only ledger for one account with running balance.
@@ -231,7 +231,7 @@ export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverv
 export const OPENING_CASH: Minor = 1_845_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
 // Feeding is a line on the school fees invoice, but its income is still posted to its own account.
-const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extracurricular Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : "4400 Levies & Other Fees");
+const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extracurricular Fees" : account === "classes" ? "4600 Extra Classes Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : "4400 Levies & Other Fees");
 const expenseAccount = (c: string) => `5${({ Salaries: "100", Utilities: "200", Internet: "250", Repairs: "300", Stationery: "350", "Food Supplies": "400", Transport: "450", "Inventory Purchases": "500", Software: "550", Building: "600", Maintenance: "650" } as Record<string, string>)[c] ?? "900"} ${c}`;
 export function generalLedger(): GLLine[] {
   const L: GLLine[] = [{ date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "1100 Bank & Cash", dr: OPENING_CASH, cr: 0 }, { date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "3100 Accumulated Fund", dr: 0, cr: OPENING_CASH }];

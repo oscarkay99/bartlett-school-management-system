@@ -11,7 +11,7 @@ describe("Owner role", () => {
   it("can create, edit, delete and approve on every resource", () => {
     for (const r of RESOURCES) for (const o of OPS) expect(allowed("owner", r, o), `${r}.${o}`).toBe(true);
   });
-  it("sees every module, including Invoices and Extracurricular", () => { expect(ROLES.owner.nav).toHaveLength(16); expect(ROLES.owner.nav).toEqual(expect.arrayContaining(["invoices", "extracurricular"])); });
+  it("sees every module, including Invoices, Extracurricular and Extra Classes", () => { expect(ROLES.owner.nav).toHaveLength(17); expect(ROLES.owner.nav).toEqual(expect.arrayContaining(["invoices", "extracurricular", "extra-classes"])); });
   it("old saved roles fall back to Owner instead of breaking", () => {
     expect(normalizeRole("headmaster")).toBe("owner"); expect(normalizeRole("proprietor")).toBe("owner"); expect(normalizeRole(null)).toBe("owner"); expect(normalizeRole("bursar")).toBe("bursar");
   });
@@ -34,8 +34,8 @@ describe("Administrator: follows up on balances but never sees money coming in",
   it("cannot record payments or issue invoices", () => { expect(allowed("admin", "payments", "create")).toBe(false); expect(allowed("admin", "invoices", "create")).toBe(false); });
 });
 describe("Accountant", () => {
-  it("has School Fees and Extracurricular, and full money access", () => {
-    expect(ROLES.bursar.nav).toEqual(expect.arrayContaining(["fees", "extracurricular", "invoices"])); expect(moneyAccess("bursar")).toBe("full");
+  it("has School Fees, Extracurricular and Extra Classes, and full money access", () => {
+    expect(ROLES.bursar.nav).toEqual(expect.arrayContaining(["fees", "extracurricular", "extra-classes", "invoices"])); expect(moneyAccess("bursar")).toBe("full");
   });
   it("can record payments and issue invoices/receipts", () => { expect(allowed("bursar", "payments", "create")).toBe(true); expect(allowed("bursar", "invoices", "create")).toBe(true); });
 });

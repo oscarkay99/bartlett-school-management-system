@@ -15,7 +15,7 @@ export const dynamicParams = false;
 export default async function ParentPage({ params }: PageProps<"/parents/[id]">) {
   const { id } = await params; const g = Q.getGuardian(id); if (!g) notFound();
   const kids = Q.studentsOfGuardian(id);
-  // Only children this guardian pays for count towards the family's term total (school fees only; Extracurricular is separate).
+  // Only children this guardian pays for count towards the family's term total (school fees only; Extracurricular and Extra Classes are separate).
   const paying = kids.filter((k) => k.guardians.some((x) => x.guardianId === id && x.financial));
   const familyTerm = paying.reduce((a, k) => a + Q.termCharges(k.id).total, 0); const familyOwed = paying.reduce((a, k) => a + Q.totalOwed(k.id), 0);
   const rows = Q.ACCOUNT_IDS.map((acc) => ({ acc, row: Q.reminderRows({ account: acc }).find((r) => r.guardian.id === id) })).filter((x) => x.row);

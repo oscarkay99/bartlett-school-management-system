@@ -45,7 +45,7 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
   const tabs = [
     { id: "overview", label: "Overview", content: (
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2"><CardHeader title="Personal & enrolment" /><div className="px-4 pb-4">{dl([["Admission no.", s.admissionNo], ["Date of birth", `${fmtDate(s.dob)} (${ageFrom(s.dob)} yrs)`], ["Gender", s.gender], ["Nationality", s.nationality], ["Class", cls.name], ["House", s.house], ["Admitted", fmtDate(s.admittedOn)], ["Previous school", s.previousSchool ?? "—"], ["Address", s.address]])}</div></Card>
+        <Card className="lg:col-span-2"><CardHeader title="Personal & enrolment" /><div className="px-4 pb-4">{dl([["Admission no.", s.admissionNo], ["Date of birth", `${fmtDate(s.dob)} (${ageFrom(s.dob)} yrs)`], ["Gender", s.gender], ["Nationality", s.nationality], ["Class", cls.name], ["Admitted", fmtDate(s.admittedOn)], ["Previous school", s.previousSchool ?? "—"], ["Address", s.address]])}</div></Card>
         <Card><CardHeader title="At a glance" /><div className="space-y-3 px-4 pb-4">
           <MoneyGate level="balances"><div><div className="mb-1 flex justify-between text-xs text-muted"><span>Fees paid</span><span>{Math.round((f.paid / Math.max(1, f.billed)) * 100)}%</span></div><Progress value={(f.paid / Math.max(1, f.billed)) * 100} tone={tone as "ok"} /></div></MoneyGate>
           <div><div className="mb-1 flex justify-between text-xs text-muted"><span>Attendance</span><span>{att.rate}%</span></div><Progress value={att.rate} tone={att.rate > 90 ? "ok" : "warn"} /></div>
@@ -77,7 +77,7 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
   return (
     <>
       <PageHeader crumbs={<Link href="/students" className="text-xs text-muted hover:text-fg">← Students</Link>} title={Q.fullName(s)} sub={`${s.admissionNo} · ${cls.name}`}
-        actions={<><LinkButton href={`/print/statement/${s.id}`}><Download size={14} />Statement</LinkButton><StudentRecordActions adm={s.admissionNo} classes={Q.classes.map((c) => c.name)} houses={["Nkrumah", "Aggrey", "Yaa Asantewaa", "Sutherland"]} initial={{ first: s.first, middle: s.middle ?? "", last: s.last, dob: s.dob, gender: s.gender, classId: cls.name, house: s.house, status: s.status, address: s.address }} /><RecordPaymentButton student={payStudentFor("fees")} usedRefs={usedRefs} /></>} />
+        actions={<><LinkButton href={`/print/statement/${s.id}`}><Download size={14} />Statement</LinkButton><StudentRecordActions adm={s.admissionNo} classes={Q.classes.map((c) => c.name)} initial={{ first: s.first, middle: s.middle ?? "", last: s.last, dob: s.dob, gender: s.gender, classId: cls.name, status: s.status, address: s.address }} /><RecordPaymentButton student={payStudentFor("fees")} usedRefs={usedRefs} /></>} />
       <div className="mb-5 flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4">
         <Avatar name={Q.shortName(s)} size={64} />
         <div className="flex flex-wrap gap-2"><StatusBadge status={s.status} />{s.medicalAlert && <Badge tone="danger"><AlertTriangle size={11} />Medical alert</Badge>}{s.scholarship && <Badge tone="info">{s.scholarship}</Badge>}</div>
@@ -91,10 +91,10 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
         </div>
         {fa.separate && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm"><span className="text-muted">Feeding <span className="text-xs">(paid separately on a plan, not part of school fees)</span></span>
           <span><b className="num">{money(fa.billed)}</b> <span className="text-xs text-muted">· owed {money(Math.max(0, fa.balance))}</span></span></div>}
-        {tc.extra.billed && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm"><span className="text-muted">Extracurricular <span className="text-xs">(separate invoice, not added to school fees)</span></span>
-          <span><b className="num">{money(tc.extra.net)}</b> <span className="text-xs text-muted">· owed {money(Math.max(0, Q.accountSummary(s.id, "extra").balance))}</span></span></div>}
+        {tc.parts.filter((p) => p.account !== "fees" && p.billed).map((p) => <div key={p.account} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm"><span className="text-muted">{p.label} <span className="text-xs">(separate invoice, not added to school fees)</span></span>
+          <span><b className="num">{money(p.net)}</b> <span className="text-xs text-muted">· owed {money(Math.max(0, Q.accountSummary(s.id, p.account).balance))}</span></span></div>)}
       </div>
-      <div className="mb-3 grid gap-2 sm:grid-cols-2">{accts.map(({ id: acc, a, f: af }) => <Link key={acc} href={`/students/${s.id}?tab=${acc}`} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">{a.label}</span><span className={`num font-semibold ${af.balance > 0 ? "text-danger" : ""}`}>{af.enrolled ? money(Math.max(0, af.balance)) : "Not enrolled"}</span></span>{af.enrolled && <StatusBadge status={af.status} />}</Link>)}</div>
+      <div className="mb-3 grid gap-2 sm:grid-cols-3">{accts.map(({ id: acc, a, f: af }) => <Link key={acc} href={`/students/${s.id}?tab=${acc}`} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">{a.label}</span><span className={`num font-semibold ${af.balance > 0 ? "text-danger" : ""}`}>{af.enrolled ? money(Math.max(0, af.balance)) : "Not enrolled"}</span></span>{af.enrolled && <StatusBadge status={af.status} />}</Link>)}</div>
       {f.balance > 0 ? (
         <div role="alert" className={`mb-5 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${f.overdue ? "border-danger/30 bg-danger/8" : "border-warn/30 bg-warn/10"}`}>
           <AlertTriangle className={f.overdue ? "text-danger" : "text-warn"} />

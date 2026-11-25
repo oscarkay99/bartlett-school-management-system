@@ -6,14 +6,14 @@ import { ghs } from "../money";
 const inv = (title: string, amounts: number[]): ClassInvoice => ({ title, period: "Term 1", notes: "", lines: amounts.map((a, i) => ({ description: `Line ${i}`, amount: ghs(a) })) });
 
 describe("Class invoices", () => {
-  it("lists KG 1, KG 2, Class 1–6, JHS 1–3, then Extracurricular as its own invoice", () => {
-    expect(INVOICE_TABS.map((t) => t.label)).toEqual(["KG 1", "KG 2", "Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6", "JHS 1", "JHS 2", "JHS 3", "Extracurricular"]);
+  it("lists KG 1, KG 2, Class 1–6, JHS 1–3, then Extracurricular and Extra Classes as their own invoices", () => {
+    expect(INVOICE_TABS.map((t) => t.label)).toEqual(["KG 1", "KG 2", "Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6", "JHS 1", "JHS 2", "JHS 3", "Extracurricular", "Extra Classes"]);
     for (const t of INVOICE_TABS.filter((x) => x.classId)) expect(Q.getClass(t.classId!).name.replace("Primary", "Class"), t.id).toBe(t.label);
     expect(INVOICE_TABS.at(-1)!.classId).toBeUndefined();
   });
-  it("only Extracurricular is the small 10-per-A4 invoice; classes get the full invoice", () => {
+  it("Extracurricular and Extra Classes are the small 10-per-A4 invoices; classes get the full invoice", () => {
     expect(PER_PAGE).toBe(10);
-    expect(INVOICE_TABS.filter(isSmall).map((t) => t.label)).toEqual(["Extracurricular"]);
+    expect(INVOICE_TABS.filter(isSmall).map((t) => t.label)).toEqual(["Extracurricular", "Extra Classes"]);
   });
   it("school fees invoice: fee lines, the ICT levy at 0 (not billed yet), then feeding", () => {
     const lines = mainLines([{ description: "Tuition", amount: ghs(1800) }, { description: "Books", amount: ghs(150) }, { description: "ICT & Development Levy", amount: ghs(150) }, { description: "PTA", amount: ghs(50) }], ghs(450));

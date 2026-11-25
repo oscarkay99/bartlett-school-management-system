@@ -52,13 +52,13 @@ const lvl = (tuition: number, books: number, levy: number, feeding: number): Lev
   items: [{ label: "Tuition", amount: ghs(tuition) }, { label: "Books", amount: ghs(books) }, { label: "ICT & Development Levy", amount: ghs(levy) }, { label: "PTA", amount: ghs(50) }],
   feeding: ghs(feeding),
 });
-const acts = (piano: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), "STEM": ghs(extra) });
-const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 420), Primary: lvl(2200, 250, 0, 560), JHS: lvl(2750, 350, 0, 560) }, overrides: {}, activities: acts(380, 320) });
+const acts = (piano: number, stem: number, classes: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), "STEM": ghs(stem), "Extra Classes": ghs(classes) });
+const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 420), Primary: lvl(2200, 250, 0, 560), JHS: lvl(2750, 350, 0, 560) }, overrides: {}, activities: acts(380, 320, 280) });
 export const feeSchedule: TermFees[] = [
   lastYear("Term 1"), lastYear("Term 2"), { ...lastYear("Term 3"), overrides: { c11: [{ label: "BECE Registration", amount: ghs(300) }] } },
-  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 450), Primary: lvl(2400, 250, 0, 600), JHS: lvl(3000, 350, 0, 600) }, overrides: {}, activities: acts(400, 350) },
+  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 450), Primary: lvl(2400, 250, 0, 600), JHS: lvl(3000, 350, 0, 600) }, overrides: {}, activities: acts(400, 350, 300) },
   // Term 2: books are bought once a year (Term 1), Primary 6 pays a mock-exam fee, JHS 3 pays BECE registration.
-  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 450), Primary: lvl(2400, 0, 0, 600), JHS: lvl(3000, 0, 0, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350) },
+  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 450), Primary: lvl(2400, 0, 0, 600), JHS: lvl(3000, 0, 0, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350, 300) },
   // Term 3 of 2026/2027 has no fees yet — set it up in Settings → Fee schedule.
 ];
 const billingTerm = findTerm(feeSchedule, "2026/2027", "Term 1")!;
@@ -107,7 +107,8 @@ classes.forEach((cls) => {
       id: `s${sn}`, admissionNo: `BMS/${pad(2026 - Math.min(idx, 5), 4).slice(2)}/${pad(sn, 4)}`,
       first: male ? pick(maleF) : pick(femaleF), middle: rnd() > 0.5 ? pick(["Nana", "Kwaku", "Yaa", "Owusua", "Fiifi"]) : undefined, last,
       dob: `${year}-${pad(int(1, 12), 2)}-${pad(int(1, 28), 2)}`, gender: male ? "Male" : "Female", classId: cls.id,
-      house: pick(houses), status: "Active", nationality: "Ghanaian", address: g.address,
+      // (pick(houses): the old House draw, kept so the rest of the demo data stays the same; the school uses no houses)
+      status: (pick(houses), "Active"), nationality: "Ghanaian", address: g.address,
       admittedOn: `${pick([2021, 2022, 2023, 2024, 2025, 2026])}-09-${pad(int(1, 20), 2)}`,
       previousSchool: rnd() > 0.5 ? pick(["Bright Start Academy", "Faith Preparatory", "Garden City School", "Hillcrest Prep"]) : undefined,
       medicalAlert: rnd() < 0.08 ? pick(["Asthma", "Peanut allergy", "Sickle cell trait", "Epilepsy"]) : undefined,
@@ -267,6 +268,20 @@ const getLevel = (st: T.Student) => classes.find((c) => c.id === st.classId)!.le
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id && payments[i].account !== "fees") payments.splice(i, 1);
   invoices.push({ id: `exc${++xInv}`, no: `EXC-2627-T1-${pad(xInv, 4)}`, account: "extra", studentId: ama.id, term: "Term 1", year: "2026/2027", items: activitiesFor(getLevel(ama)).map((a) => ({ label: a, amount: activityFees[a] })), discount: 0, billedOn: "2026-09-08", dueOn: "2026-10-30" });
 }
+
+// ---------- Extra Classes (standalone invoice, receipted separately; Primary and JHS) ----------
+let s4 = 20261126;
+const rnd4 = () => { s4 |= 0; s4 = (s4 + 0x6d2b79f5) | 0; let t = Math.imul(s4 ^ (s4 >>> 15), 1 | s4); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+let cInv = 0, cRc = 0;
+students.forEach((st) => {
+  const taken = activitiesFor(getLevel(st), "classes"); if (!taken.length) return;
+  const items = taken.map((a) => ({ label: a, amount: activityFees[a] })); const total = items.reduce((a, b) => a + b.amount, 0);
+  invoices.push({ id: `xcl${++cInv}`, no: `XCL-2627-T1-${pad(cInv, 4)}`, account: "classes", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount: 0, billedOn: "2026-09-08", dueOn: "2026-10-30" });
+  if (st.id === ama.id) return; // Ama: unpaid, for the walkthrough
+  const r = rnd4(); const amt = r < 0.45 ? total : r < 0.75 ? Math.round(total * 0.5 / 100) * 100 : 0;
+  if (amt > 0) { const day = addDays("2026-09-07", Math.floor(rnd4() * 30));
+    payments.push({ id: `p${++pay}`, receiptNo: `XCR-${pad(++cRc, 5)}`, account: "classes", studentId: st.id, guardianId: st.guardians[0].guardianId, amount: amt, method: PAY_METHODS[Math.floor(rnd4() * PAY_METHODS.length)], date: day > TODAY ? TODAY : day, ref: `CL${100000 + Math.floor(rnd4() * 899999)}`, status: "Confirmed", staff: staffNames[Math.floor(rnd4() * staffNames.length)] }); }
+});
 
 // ---------- Staff ----------
 const tFirst = ["Efua", "Samuel", "Gifty", "Isaac", "Mavis", "Yaw", "Abigail", "Michael", "Priscilla", "Kojo", "Joyce", "Emmanuel", "Selina", "Caleb"];

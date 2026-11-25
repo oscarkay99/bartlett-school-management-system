@@ -23,20 +23,20 @@ export function ParentRecordActions({ initial, soleFor }: { initial: Values; sol
   );
 }
 
-const STUDENT_FIELDS = (classes: string[], houses: string[]): FieldDef[] => [
+const STUDENT_FIELDS = (classes: string[]): FieldDef[] => [
   { key: "first", label: "First name", required: true }, { key: "middle", label: "Middle name" }, { key: "last", label: "Last name", required: true },
   { key: "dob", label: "Date of birth", type: "date", required: true, validate: (v) => (new Date(v) > new Date("2026-10-12") ? "Cannot be in the future" : undefined) },
-  { key: "gender", label: "Gender", type: "select", options: ["Female", "Male"], required: true }, { key: "classId", label: "Class", type: "select", options: classes, required: true }, { key: "house", label: "House", type: "select", options: houses },
+  { key: "gender", label: "Gender", type: "select", options: ["Female", "Male"], required: true }, { key: "classId", label: "Class", type: "select", options: classes, required: true },
   { key: "status", label: "Enrolment status", type: "select", options: ["Active", "Suspended", "Withdrawn", "Graduated"], required: true }, { key: "address", label: "Residential address", span: 2 },
 ];
-export function StudentRecordActions({ initial, classes, houses, adm }: { initial: Values; classes: string[]; houses: string[]; adm: string }) {
+export function StudentRecordActions({ initial, classes, adm }: { initial: Values; classes: string[]; adm: string }) {
   const { allow } = useRole(); const toast = useToast(); const router = useRouter(); const [edit, setEdit] = useState(false); const [del, setDel] = useState(false); const [typed, setTyped] = useState(""); const [why, setWhy] = useState("");
   const name = `${initial.first} ${initial.last}`;
   return (
     <>
       {allow("students", "edit") && <Button onClick={() => setEdit(true)}><Pencil size={14} />Edit</Button>}
       {allow("students", "delete") && <Button variant="danger" onClick={() => setDel(true)}><Trash2 size={14} />Delete</Button>}
-      {edit && <RecordDialog open onClose={() => setEdit(false)} title={`Edit ${name}`} fields={STUDENT_FIELDS(classes, houses)} initial={initial} submitLabel="Save changes" onSubmit={() => { toast(`${name} updated`); setEdit(false); }} />}
+      {edit && <RecordDialog open onClose={() => setEdit(false)} title={`Edit ${name}`} fields={STUDENT_FIELDS(classes)} initial={initial} submitLabel="Save changes" onSubmit={() => { toast(`${name} updated`); setEdit(false); }} />}
       <Modal open={del} onClose={() => setDel(false)} title={`Delete ${name}`} footer={<><Button onClick={() => setDel(false)}>Cancel</Button><Button variant="danger" disabled={typed !== adm || why.trim().length < 5} onClick={() => { toast(`${name} deleted. Financial history retained in the archive.`); router.push("/students"); }}>Delete student</Button></>}>
         <div className="space-y-3 text-sm"><p>This removes the student from active lists. <b>Invoices, payments and the ledger are never deleted</b> — they are kept in the archive for audit and accounting.</p>
           <Field label={`Type the admission number (${adm}) to confirm`}><input className={inputClass} value={typed} onChange={(e) => setTyped(e.target.value)} /></Field>
