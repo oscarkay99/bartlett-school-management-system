@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BookOpen, FileText, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Utensils, Shapes, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, FileText, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Shapes, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
@@ -19,7 +19,6 @@ const NAV: Nav[] = [
   { href: "/parents", label: "Parents", icon: UsersRound, key: "parents" },
   { href: "/admissions", label: "Admissions", icon: UserPlus, key: "admissions" },
   { href: "/fees", label: "School Fees", icon: Receipt, key: "fees" },
-  { href: "/feeding", label: "Feeding", icon: Utensils, key: "feeding" },
   { href: "/extracurricular", label: "Extracurricular", icon: Shapes, key: "extracurricular" },
   { href: "/invoices", label: "Invoices", icon: FileText, key: "invoices" },
   { href: "/finance", label: "Finance", icon: Landmark, key: "finance" },
@@ -123,7 +122,7 @@ function Topbar({ school, onMenu, role, setRole }: { school: { name: string }; o
       </button>
       <div className="relative">
         <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "quick" ? null : "quick")} aria-label="Quick actions" aria-expanded={open === "quick"}><Plus size={19} /></button>
-        {open === "quick" && <div className={pop}>{[["Register student", "/students/new", "students"], ["Record school fees payment", "/fees?pay=1", "fees"], ["Record feeding payment", "/feeding?pay=1", "feeding"], ["Record extracurricular payment", "/extracurricular?pay=1", "extracurricular"], ["Prepare fee reminders", "/fees?tab=reminders", "fees"], ["Mark attendance", "/attendance", "attendance"], ["Issue inventory", "/inventory?issue=1", "inventory"]].filter(([l, , k]) => ROLES[role].nav.includes(k) && (!l.startsWith("Record") || allowedOp(role, "payments", "create"))).map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
+        {open === "quick" && <div className={pop}>{[["Register student", "/students/new", "students"], ["Record school fees payment", "/fees?pay=1", "fees"], ["Record extracurricular payment", "/extracurricular?pay=1", "extracurricular"], ["Prepare fee reminders", "/fees?tab=reminders", "fees"], ["Mark attendance", "/attendance", "attendance"], ["Issue inventory", "/inventory?issue=1", "inventory"]].filter(([l, , k]) => ROLES[role].nav.includes(k) && (!l.startsWith("Record") || allowedOp(role, "payments", "create"))).map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
       </div>
       <div className="relative">
         <button className="relative grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "notif" ? null : "notif")} aria-label="Notifications"><Bell size={19} /><span className="absolute right-2 top-2 size-2 rounded-full bg-danger" /></button>

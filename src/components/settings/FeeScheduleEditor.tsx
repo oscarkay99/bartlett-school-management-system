@@ -7,7 +7,7 @@ import { Modal, MoneyInput, useToast } from "@/components/ui/interactive";
 import { PeriodSelect, useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
-import { blankTerm, classFees, copyTerm, feedingRate, fromGrid, LEVELS, previousTermWithFees, sumItems, toGrid, validateGrid, type ClassRef, type FeeGrid, type Level, type TermFees } from "@/lib/fees";
+import { blankTerm, copyTerm, fromGrid, termBillLines, LEVELS, previousTermWithFees, sumItems, toGrid, validateGrid, type ClassRef, type FeeGrid, type Level, type TermFees } from "@/lib/fees";
 import { money } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,7 @@ export function FeeScheduleEditor() {
 
       {editing ? <GridEditor key={key} tf={editing} onCancel={() => setDraft(null)} onSave={(tf) => { fs.save(tf); setDraft(null); }} />
         : saved ? <>
-            <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term. Feeding and activities are billed separately."
+            <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term, feeding included. Activities go on a second invoice."
               action={canEdit && !locked ? <Button size="sm" variant="primary" onClick={() => edit(structuredClone(saved))}><Pencil size={13} />Edit fees</Button> : undefined} />
             <p className="text-sm text-muted">Activities this term: {Object.entries(saved.activities).map(([a, m]) => `${a} ${money(m)}`).join(" · ")}</p></>
         : <Card><EmptyState icon={FilePlus2} title={`No fees set for ${term} ${year}`}
@@ -90,9 +90,9 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
             <tr><td colSpan={5} className="px-4 py-2"><Button size="sm" variant="ghost" onClick={() => setG({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] })}><Plus size={13} />Add a fee</Button></td></tr>
           </tbody>
           <tbody className="border-t-2 border-line bg-surface-2/40">
-            <tr className="font-semibold"><td className="px-4 py-2.5">School fees total</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv))}</td>)}<td /></tr>
+            <tr><td className="px-4 py-2"><div className="font-medium">Feeding</div><div className="text-xs text-muted">On every school fees invoice</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
+            <tr className="font-semibold"><td className="px-4 py-2.5">School fees total (with feeding)</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv) + (g.feeding[lv] || 0))}</td>)}<td /></tr>
             <tr><td className="px-4 py-2"><div className="font-medium">Boarding</div><div className="text-xs text-muted">Added for boarders only</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Boarding for ${lv}`} value={g.boarding[lv]} onChange={(m) => setG({ ...g, boarding: { ...g.boarding, [lv]: m } })} /></td>)}<td /></tr>
-            <tr><td className="px-4 py-2"><div className="font-medium">Feeding</div><div className="text-xs text-muted">Billed separately</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
           </tbody>
         </table></div></Card>
 
@@ -134,16 +134,15 @@ function Exceptions({ g, setG, classes }: { g: FeeGrid; setG: (g: FeeGrid) => vo
 
 /** What each class pays in a term: school fees (with what's included), boarder total and feeding. Shared with Fees → Fee structures. */
 export function ClassFeeTable({ tf, classes, title, sub, action }: { tf: TermFees; classes: ClassRef[]; title: string; sub?: string; action?: React.ReactNode }) {
-  const rows = classes.map((c) => ({ c, day: classFees(tf, c, false), boarding: tf.levels[c.level].boarding, feeding: feedingRate(tf, c), extra: tf.overrides[c.id] ?? [] }));
+  const rows = classes.map((c) => ({ c, day: termBillLines(tf, c, false), boarding: tf.levels[c.level].boarding, extra: tf.overrides[c.id] ?? [] }));
   const anyBoarding = rows.some((r) => r.boarding > 0);
   const short = (m: number) => (m / 100).toLocaleString("en-GH");
   return (
-    <Card><CardHeader title={title} sub={sub ?? "School fees per student. Feeding and extracurricular are billed on their own accounts."} action={action} />
+    <Card><CardHeader title={title} sub={sub ?? "School fees per student, feeding included. Extracurricular is billed on a second invoice."} action={action} />
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GHS)</th><th className="whitespace-nowrap px-3 text-right">School fees</th>{anyBoarding && <th className="whitespace-nowrap px-4 text-right">Boarders pay</th>}</tr></thead>
         <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.c.id} className="align-top">
           <td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.c.name}</td>
-          <td className="hidden px-3 py-2.5 text-muted md:table-cell">{r.day.map((i) => { const odd = r.extra.some((e) => e.label === i.label); return <span key={i.label} className={cn("mr-3 inline-block", odd && "font-medium text-info")}>{i.label} {short(i.amount)}</span>; })}
-            <span className="mr-3 inline-block text-xs">· Feeding {short(r.feeding)} (separate)</span></td>
+          <td className="hidden px-3 py-2.5 text-muted md:table-cell">{r.day.map((i) => { const odd = r.extra.some((e) => e.label === i.label); return <span key={i.label} className={cn("mr-3 inline-block", odd && "font-medium text-info")}>{i.label} {short(i.amount)}</span>; })}</td>
           <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">{money(sumItems(r.day))}</td>
           {anyBoarding && <td className="num whitespace-nowrap px-4 py-2.5 text-right">{r.boarding ? money(sumItems(r.day) + r.boarding) : "—"}</td>}</tr>)}</tbody></table></div>
       {rows.some((r) => r.extra.length) && <p className="border-t border-line px-4 py-2 text-xs text-muted">Highlighted fees differ for that class only.</p>}</Card>

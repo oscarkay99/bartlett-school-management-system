@@ -36,6 +36,11 @@ export function classFees(tf: TermFees, cls: ClassRef, boarding: boolean): FeeIt
   return lines.filter((l) => l.amount > 0).map((l) => ({ ...l }));
 }
 export const feedingRate = (tf: TermFees, cls: ClassRef) => tf.levels[cls.level].feeding;
+/** Everything on a student's school fees invoice this term: the class's fee lines, then boarding, then feeding. */
+export function termBillLines(tf: TermFees, cls: ClassRef, boarding: boolean): FeeItem[] {
+  const feeding = feedingRate(tf, cls);
+  return [...classFees(tf, cls, boarding), ...(feeding > 0 ? [{ label: "Feeding", amount: feeding }] : [])];
+}
 export const sumItems = (items: FeeItem[]) => items.reduce((a, i) => a + i.amount, 0);
 
 /** A fresh copy of another term's fees for a new year/term — the starting point for "Copy from last term". */
@@ -105,7 +110,8 @@ export function fromGrid(g: FeeGrid, year: string, term: string): TermFees {
   for (const e of g.exceptions) (overrides[e.classId] ??= []).push({ label: e.label.trim(), amount: e.amount });
   return {
     year, term, overrides, activities: { ...g.activities },
-    levels: Object.fromEntries(LEVELS.map((lv) => [lv, { items: g.rows.filter((r) => r.amounts[lv] > 0).map((r) => ({ label: r.label.trim(), amount: r.amounts[lv] })), boarding: g.boarding[lv], feeding: g.feeding[lv] }])) as Record<Level, LevelFees>,
+    // A named row left at 0 for every level (e.g. a levy not charged yet) is kept as a placeholder; it prints as "—".
+    levels: Object.fromEntries(LEVELS.map((lv) => [lv, { items: g.rows.filter((r) => r.amounts[lv] > 0 || LEVELS.every((l) => !r.amounts[l])).map((r) => ({ label: r.label.trim(), amount: r.amounts[lv] })), boarding: g.boarding[lv], feeding: g.feeding[lv] }])) as Record<Level, LevelFees>,
   };
 }
 

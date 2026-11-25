@@ -208,7 +208,8 @@ export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverv
 // ---- General ledger (derived; double-entry) ----
 export const OPENING_CASH: Minor = 18_450_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
-const incomeAccount = (account: FeeAccount, label: string) => (account === "feeding" ? "4200 Feeding Fees" : account === "extra" ? "4500 Extracurricular Fees" : label === "Tuition" ? "4100 Tuition Fees" : label === "Boarding" ? "4300 Boarding Fees" : "4400 Levies & Other Fees");
+// Feeding is a line on the school fees invoice, but its income is still posted to its own account.
+const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extracurricular Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : label === "Boarding" ? "4300 Boarding Fees" : "4400 Levies & Other Fees");
 const expenseAccount = (c: string) => `5${({ Salaries: "100", Utilities: "200", Internet: "250", Repairs: "300", Stationery: "350", "Food Supplies": "400", Transport: "450", "Inventory Purchases": "500", Software: "550", Building: "600", Maintenance: "650" } as Record<string, string>)[c] ?? "900"} ${c}`;
 export function generalLedger(): GLLine[] {
   const L: GLLine[] = [{ date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "1100 Bank & Cash", dr: OPENING_CASH, cr: 0 }, { date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "3100 Accumulated Fund", dr: 0, cr: OPENING_CASH }];

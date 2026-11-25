@@ -7,13 +7,13 @@ import { Modal, useToast } from "@/components/ui/interactive";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
-import { feedingRate, invoiceStem, termKey } from "@/lib/fees";
+import { invoiceStem, termKey } from "@/lib/fees";
 import { money } from "@/lib/money";
 
 /** A student who can be billed in this account. `billed` maps a term key ("2026/2027|Term 1") to the lines they already have that term. */
 export interface BillCandidate { id: string; name: string; adm: string; classId: string; cls: string; boarding: boolean; billed: Record<string, string[]> }
 
-// Issue a feeding bill or an extracurricular invoice for one student, for the term selected in the top bar.
+// Issue an extracurricular invoice (the second invoice parents receive) for one student, for the term selected in the top bar.
 // Prices come from that term's fee schedule. Front-end preview: the backend assigns the real number.
 export function IssueBillDialog({ open, onClose, account, candidates }: { open: boolean; onClose: () => void; account: FeeAccount; candidates: BillCandidate[] }) {
   const A = ACCOUNTS[account]; const toast = useToast();
@@ -25,15 +25,14 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
   const offered = cls?.level === "Kindergarten" ? ["Music (Piano)"] : [...ACTIVITIES];
   const items = ((): { label: string; amount: number }[] => {
     if (!st || !cls || !tf) return [];
-    if (account === "feeding") return billed.includes("Feeding") ? [] : [{ label: "Feeding", amount: feedingRate(tf, cls) }];
     return acts.filter((a) => !billed.includes(a)).map((a) => ({ label: a, amount: tf.activities[a] ?? 0 }));
   })();
   const total = items.reduce((a, b) => a + b.amount, 0);
-  const err = !tf ? `No fees set for ${term} ${year}` : !st ? "Select a student" : account === "feeding" && billed.includes("Feeding") ? `${st.name} already has a feeding bill for ${term}` : items.length === 0 ? "Select at least one activity" : items.some((i) => i.amount <= 0) ? `${items.find((i) => i.amount <= 0)!.label} has no price for ${term}` : "";
+  const err = !tf ? `No fees set for ${term} ${year}` : !st ? "Select a student" : items.length === 0 ? "Select at least one activity" : items.some((i) => i.amount <= 0) ? `${items.find((i) => i.amount <= 0)!.label} has no price for ${term}` : "";
   const close = () => { setSid(""); setFilter(""); setActs([]); setDone(null); onClose(); };
   const list = candidates.filter((c) => !filter || (c.name + c.adm).toLowerCase().includes(filter.toLowerCase())).slice(0, 6);
   return (
-    <Modal open={open} onClose={close} title={done ? "Bill issued" : `${account === "feeding" ? "Add student to feeding" : "Enrol & bill student"} — ${term} ${year}`} wide
+    <Modal open={open} onClose={close} title={done ? "Bill issued" : `Enrol & bill student — ${term} ${year}`} wide
       footer={done ? <Button variant="primary" onClick={close}>Done</Button> : <><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={!!err} onClick={() => { const no = `${invoiceStem(A.invoicePrefix, year, term)}-${String(900 + Math.floor(Math.random() * 99)).padStart(4, "0")}`; setDone(no); toast(`${A.label} bill ${no} issued`); }}>Issue bill · {money(total)}</Button></>}>
       {done ? (
         <div className="space-y-2 text-center"><CheckCircle2 className="mx-auto text-ok" size={40} />

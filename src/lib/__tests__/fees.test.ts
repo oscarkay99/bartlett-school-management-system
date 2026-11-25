@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blankTerm, classFees, copyTerm, fromGrid, toGrid, validateGrid, feedingRate, findTerm, invoiceStem, mergeSchedule, previousTermWithFees, sumItems, termKey, validateTermFees, type ClassRef } from "../fees";
+import { blankTerm, classFees, copyTerm, termBillLines, fromGrid, toGrid, validateGrid, feedingRate, findTerm, invoiceStem, mergeSchedule, previousTermWithFees, sumItems, termKey, validateTermFees, type ClassRef } from "../fees";
 import { ghs } from "../money";
 import * as Q from "../data/queries";
 
@@ -10,19 +10,25 @@ const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!;
 const order = Q.SCHOOL.calendar.flatMap((y) => y.terms.map((t) => ({ year: y.name, term: t.name, start: t.start }))).sort((a, b) => a.start.localeCompare(b.start));
 
 describe("Fee schedule — what a class pays in a term", () => {
+  it("feeding goes on the school fees invoice, after the fee lines; the ICT levy is a 0 placeholder", () => {
+    const lines = termBillLines(t1, cls("Primary 3"), false);
+    expect(lines.map((l) => l.label)).toEqual(["Tuition", "Books", "PTA", "Feeding"]);
+    expect(sumItems(lines)).toBe(ghs(3300));
+    expect(t1.levels.Primary.items.find((i) => i.label === "ICT & Development Levy")!.amount).toBe(0);
+  });
   it("every seeded term is valid", () => { for (const tf of Q.feeSchedule) expect(validateTermFees(tf, classes), termKey(tf.year, tf.term)).toBe(""); });
-  it("fees differ by level: KG 2,150 · Primary 2,850 · JHS 3,850 for a day student in Term 1", () => {
-    expect(sumItems(classFees(t1, cls("KG 1"), false))).toBe(ghs(2150));
-    expect(sumItems(classFees(t1, cls("Primary 3"), false))).toBe(ghs(2850));
-    expect(sumItems(classFees(t1, cls("JHS 2"), false))).toBe(ghs(3850));
+  it("fees differ by level: KG 2,000 · Primary 2,700 · JHS 3,600 for a day student in Term 1 (before feeding)", () => {
+    expect(sumItems(classFees(t1, cls("KG 1"), false))).toBe(ghs(2000));
+    expect(sumItems(classFees(t1, cls("Primary 3"), false))).toBe(ghs(2700));
+    expect(sumItems(classFees(t1, cls("JHS 2"), false))).toBe(ghs(3600));
   });
   it("boarders pay the level's boarding add-on as its own line", () => {
     const b = classFees(t1, cls("JHS 1"), true);
-    expect(b.find((i) => i.label === "Boarding")!.amount).toBe(ghs(1500)); expect(sumItems(b)).toBe(ghs(5350));
+    expect(b.find((i) => i.label === "Boarding")!.amount).toBe(ghs(1500)); expect(sumItems(b)).toBe(ghs(5100));
     expect(classFees(t1, cls("KG 1"), true).some((i) => i.label === "Boarding")).toBe(false); // no boarding at KG
   });
   it("the same class can pay different amounts in different terms", () => {
-    expect(sumItems(classFees(t2, cls("Primary 3"), false))).toBe(ghs(2600)); // no books in Term 2
+    expect(sumItems(classFees(t2, cls("Primary 3"), false))).toBe(ghs(2450)); // no books in Term 2
     expect(classFees(t2, cls("Primary 3"), false).some((i) => i.label === "Books")).toBe(false);
     expect(feedingRate(t2, cls("KG 2"))).toBe(ghs(450));
   });
@@ -32,14 +38,14 @@ describe("Fee schedule — what a class pays in a term", () => {
     const tf = { ...t1, overrides: { [cls("JHS 3").id]: [{ label: "Examination", amount: ghs(350) }, { label: "PTA", amount: 0 }] } };
     const j3 = classFees(tf, cls("JHS 3"), false);
     expect(j3.find((i) => i.label === "Examination")!.amount).toBe(ghs(350)); expect(j3.some((i) => i.label === "PTA")).toBe(false);
-    expect(j3.map((i) => i.label).slice(0, 3)).toEqual(["Tuition", "Books", "ICT & Development Levy"]); // order kept
+    expect(j3.map((i) => i.label)).toEqual(["Tuition", "Books", "Examination"]); // order kept; uncharged ICT levy and removed PTA left out
   });
   // Except Ama Mensah: her demo invoice is hand-set to exactly GHS 3,500 (see seed.ts and the acceptance tests).
   it("seeded Term 1 invoices match the schedule for every student", () => {
     const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!.id;
     for (const i of Q.invoices.filter((x) => x.account === "fees" && x.studentId !== ama)) {
       const s = Q.getStudent(i.studentId)!; const tf = findTerm(Q.feeSchedule, i.year, i.term)!;
-      expect(i.items, i.no).toEqual(classFees(tf, cls(Q.getClass(s.classId).name), s.category === "Boarding"));
+      expect(i.items, i.no).toEqual(termBillLines(tf, cls(Q.getClass(s.classId).name), s.category === "Boarding"));
     }
   });
 });
@@ -92,10 +98,10 @@ describe("Fee schedule — locking and saved edits", () => {
 
 describe("What a parent owes for the term", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-  it("term total = school fees + feeding + activities for that term, each net of discounts", () => {
+  it("term total = school fees invoice (feeding included) + extracurricular invoice, each net of discounts", () => {
     const tc = Q.termCharges(ama().id, "2026/2027", "Term 1");
-    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3500)], ["feeding", ghs(600)], ["extra", ghs(400)]]);
-    expect(tc.total).toBe(ghs(4500));
+    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3950)], ["extra", ghs(400)]]);
+    expect(tc.total).toBe(ghs(4350));
     expect(Q.termCharges(ama().id, "2026/2027", "Term 2").total).toBe(0); // nothing billed for Term 2 yet
   });
   it("a scholarship is its own named line, taken off tuition only", () => {

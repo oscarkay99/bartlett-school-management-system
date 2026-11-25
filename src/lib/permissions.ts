@@ -12,8 +12,8 @@ type Grants = "all" | Partial<Record<Resource, Op[]>>;
 export type MoneyAccess = "full" | "balances" | "none";
 
 export interface RoleDef { label: string; person: string; nav: string[]; grants: Grants; money: MoneyAccess }
-const ALL_NAV = ["dashboard", "students", "parents", "admissions", "fees", "feeding", "extracurricular", "invoices", "finance", "inventory", "academics", "staff", "attendance", "comms", "reports", "settings"];
-const BILLING_NAV = ["fees", "feeding", "extracurricular"];
+const ALL_NAV = ["dashboard", "students", "parents", "admissions", "fees", "extracurricular", "invoices", "finance", "inventory", "academics", "staff", "attendance", "comms", "reports", "settings"];
+const BILLING_NAV = ["fees", "extracurricular"];
 
 export const ROLES: Record<string, RoleDef> = {
   // The Owner has unrestricted read / create / edit / delete / approve across the whole system.
@@ -37,7 +37,7 @@ export const moneyAccess = (role: string): MoneyAccess => ROLES[role]?.money ?? 
 
 // Which nav key guards a path. Print pages and unknown paths are not guarded here.
 const ROUTE_KEYS: [string, string][] = [
-  ["/students", "students"], ["/parents", "parents"], ["/admissions", "admissions"], ["/fees", "fees"], ["/feeding", "feeding"], ["/extracurricular", "extracurricular"], ["/invoices", "invoices"],
+  ["/students", "students"], ["/parents", "parents"], ["/admissions", "admissions"], ["/fees", "fees"], ["/extracurricular", "extracurricular"], ["/invoices", "invoices"],
   ["/finance", "finance"], ["/inventory", "inventory"], ["/academics", "academics"], ["/staff", "staff"], ["/attendance", "attendance"], ["/communications", "comms"], ["/reports", "reports"], ["/settings", "settings"],
 ];
 export function routeKey(path: string): string | null {
