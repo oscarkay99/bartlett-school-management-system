@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { PageHeader } from "@/components/ui/primitives";
 import { FeedingWorkspace } from "@/components/feeding/FeedingWorkspace";
 import * as Q from "@/lib/data/queries";
@@ -14,6 +15,7 @@ export default function FeedingPage() {
   const kitchen = Q.inventory.filter((i) => i.category === "Kitchen & Feeding").map((i) => ({ id: i.id, name: i.name, unit: i.unit, onHand: onHand(i.id), reorder: i.reorder, expiry: i.expiry }));
   return (<>
     <PageHeader title="Feeding" sub="Who is on feeding, what has been paid (with school fees or daily, weekly, monthly), the meal register and kitchen stock. Feeding is billed on the school fees invoice." />
-    <FeedingWorkspace students={students} payments={payments} kitchen={kitchen} today={Q.TODAY} />
+    {/* The workspace reads ?tab= from the URL, so it needs a Suspense boundary for the static export. */}
+    <Suspense fallback={null}><FeedingWorkspace students={students} payments={payments} kitchen={kitchen} today={Q.TODAY} /></Suspense>
   </>);
 }
