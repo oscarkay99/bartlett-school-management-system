@@ -13,7 +13,7 @@ import { feedingStatus, studentFeedingRate, validateException, type FeedingExcep
 import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-interface FStudent { id: string; name: string; adm: string; classId: string; cls: string; category: string }
+interface FStudent { id: string; name: string; adm: string; classId: string; cls: string }
 interface KitchenItem { id: string; name: string; unit: string; onHand: number; reorder: number; expiry?: string }
 
 // Feeding module: who is on feeding this term, the daily meal register, and kitchen stock.
@@ -80,7 +80,8 @@ function StudentsTab({ rows, canEdit, termLabel, onSave, classes, termKey: key }
   </>);
 }
 
-function ChangeFeeding({ row, termLabel, termKey: key, onClose, onSave }: { row: Row; termLabel: string; termKey: string; onClose: () => void; onSave: (ex: FeedingException | null) => void }) {
+/** Change one student's feeding for a term. Shared by the Feeding page and the student profile's Feeding tab. */
+export function ChangeFeeding({ row, termLabel, termKey: key, onClose, onSave }: { row: Pick<Row, "id" | "name" | "cls" | "classRate" | "ex">; termLabel: string; termKey: string; onClose: () => void; onSave: (ex: FeedingException | null) => void }) {
   const toast = useToast();
   const [mode, setMode] = useState<"class" | "rate" | "off">(row.ex ? (row.ex.onFeeding ? "rate" : "off") : "class");
   const [rate, setRate] = useState(row.ex?.rate ?? row.classRate); const [reason, setReason] = useState(row.ex?.reason ?? "");

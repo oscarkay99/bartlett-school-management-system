@@ -12,32 +12,32 @@ const order = Q.SCHOOL.calendar.flatMap((y) => y.terms.map((t) => ({ year: y.nam
 
 describe("Fee schedule — what a class pays in a term", () => {
   it("feeding goes on the school fees invoice, after the fee lines; the ICT levy is a 0 placeholder", () => {
-    const lines = termBillLines(t1, cls("Primary 3"), false);
+    const lines = termBillLines(t1, cls("Primary 3"));
     expect(lines.map((l) => l.label)).toEqual(["Tuition", "Books", "PTA", "Feeding"]);
     expect(sumItems(lines)).toBe(ghs(3300));
     expect(t1.levels.Primary.items.find((i) => i.label === "ICT & Development Levy")!.amount).toBe(0);
   });
   it("every seeded term is valid", () => { for (const tf of Q.feeSchedule) expect(validateTermFees(tf, classes), termKey(tf.year, tf.term)).toBe(""); });
   it("fees differ by level: KG 2,000 · Primary 2,700 · JHS 3,600 for a day student in Term 1 (before feeding)", () => {
-    expect(sumItems(classFees(t1, cls("KG 1"), false))).toBe(ghs(2000));
-    expect(sumItems(classFees(t1, cls("Primary 3"), false))).toBe(ghs(2700));
-    expect(sumItems(classFees(t1, cls("JHS 2"), false))).toBe(ghs(3600));
+    expect(sumItems(classFees(t1, cls("KG 1")))).toBe(ghs(2000));
+    expect(sumItems(classFees(t1, cls("Primary 3")))).toBe(ghs(2700));
+    expect(sumItems(classFees(t1, cls("JHS 2")))).toBe(ghs(3600));
   });
-  it("boarders pay the level's boarding add-on as its own line", () => {
-    const b = classFees(t1, cls("JHS 1"), true);
-    expect(b.find((i) => i.label === "Boarding")!.amount).toBe(ghs(1500)); expect(sumItems(b)).toBe(ghs(5100));
-    expect(classFees(t1, cls("KG 1"), true).some((i) => i.label === "Boarding")).toBe(false); // no boarding at KG
+  it("there is no boarding: no Boarding line on any invoice or in the schedule", () => {
+    for (const c of classes) expect(termBillLines(t1, c).some((i) => i.label === "Boarding"), c.name).toBe(false);
+    expect(Q.invoices.some((i) => i.items.some((x) => x.label === "Boarding"))).toBe(false);
+    expect(Object.values(t1.levels).some((l) => "boarding" in l)).toBe(false);
   });
   it("the same class can pay different amounts in different terms", () => {
-    expect(sumItems(classFees(t2, cls("Primary 3"), false))).toBe(ghs(2450)); // no books in Term 2
-    expect(classFees(t2, cls("Primary 3"), false).some((i) => i.label === "Books")).toBe(false);
+    expect(sumItems(classFees(t2, cls("Primary 3")))).toBe(ghs(2450)); // no books in Term 2
+    expect(classFees(t2, cls("Primary 3")).some((i) => i.label === "Books")).toBe(false);
     expect(feedingRate(t2, cls("KG 2"))).toBe(ghs(450));
   });
   it("class adjustments replace a level line or add one for that class only", () => {
-    expect(classFees(t2, cls("JHS 3"), false).find((i) => i.label === "BECE Registration")!.amount).toBe(ghs(320));
-    expect(classFees(t2, cls("JHS 2"), false).some((i) => i.label === "BECE Registration")).toBe(false);
+    expect(classFees(t2, cls("JHS 3")).find((i) => i.label === "BECE Registration")!.amount).toBe(ghs(320));
+    expect(classFees(t2, cls("JHS 2")).some((i) => i.label === "BECE Registration")).toBe(false);
     const tf = { ...t1, overrides: { [cls("JHS 3").id]: [{ label: "Examination", amount: ghs(350) }, { label: "PTA", amount: 0 }] } };
-    const j3 = classFees(tf, cls("JHS 3"), false);
+    const j3 = classFees(tf, cls("JHS 3"));
     expect(j3.find((i) => i.label === "Examination")!.amount).toBe(ghs(350)); expect(j3.some((i) => i.label === "PTA")).toBe(false);
     expect(j3.map((i) => i.label)).toEqual(["Tuition", "Books", "Examination"]); // order kept; uncharged ICT levy and removed PTA left out
   });
@@ -46,7 +46,7 @@ describe("Fee schedule — what a class pays in a term", () => {
     const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!.id;
     for (const i of Q.invoices.filter((x) => x.account === "fees" && x.studentId !== ama)) {
       const s = Q.getStudent(i.studentId)!; const tf = findTerm(Q.feeSchedule, i.year, i.term)!;
-      expect(i.items, i.no).toEqual(termBillLines(tf, cls(Q.getClass(s.classId).name), s.category === "Boarding"));
+      expect(i.items, i.no).toEqual(termBillLines(tf, cls(Q.getClass(s.classId).name)));
     }
   });
 });
@@ -64,12 +64,11 @@ describe("Fee schedule — setting up a new term", () => {
     const b = blankTerm("2026/2027", "Term 3", ["STEM"]);
     expect(validateTermFees(b, classes)).toMatch(/add up to zero/);
   });
-  it("rejects unnamed, duplicate, negative and boarding-as-line entries", () => {
+  it("rejects unnamed, duplicate and negative entries", () => {
     const bad = (f: (tf: typeof t1) => void) => { const tf = structuredClone(t1); f(tf); return validateTermFees(tf, classes); };
     expect(bad((tf) => { tf.levels.Primary.items[1].label = " "; })).toMatch(/needs a name/);
     expect(bad((tf) => { tf.levels.Primary.items[1].label = "tuition"; })).toMatch(/appears twice/);
-    expect(bad((tf) => { tf.levels.JHS.boarding = -5; })).toMatch(/zero or more/);
-    expect(bad((tf) => { tf.levels.Kindergarten.items.push({ label: "Boarding", amount: 1 }); })).toMatch(/Boarding field/);
+    expect(bad((tf) => { tf.levels.JHS.feeding = -5; })).toMatch(/zero or more/);
     expect(bad((tf) => { tf.overrides.zzz = [{ label: "X", amount: 1 }]; })).toMatch(/no longer exists/);
   });
 });
@@ -125,7 +124,7 @@ describe("Fee schedule — spreadsheet editor", () => {
   const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!;
   it("table round-trips a term without changing what any class pays", () => {
     const back = fromGrid(toGrid(t2), t2.year, t2.term);
-    for (const c of classes) for (const b of [false, true]) expect(classFees(back, c, b)).toEqual(classFees(t2, c, b));
+    for (const c of classes) expect(classFees(back, c)).toEqual(classFees(t2, c));
     expect(back.activities).toEqual(t2.activities);
   });
   it("one row per fee; a level that doesn't pay a fee is 0 and gets no line", () => {
@@ -148,16 +147,16 @@ describe("Fee schedule — spreadsheet editor", () => {
 
 describe("Generate term invoices", () => {
   const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!;
-  const cand = (name: string, classId: string, boarding = false, scholarship = false) => ({ id: name, name, adm: "A", classId, boarding, scholarship });
+  const cand = (name: string, classId: string, scholarship = false) => ({ id: name, name, adm: "A", classId, scholarship });
   it("builds one numbered invoice per student from the fee schedule, feeding included", () => {
-    const inv = buildTermInvoices([cand("a", cls("Primary 3").id), cand("b", cls("JHS 1").id, true)], classes, t2, "2027-01-11");
+    const inv = buildTermInvoices([cand("a", cls("Primary 3").id), cand("b", cls("JHS 1").id)], classes, t2, "2027-01-11");
     expect(inv.map((i) => i.no)).toEqual(["INV-2627-T2-0001", "INV-2627-T2-0002"]);
     expect(generatedTotal(inv[0])).toBe(ghs(2450 + 600));
-    expect(inv[1].items.map((i) => i.label)).toEqual(["Tuition", "PTA", "Examination", "Boarding", "Feeding"]);
+    expect(inv[1].items.map((i) => i.label)).toEqual(["Tuition", "PTA", "Examination", "Feeding"]);
     expect([inv[0].billedOn, inv[0].dueOn]).toEqual(["2027-01-11", "2027-02-08"]);
   });
   it("continues numbering and gives scholarship students 25% off tuition", () => {
-    const [i] = buildTermInvoices([cand("c", cls("KG 1").id, false, true)], classes, t2, "2027-01-11", 176);
+    const [i] = buildTermInvoices([cand("c", cls("KG 1").id, true)], classes, t2, "2027-01-11", 176);
     expect(i.no).toBe("INV-2627-T2-0177"); expect(i.discount).toBe(ghs(450));
   });
   it("ignores malformed saved invoices", () => {

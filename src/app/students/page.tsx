@@ -7,7 +7,7 @@ export const metadata = { title: "Students — EduFlow" };
 export default function StudentsPage() {
   const rows: StudentRow[] = Q.students.map((s) => {
     const f = Q.feeSummary(s.id);
-    return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId).name, classId: s.classId, cat: s.category, status: s.status, fee: f.status, balance: f.balance, medical: !!s.medicalAlert,
+    return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId).name, classId: s.classId, status: s.status, fee: f.status, balance: f.balance, medical: !!s.medicalAlert,
       guardians: s.guardians.filter((g) => g.verified).map((g) => Q.getGuardian(g.guardianId)!.name).join(", "), guardianCount: s.guardians.filter((g) => g.verified).length };
   });
   return (

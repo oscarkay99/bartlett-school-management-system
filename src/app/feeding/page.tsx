@@ -4,7 +4,7 @@ import * as Q from "@/lib/data/queries";
 
 export const metadata = { title: "Feeding — EduFlow" };
 export default function FeedingPage() {
-  const students = Q.activeStudents().map((s) => ({ id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, category: s.category }));
+  const students = Q.activeStudents().map((s) => ({ id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name }));
   const onHand = (id: string) => Q.inventory.find((i) => i.id === id)!.onHand;
   const kitchen = Q.inventory.filter((i) => i.category === "Kitchen & Feeding").map((i) => ({ id: i.id, name: i.name, unit: i.unit, onHand: onHand(i.id), reorder: i.reorder, expiry: i.expiry }));
   return (<>

@@ -10,6 +10,7 @@ import { RecordPaymentButton } from "@/components/students/ProfileActions";
 import { MedicalGate } from "@/components/students/MedicalGate";
 import { StudentRecordActions } from "@/components/RecordActions";
 import { GuardiansPanel } from "@/components/students/GuardiansPanel";
+import { StudentFeeding } from "@/components/feeding/StudentFeeding";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "@/lib/accounts";
@@ -44,7 +45,7 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
   const tabs = [
     { id: "overview", label: "Overview", content: (
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2"><CardHeader title="Personal & enrolment" /><div className="px-4 pb-4">{dl([["Admission no.", s.admissionNo], ["Date of birth", `${fmtDate(s.dob)} (${ageFrom(s.dob)} yrs)`], ["Gender", s.gender], ["Nationality", s.nationality], ["Class", cls.name], ["Category", s.category], ["House", s.house], ["Admitted", fmtDate(s.admittedOn)], ["Previous school", s.previousSchool ?? "—"], ["Address", s.address]])}</div></Card>
+        <Card className="lg:col-span-2"><CardHeader title="Personal & enrolment" /><div className="px-4 pb-4">{dl([["Admission no.", s.admissionNo], ["Date of birth", `${fmtDate(s.dob)} (${ageFrom(s.dob)} yrs)`], ["Gender", s.gender], ["Nationality", s.nationality], ["Class", cls.name], ["House", s.house], ["Admitted", fmtDate(s.admittedOn)], ["Previous school", s.previousSchool ?? "—"], ["Address", s.address]])}</div></Card>
         <Card><CardHeader title="At a glance" /><div className="space-y-3 px-4 pb-4">
           <MoneyGate level="balances"><div><div className="mb-1 flex justify-between text-xs text-muted"><span>Fees paid</span><span>{Math.round((f.paid / Math.max(1, f.billed)) * 100)}%</span></div><Progress value={(f.paid / Math.max(1, f.billed)) * 100} tone={tone as "ok"} /></div></MoneyGate>
           <div><div className="mb-1 flex justify-between text-xs text-muted"><span>Attendance</span><span>{att.rate}%</span></div><Progress value={att.rate} tone={att.rate > 90 ? "ok" : "warn"} /></div>
@@ -59,6 +60,9 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
           <tbody className="divide-y divide-line">{grades.map((g) => <tr key={g.subject}><td className="px-4 py-2.5">{g.subject}</td><td className="num px-3 text-right">{g.ca}</td><td className="num px-3 text-right">{g.exam}</td><td className="num px-3 text-right font-medium">{g.total}</td><td className="px-4 text-right"><Badge tone={g.grade <= "B" ? "ok" : g.grade === "C" ? "info" : g.grade === "D" ? "warn" : "danger"}>{g.grade} · {g.label}</Badge></td></tr>)}</tbody></table>
         <div className="border-t border-line px-4 py-3 text-sm">Average: <b>{Math.round(grades.reduce((a, g) => a + g.total, 0) / Math.max(1, grades.length))}%</b></div></Card>) },
     ...accts.map(({ id: acc, a, f: af }) => ({ id: acc, label: a.label, money: true, badge: af.balance > 0 ? "Owing" : undefined, content: <AccountPanel studentId={s.id} account={acc} payStudent={payStudentFor(acc)} usedRefs={usedRefs} /> })),
+    // Feeding is billed on the school fees invoice; this tab shows the student's feeding for the term and what has been billed.
+    { id: "feeding", label: "Feeding", money: true, content: <StudentFeeding student={{ id: s.id, name: Q.fullName(s), classId: s.classId, cls: cls.name }}
+      history={Q.invoicesOf(s.id, "fees").flatMap((i) => { const l = i.items.find((x) => x.label === "Feeding"); return l ? [{ invoice: i.no, term: `${i.term} ${i.year}`, amount: l.amount }] : []; })} /> },
     { id: "attendance", label: "Attendance", content: <Card><div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">{[["Present", att.present], ["Absent", att.absent], ["Late", att.late], ["Rate", `${att.rate}%`]].map(([k, v]) => <div key={k}><div className="text-xs text-muted">{k}</div><div className="num text-2xl font-semibold">{v}</div></div>)}</div></Card> },
     { id: "inventory", label: "Items Issued", badge: String(issues.length), content: (
       <Card>{issues.length === 0 ? <p className="p-6 text-muted">No items issued.</p> : <table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Item</th><th className="text-right">Qty</th><th className="px-3 text-left">Issued</th><th className="text-left">Return</th></tr></thead><tbody className="divide-y divide-line">{issues.map((i, k) => <tr key={k}><td className="px-4 py-2.5">{i.item}</td><td className="num text-right">{i.qty}</td><td className="px-3">{fmtDate(i.date)}</td><td>{i.returnRequired ? <Badge tone={i.returned ? "ok" : "warn"}>{i.returned ? "Returned" : "Return due at term end"}</Badge> : <Badge>Consumable</Badge>}</td></tr>)}</tbody></table>}</Card>) },
@@ -71,8 +75,8 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
 
   return (
     <>
-      <PageHeader crumbs={<Link href="/students" className="text-xs text-muted hover:text-fg">← Students</Link>} title={Q.fullName(s)} sub={`${s.admissionNo} · ${cls.name} · ${s.category}`}
-        actions={<><LinkButton href={`/print/statement/${s.id}`}><Download size={14} />Statement</LinkButton><StudentRecordActions adm={s.admissionNo} classes={Q.classes.map((c) => c.name)} houses={["Nkrumah", "Aggrey", "Yaa Asantewaa", "Sutherland"]} initial={{ first: s.first, middle: s.middle ?? "", last: s.last, dob: s.dob, gender: s.gender, classId: cls.name, category: s.category, house: s.house, status: s.status, address: s.address }} /><RecordPaymentButton student={payStudentFor("fees")} usedRefs={usedRefs} /></>} />
+      <PageHeader crumbs={<Link href="/students" className="text-xs text-muted hover:text-fg">← Students</Link>} title={Q.fullName(s)} sub={`${s.admissionNo} · ${cls.name}`}
+        actions={<><LinkButton href={`/print/statement/${s.id}`}><Download size={14} />Statement</LinkButton><StudentRecordActions adm={s.admissionNo} classes={Q.classes.map((c) => c.name)} houses={["Nkrumah", "Aggrey", "Yaa Asantewaa", "Sutherland"]} initial={{ first: s.first, middle: s.middle ?? "", last: s.last, dob: s.dob, gender: s.gender, classId: cls.name, house: s.house, status: s.status, address: s.address }} /><RecordPaymentButton student={payStudentFor("fees")} usedRefs={usedRefs} /></>} />
       <div className="mb-5 flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4">
         <Avatar name={Q.shortName(s)} size={64} />
         <div className="flex flex-wrap gap-2"><StatusBadge status={s.status} />{s.medicalAlert && <Badge tone="danger"><AlertTriangle size={11} />Medical alert</Badge>}{s.scholarship && <Badge tone="info">{s.scholarship}</Badge>}</div>

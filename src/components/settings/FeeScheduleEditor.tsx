@@ -65,7 +65,7 @@ function RequestChange({ year, term }: { year: string; term: string }) {
   </>);
 }
 
-// One table: a row per fee, a column per level. Boarding and feeding are rows too.
+// One table: a row per fee, a column per level. Feeding is a row too.
 function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => void; onSave: (tf: TermFees) => void }) {
   const { classes } = useFeeSchedule(); const toast = useToast();
   const [g, setG] = useState<FeeGrid>(() => toGrid(tf)); const [tried, setTried] = useState(false);
@@ -92,7 +92,6 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
           <tbody className="border-t-2 border-line bg-surface-2/40">
             <tr><td className="px-4 py-2"><div className="font-medium">Feeding</div><div className="text-xs text-muted">On every school fees invoice</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
             <tr className="font-semibold"><td className="px-4 py-2.5">School fees total (with feeding)</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv) + (g.feeding[lv] || 0))}</td>)}<td /></tr>
-            <tr><td className="px-4 py-2"><div className="font-medium">Boarding</div><div className="text-xs text-muted">Added for boarders only</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Boarding for ${lv}`} value={g.boarding[lv]} onChange={(m) => setG({ ...g, boarding: { ...g.boarding, [lv]: m } })} /></td>)}<td /></tr>
           </tbody>
         </table></div></Card>
 
@@ -132,19 +131,17 @@ function Exceptions({ g, setG, classes }: { g: FeeGrid; setG: (g: FeeGrid) => vo
   );
 }
 
-/** What each class pays in a term: school fees (with what's included), boarder total and feeding. Shared with Fees → Fee structures. */
+/** What each class pays in a term: school fees (with what's included), feeding included. Shared with Fees → Fee structures. */
 export function ClassFeeTable({ tf, classes, title, sub, action }: { tf: TermFees; classes: ClassRef[]; title: string; sub?: string; action?: React.ReactNode }) {
-  const rows = classes.map((c) => ({ c, day: termBillLines(tf, c, false), boarding: tf.levels[c.level].boarding, extra: tf.overrides[c.id] ?? [] }));
-  const anyBoarding = rows.some((r) => r.boarding > 0);
+  const rows = classes.map((c) => ({ c, day: termBillLines(tf, c), extra: tf.overrides[c.id] ?? [] }));
   const short = (m: number) => (m / 100).toLocaleString("en-GH");
   return (
     <Card><CardHeader title={title} sub={sub ?? "School fees per student, feeding included. Extra classes are billed separately."} action={action} />
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GHS)</th><th className="whitespace-nowrap px-3 text-right">School fees</th>{anyBoarding && <th className="whitespace-nowrap px-4 text-right">Boarders pay</th>}</tr></thead>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GHS)</th><th className="whitespace-nowrap px-3 text-right">School fees</th></tr></thead>
         <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.c.id} className="align-top">
           <td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.c.name}</td>
           <td className="hidden px-3 py-2.5 text-muted md:table-cell">{r.day.map((i) => { const odd = r.extra.some((e) => e.label === i.label); return <span key={i.label} className={cn("mr-3 inline-block", odd && "font-medium text-info")}>{i.label} {short(i.amount)}</span>; })}</td>
-          <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">{money(sumItems(r.day))}</td>
-          {anyBoarding && <td className="num whitespace-nowrap px-4 py-2.5 text-right">{r.boarding ? money(sumItems(r.day) + r.boarding) : "—"}</td>}</tr>)}</tbody></table></div>
+          <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">{money(sumItems(r.day))}</td></tr>)}</tbody></table></div>
       {rows.some((r) => r.extra.length) && <p className="border-t border-line px-4 py-2 text-xs text-muted">Highlighted fees differ for that class only.</p>}</Card>
   );
 }

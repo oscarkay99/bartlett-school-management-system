@@ -5,14 +5,13 @@ import { DataTable, Select, type Column } from "@/components/ui/interactive";
 import { Avatar, Badge, StatusBadge } from "@/components/ui/primitives";
 import { money } from "@/lib/money";
 
-export interface StudentRow { id: string; name: string; adm: string; cls: string; classId: string; cat: string; status: string; fee: string; balance: number; guardians: string; guardianCount: number; medical: boolean }
+export interface StudentRow { id: string; name: string; adm: string; cls: string; classId: string; status: string; fee: string; balance: number; guardians: string; guardianCount: number; medical: boolean }
 export function StudentsTable({ rows, classes }: { rows: StudentRow[]; classes: { id: string; name: string }[] }) {
   const r = useRouter(); const [cls, setCls] = useState(""); const [fee, setFee] = useState(""); const [st, setSt] = useState(""); const [gd, setGd] = useState("");
   const data = useMemo(() => rows.filter((x) => (!cls || x.classId === cls) && (!fee || x.fee === fee) && (!st || x.status === st)), [rows, cls, fee, st]);
   const cols: Column<StudentRow>[] = [
     { key: "name", header: "Student", sort: (x) => x.name, render: (x) => <div className="flex items-center gap-2.5"><Avatar name={x.name} size={32} /><div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div></div> },
     { key: "cls", header: "Class", sort: (x) => x.classId.padStart(3, "0"), render: (x) => x.cls },
-    { key: "cat", header: "Category", hideOnMobile: true, render: (x) => x.cat },
     { key: "guardians", header: "Guardians", hideOnMobile: true, render: (x) => x.guardianCount === 0 ? <Badge tone="danger">No guardian linked</Badge> : <span className="text-muted">{x.guardians}</span> },
     { key: "status", header: "Status", hideOnMobile: true, render: (x) => <StatusBadge status={x.status} /> },
     { key: "fee", header: "Fees", render: (x) => <StatusBadge status={x.fee} /> },

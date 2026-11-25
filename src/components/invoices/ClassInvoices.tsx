@@ -89,15 +89,15 @@ function Preview({ school, inv }: { school: School; inv: ClassInvoice }) {
   return <div className="flex justify-center overflow-hidden rounded-lg bg-surface-2 p-4"><div style={{ zoom: 1.45 }} className="shadow-md"><MiniInvoice school={school} inv={inv} /></div></div>;
 }
 
-/** One small Extracurricular invoice, sized in millimetres so the screen preview and the A4 print match exactly. No crest. */
-export function MiniInvoice({ school, inv }: { school: School; inv: ClassInvoice }) {
+/** One small Extracurricular invoice, sized in millimetres so the screen preview and the A4 print match exactly. No crest, school name or contacts. */
+export function MiniInvoice({ inv }: { school?: School; inv: ClassInvoice }) {
   return (
     <article className="mini-invoice flex flex-col overflow-hidden bg-white text-neutral-900" style={{ width: W, height: H, padding: "3.5mm 4.5mm", fontSize: "7.4pt", lineHeight: 1.3 }}>
+      {/* No school name or contacts on the small invoice: just what it is for, the term, the lines and the total. */}
       <header className="flex items-start justify-between gap-2 border-b border-neutral-800 pb-[1.2mm]">
-        <div className="min-w-0"><div className="truncate font-bold" style={{ fontSize: "8.6pt" }}>{school.name}</div><div className="truncate text-neutral-600" style={{ fontSize: "6.3pt" }}>{school.phone} · {school.email}</div></div>
+        <div className="min-w-0"><div className="truncate font-bold" style={{ fontSize: "8.6pt" }}>{inv.title}</div><div className="truncate text-neutral-600" style={{ fontSize: "6.8pt" }}>{inv.period}</div></div>
         <div className="shrink-0 font-bold tracking-wide" style={{ fontSize: "9pt" }}>INVOICE</div>
       </header>
-      <div className="mt-[1.2mm] flex justify-between gap-2 font-semibold"><span className="truncate">{inv.title}</span><span className="shrink-0 font-normal text-neutral-600">{inv.period}</span></div>
       <table className="mt-[1mm] w-full border-collapse">
         <tbody>{inv.lines.map((l, i) => <tr key={i} className="border-b border-neutral-200"><td className="py-[0.35mm] pr-2">{l.description}</td><td className="num whitespace-nowrap py-[0.35mm] text-right">{amt(l.amount)}</td></tr>)}</tbody>
         <tfoot><tr className="font-bold"><td className="pt-[0.8mm]">Total</td><td className="num whitespace-nowrap pt-[0.8mm] text-right">{money(invoiceTotal(inv))}</td></tr></tfoot>

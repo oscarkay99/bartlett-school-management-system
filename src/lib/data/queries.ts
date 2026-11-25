@@ -75,8 +75,8 @@ export function accountLedger(studentId: string, account: FeeAccount) {
 export const activeStudents = () => students.filter((s) => s.status === "Active");
 export const studentsOfGuardian = (gid: string) => students.filter((s) => s.guardians.some((g) => g.guardianId === gid));
 
-export function feesOverview(classId?: string, category?: string, account: FeeAccount = "fees") {
-  const list = activeStudents().filter((s) => (!classId || s.classId === classId) && (!category || s.category === category));
+export function feesOverview(classId?: string, account: FeeAccount = "fees") {
+  const list = activeStudents().filter((s) => (!classId || s.classId === classId));
   const rows = list.map((s) => ({ s, f: accountSummary(s.id, account) })).filter((r) => r.f.enrolled);
   const billed = rows.reduce((a, r) => a + r.f.billed, 0);
   const paid = rows.reduce((a, r) => a + r.f.paid, 0);
@@ -203,13 +203,13 @@ export const enrollmentTrend = [
 ];
 export const unreconciled = () => payments.filter((p) => p.status === "Pending");
 /** Billed / collected / outstanding for each account, school-wide (for the owner's dashboard). */
-export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverview(undefined, undefined, id); return { id, label: ACCOUNTS[id].label, href: ACCOUNTS[id].href, billed: o.billed, paid: o.paid, outstanding: o.outstanding, rate: o.rate, students: o.rows.length, owing: o.owingCount }; });
+export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverview(undefined, id); return { id, label: ACCOUNTS[id].label, href: ACCOUNTS[id].href, billed: o.billed, paid: o.paid, outstanding: o.outstanding, rate: o.rate, students: o.rows.length, owing: o.owingCount }; });
 
 // ---- General ledger (derived; double-entry) ----
 export const OPENING_CASH: Minor = 18_450_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
 // Feeding is a line on the school fees invoice, but its income is still posted to its own account.
-const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extra Classes Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : label === "Boarding" ? "4300 Boarding Fees" : "4400 Levies & Other Fees");
+const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extra Classes Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : "4400 Levies & Other Fees");
 const expenseAccount = (c: string) => `5${({ Salaries: "100", Utilities: "200", Internet: "250", Repairs: "300", Stationery: "350", "Food Supplies": "400", Transport: "450", "Inventory Purchases": "500", Software: "550", Building: "600", Maintenance: "650" } as Record<string, string>)[c] ?? "900"} ${c}`;
 export function generalLedger(): GLLine[] {
   const L: GLLine[] = [{ date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "1100 Bank & Cash", dr: OPENING_CASH, cr: 0 }, { date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "3100 Accumulated Fund", dr: 0, cr: OPENING_CASH }];

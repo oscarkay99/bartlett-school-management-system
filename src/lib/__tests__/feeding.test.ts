@@ -34,7 +34,7 @@ describe("Feeding module", () => {
     expect(applyFeeding([{ label: "Tuition", amount: 5 }, { label: "Feeding", amount: 600 }], 0)).toEqual([{ label: "Tuition", amount: 5 }]);
     const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!; const classes = Q.classes.map((c) => ({ id: c.id, name: c.name, level: c.level }));
     const c3 = classes.find((c) => c.name === "Primary 3")!.id;
-    const cand = (id: string) => ({ id, name: id, adm: id, classId: c3, boarding: false, scholarship: false });
+    const cand = (id: string) => ({ id, name: id, adm: id, classId: c3, scholarship: false });
     const [a, b, c] = buildTermInvoices([cand("a"), cand("b"), cand("c")], classes, t2, "2027-01-11", 0, (sid) => ({ a: undefined, b: 0, c: ghs(300) })[sid]);
     expect(a.items.find((i) => i.label === "Feeding")!.amount).toBe(ghs(600));
     expect(b.items.some((i) => i.label === "Feeding")).toBe(false);

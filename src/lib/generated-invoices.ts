@@ -1,11 +1,11 @@
 // School fees invoices created with "Generate Term N invoices" on the School Fees page.
-// Built from the fee schedule for that term: the class's lines, boarding for boarders, then feeding,
+// Built from the fee schedule for that term: the class's lines, then feeding,
 // with a 25% tuition discount for scholarship students (as on seeded invoices). Pure helpers, safe on client and server.
 // Front-end stand-in: the page keeps these in the browser until the backend stores invoices.
 import { invoiceStem, sumItems, termBillLines, type ClassRef, type FeeItem, type TermFees } from "./fees";
 import { applyFeeding } from "./feeding";
 
-export interface GenCandidate { id: string; name: string; adm: string; classId: string; boarding: boolean; scholarship: boolean }
+export interface GenCandidate { id: string; name: string; adm: string; classId: string; scholarship: boolean }
 export interface GeneratedInvoice {
   no: string; year: string; term: string; studentId: string; name: string; adm: string; classId: string;
   items: FeeItem[]; discount: number; billedOn: string; dueOn: string;
@@ -27,7 +27,7 @@ export function buildTermInvoices(candidates: GenCandidate[], classes: ClassRef[
   return candidates.flatMap((c) => {
     const cls = classes.find((x) => x.id === c.classId); if (!cls) return [];
     const rate = feedingFor?.(c.id);
-    const items = rate === undefined ? termBillLines(tf, cls, c.boarding) : applyFeeding(termBillLines(tf, cls, c.boarding), rate);
+    const items = rate === undefined ? termBillLines(tf, cls) : applyFeeding(termBillLines(tf, cls), rate);
     const tuition = items.find((i) => i.label === "Tuition")?.amount ?? 0;
     return [{ no: `${stem}-${String(++seq).padStart(4, "0")}`, year: tf.year, term: tf.term, studentId: c.id, name: c.name, adm: c.adm, classId: c.classId,
       items, discount: c.scholarship ? Math.round(tuition * SCHOLARSHIP_SHARE) : 0, billedOn: termStart, dueOn: addDays(termStart, 28) }];

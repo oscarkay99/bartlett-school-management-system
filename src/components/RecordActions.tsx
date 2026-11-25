@@ -26,8 +26,7 @@ export function ParentRecordActions({ initial, soleFor }: { initial: Values; sol
 const STUDENT_FIELDS = (classes: string[], houses: string[]): FieldDef[] => [
   { key: "first", label: "First name", required: true }, { key: "middle", label: "Middle name" }, { key: "last", label: "Last name", required: true },
   { key: "dob", label: "Date of birth", type: "date", required: true, validate: (v) => (new Date(v) > new Date("2026-10-12") ? "Cannot be in the future" : undefined) },
-  { key: "gender", label: "Gender", type: "select", options: ["Female", "Male"], required: true }, { key: "classId", label: "Class", type: "select", options: classes, required: true },
-  { key: "category", label: "Category", type: "select", options: ["Day", "Boarding"], required: true }, { key: "house", label: "House", type: "select", options: houses },
+  { key: "gender", label: "Gender", type: "select", options: ["Female", "Male"], required: true }, { key: "classId", label: "Class", type: "select", options: classes, required: true }, { key: "house", label: "House", type: "select", options: houses },
   { key: "status", label: "Enrolment status", type: "select", options: ["Active", "Suspended", "Withdrawn", "Graduated"], required: true }, { key: "address", label: "Residential address", span: 2 },
 ];
 export function StudentRecordActions({ initial, classes, houses, adm }: { initial: Values; classes: string[]; houses: string[]; adm: string }) {

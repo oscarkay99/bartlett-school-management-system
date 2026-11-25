@@ -44,28 +44,28 @@ export const subjectsByLevel: Record<string, string[]> = {
 };
 
 // ---------- Fee schedule (per academic year + term, minor units) ----------
-// School fees invoice: tuition, books, levies, PTA, exams, boarding and feeding. Extra classes are billed on their own standalone invoice.
+// School fees invoice: tuition, books, levies, PTA, exams and feeding. The school has no boarders. Extra classes are billed on their own standalone invoice.
 // The school does not charge the ICT & Development Levy yet (planned in about two years): it is kept at 0 so invoices show "—".
 // Fees are set per level; a class can override or add lines (see `overrides`). Edited in Settings → Fee schedule.
-const lvl = (tuition: number, books: number, levy: number, exam: number, boarding: number, feeding: number): LevelFees => ({
+const lvl = (tuition: number, books: number, levy: number, exam: number, feeding: number): LevelFees => ({
   items: [{ label: "Tuition", amount: ghs(tuition) }, { label: "Books", amount: ghs(books) }, { label: "ICT & Development Levy", amount: ghs(levy) }, { label: "PTA", amount: ghs(50) }, ...(exam ? [{ label: "Examination", amount: ghs(exam) }] : [])],
-  boarding: ghs(boarding), feeding: ghs(feeding),
+  feeding: ghs(feeding),
 });
 const acts = (piano: number, stem: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), STEM: ghs(stem), "Extra Classes": ghs(extra) });
-const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 0, 0, 420), Primary: lvl(2200, 250, 0, 0, 0, 560), JHS: lvl(2750, 350, 0, 200, 1400, 560) }, overrides: {}, activities: acts(380, 320, 280) });
+const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 0, 420), Primary: lvl(2200, 250, 0, 0, 560), JHS: lvl(2750, 350, 0, 200, 560) }, overrides: {}, activities: acts(380, 320, 280) });
 export const feeSchedule: TermFees[] = [
   lastYear("Term 1"), lastYear("Term 2"), { ...lastYear("Term 3"), overrides: { c11: [{ label: "BECE Registration", amount: ghs(300) }] } },
-  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 0, 0, 450), Primary: lvl(2400, 250, 0, 0, 0, 600), JHS: lvl(3000, 350, 0, 200, 1500, 600) }, overrides: {}, activities: acts(400, 350, 300) },
+  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 0, 450), Primary: lvl(2400, 250, 0, 0, 600), JHS: lvl(3000, 350, 0, 200, 600) }, overrides: {}, activities: acts(400, 350, 300) },
   // Term 2: books are bought once a year (Term 1), Primary 6 pays a mock-exam fee, JHS 3 pays BECE registration.
-  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 0, 0, 450), Primary: lvl(2400, 0, 0, 0, 0, 600), JHS: lvl(3000, 0, 0, 200, 1500, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350, 300) },
+  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 0, 450), Primary: lvl(2400, 0, 0, 0, 600), JHS: lvl(3000, 0, 0, 200, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350, 300) },
   // Term 3 of 2026/2027 has no fees yet — set it up in Settings → Fee schedule.
 ];
 const billingTerm = findTerm(feeSchedule, "2026/2027", "Term 1")!;
-// What goes on a student's school fees invoice: the class's lines, boarding for boarders, then feeding (every student).
-const feeFor = (cls: T.SchoolClass, boarding: boolean) => termBillLines(billingTerm, cls, boarding);
+// What goes on a student's school fees invoice: the class's lines, then feeding (every student).
+const feeFor = (cls: T.SchoolClass) => termBillLines(billingTerm, cls);
 const feedingFor = (cls: T.SchoolClass) => feedingRate(billingTerm, cls);
 /** The current term's fees per class (derived from the schedule). */
-export const feeStructure = classes.map((c) => ({ classId: c.id, className: c.name, day: classFees(billingTerm, c, false), boarding: classFees(billingTerm, c, true), feeding: feedingFor(c) }));
+export const feeStructure = classes.map((c) => ({ classId: c.id, className: c.name, day: classFees(billingTerm, c), feeding: feedingFor(c) }));
 export const activityFees = billingTerm.activities as Record<Activity, Minor>;
 
 // ---------- Guardians & students ----------
@@ -100,12 +100,12 @@ classes.forEach((cls) => {
     const idx = classes.indexOf(cls);
     const ageBase = 4 + idx;
     const year = 2026 - ageBase - (rnd() > 0.5 ? 0 : 1);
-    const boarding = cls.level === "JHS" && rnd() < 0.35;
+    rnd(); // was the day/boarding draw (the school has no boarders); kept so the rest of the demo data stays the same
     const st: T.Student = {
       id: `s${sn}`, admissionNo: `BMS/${pad(2026 - Math.min(idx, 5), 4).slice(2)}/${pad(sn, 4)}`,
       first: male ? pick(maleF) : pick(femaleF), middle: rnd() > 0.5 ? pick(["Nana", "Kwaku", "Yaa", "Owusua", "Fiifi"]) : undefined, last,
       dob: `${year}-${pad(int(1, 12), 2)}-${pad(int(1, 28), 2)}`, gender: male ? "Male" : "Female", classId: cls.id,
-      category: boarding ? "Boarding" : "Day", house: pick(houses), status: "Active", nationality: "Ghanaian", address: g.address,
+      house: pick(houses), status: "Active", nationality: "Ghanaian", address: g.address,
       admittedOn: `${pick([2021, 2022, 2023, 2024, 2025, 2026])}-09-${pad(int(1, 20), 2)}`,
       previousSchool: rnd() > 0.5 ? pick(["Bright Start Academy", "Faith Preparatory", "Garden City School", "Hillcrest Prep"]) : undefined,
       medicalAlert: rnd() < 0.08 ? pick(["Asthma", "Peanut allergy", "Sickle cell trait", "Epilepsy"]) : undefined,
@@ -132,7 +132,7 @@ mensah.name = "Kwabena Mensah"; mensah.title = "Mr."; mensah.preferred = "WhatsA
 const demoKids: [string, string, string, "Male" | "Female"][] = [["Ama", "Mensah", "c5", "Female"], ["Kofi", "Mensah", "c3", "Male"], ["Abena", "Mensah", "c1", "Female"]];
 demoKids.forEach(([f, l, c], i) => {
   const st = i === 2 ? students[0] : students.find((x) => x.classId === c && x.guardians.length === 1 && x.guardians[0].guardianId !== mensah.id)!;
-  st.first = f; st.last = l; st.gender = f === "Kofi" ? "Male" : "Female"; st.middle = undefined; st.status = "Active"; st.category = "Day"; st.scholarship = undefined; st.classId = c;
+  st.first = f; st.last = l; st.gender = f === "Kofi" ? "Male" : "Female"; st.middle = undefined; st.status = "Active"; st.scholarship = undefined; st.classId = c;
   st.guardians = [{ guardianId: mensah.id, relationship: "Father", primary: true, legal: true, emergency: true, pickup: true, financial: true, financialShare: 100, receivesFeeReminders: true, receivesAcademic: true, verified: true }];
 });
 
@@ -150,7 +150,7 @@ const staffNames = ["Efua Quansah (Bursar)", "Daniel Ofori (Accounts)", "Esi Tet
 let inv = 0, pay = 0, rc = 0;
 students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
-  const items = feeFor(cls, st.category === "Boarding");
+  const items = feeFor(cls);
   const discount = st.scholarship ? Math.round(items[0].amount * 0.25) : 0;
   const i: T.Invoice = { id: `inv${++inv}`, no: `INV-2627-T1-${pad(inv, 4)}`, account: "fees", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount, billedOn: "2026-09-01", dueOn: st.id === "s3" || inv % 5 === 0 ? "2026-10-05" : "2026-10-30" };
   invoices.push(i);
