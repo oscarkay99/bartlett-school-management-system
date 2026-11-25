@@ -85,3 +85,8 @@ body {
   .print-root .invoice-sheet { padding: 14mm; font-size: 12px; break-after: page; }
   .print-root .invoice-sheet:last-child { break-after: auto; }
 }
+/* Invoices page: 10 small invoices per A4 page (2 across × 5 down, 105 × 59.4 mm each) with dashed cut lines. */
+@media print {
+  .print-root .mini-page { display: grid; grid-template-columns: 105mm 105mm; grid-template-rows: repeat(5, 59.4mm); width: 210mm; height: 297mm; overflow: hidden; }
+  .print-root .mini-invoice { outline: 0.2mm dashed #b5b5b5; outline-offset: -0.1mm; break-inside: avoid; }
+}
