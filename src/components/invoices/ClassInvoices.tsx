@@ -15,10 +15,10 @@ type School = { name: string; city: string; phone: string; email: string };
 const box = "h-9 rounded-lg border border-line bg-surface px-2.5 text-sm placeholder:text-muted/60 focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30";
 /** 0 prints as a dash: the line is on the invoice but not charged (e.g. ICT levy, not billed yet). */
 const amt = (m: number) => (m ? money(m) : "—");
-// One small (Extra Classes) invoice = one cell of a 2 × 5 grid on A4 (210 × 297 mm).
+// One small (Extracurricular) invoice = one cell of a 2 × 5 grid on A4 (210 × 297 mm).
 const W = "105mm", H = "59.4mm";
 
-// Invoices page: a tab per class (full A4 school fees invoice) plus Extra Classes (small invoice, 10 per A4 page).
+// Invoices page: a tab per class (full A4 school fees invoice) plus Extracurricular (small invoice, 10 per A4 page).
 // Edits are kept in this browser until the backend stores them.
 export function ClassInvoices({ defaults, school }: { defaults: Record<string, ClassInvoice>; school: School }) {
   const [invoices, setInvoices] = useState(defaults);
@@ -89,7 +89,7 @@ function Preview({ school, inv }: { school: School; inv: ClassInvoice }) {
   return <div className="flex justify-center overflow-hidden rounded-lg bg-surface-2 p-4"><div style={{ zoom: 1.45 }} className="shadow-md"><MiniInvoice school={school} inv={inv} /></div></div>;
 }
 
-/** One small Extra Classes invoice, sized in millimetres so the screen preview and the A4 print match exactly. No crest. */
+/** One small Extracurricular invoice, sized in millimetres so the screen preview and the A4 print match exactly. No crest. */
 export function MiniInvoice({ school, inv }: { school: School; inv: ClassInvoice }) {
   return (
     <article className="mini-invoice flex flex-col overflow-hidden bg-white text-neutral-900" style={{ width: W, height: H, padding: "3.5mm 4.5mm", fontSize: "7.4pt", lineHeight: 1.3 }}>
