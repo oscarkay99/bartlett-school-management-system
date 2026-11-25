@@ -1,5 +1,5 @@
 // The two separately billed accounts, matching what parents receive: the school fees invoice (tuition, books,
-// levies, PTA and feeding) and a standalone Extra Classes invoice (music, STEM, extra classes) that is never added to school fees. Each has its own invoices,
+// levies, PTA and feeding) and a standalone Extra Classes invoice (Music and Extra Classes) that is never added to school fees. Each has its own invoices,
 // receipts and balance; a payment only ever settles invoices in the account it was received for.
 export type FeeAccount = "fees" | "extra";
 
@@ -15,5 +15,7 @@ export const ACCOUNTS: Record<FeeAccount, AccountDef> = {
 export const ACCOUNT_IDS = Object.keys(ACCOUNTS) as FeeAccount[];
 
 // Extra classes offered, billed per term on the standalone Extra Classes invoice.
-export const ACTIVITIES = ["Music (Piano)", "STEM", "Extra Classes"] as const;
+// Every student is enrolled: Kindergarten in Music (Piano) only, everyone else in both.
+export const ACTIVITIES = ["Music (Piano)", "Extra Classes"] as const;
+export const activitiesFor = (level: string): Activity[] => (level === "Kindergarten" ? ["Music (Piano)"] : [...ACTIVITIES]);
 export type Activity = (typeof ACTIVITIES)[number];

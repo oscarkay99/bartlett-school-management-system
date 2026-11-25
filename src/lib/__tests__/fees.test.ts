@@ -61,7 +61,7 @@ describe("Fee schedule — setting up a new term", () => {
     copy.levels.Primary.items[0].amount = 1; expect(prev.levels.Primary.items[0].amount).toBe(ghs(2400)); // deep copy
   });
   it("a blank term must have amounts before it can be saved", () => {
-    const b = blankTerm("2026/2027", "Term 3", ["STEM"]);
+    const b = blankTerm("2026/2027", "Term 3", ["Extra Classes"]);
     expect(validateTermFees(b, classes)).toMatch(/add up to zero/);
   });
   it("rejects unnamed, duplicate and negative entries", () => {
@@ -100,8 +100,8 @@ describe("What a parent owes for the term", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
   it("term total is school fees only (feeding included); Extra Classes is reported separately, never added", () => {
     const tc = Q.termCharges(ama().id, "2026/2027", "Term 1");
-    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3950)], ["extra", ghs(400)]]);
-    expect(tc.total).toBe(ghs(3950)); expect(tc.extra.net).toBe(ghs(400));
+    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3950)], ["extra", ghs(750)]]);
+    expect(tc.total).toBe(ghs(3950)); expect(tc.extra.net).toBe(ghs(750));
     expect(Q.termCharges(ama().id, "2026/2027", "Term 2").total).toBe(0); // nothing billed for Term 2 yet
   });
   it("a scholarship is its own named line, taken off tuition only", () => {
@@ -135,7 +135,7 @@ describe("Fee schedule — spreadsheet editor", () => {
     expect(g.exceptions).toContainEqual({ classId: cls("JHS 3").id, label: "BECE Registration", amount: ghs(320) });
   });
   it("explains what's missing in plain words", () => {
-    const blank = toGrid(blankTerm("2027/2028", "Term 1", ["STEM"]));
+    const blank = toGrid(blankTerm("2027/2028", "Term 1", ["Extra Classes"]));
     expect(validateGrid(blank, classes)).toBe("Enter the fees for Kindergarten, Primary, JHS");
     const g = toGrid(t2); expect(validateGrid(g, classes)).toBe("");
     expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toBe("Give every fee a name");

@@ -12,8 +12,7 @@ function defaults(): Record<string, ClassInvoice> {
   return Object.fromEntries(INVOICE_TABS.map((t) => {
     // Extracurricular: a small invoice, printed 10 to an A4 sheet.
     if (!t.classId) return [t.id, { title: "Extracurricular", period: `${SCHOOL.term}, ${SCHOOL.year}`, notes: SMALL_NOTES,
-      // Music and STEM only: the "Extra Classes" activity is not listed on this sheet.
-      lines: tf ? Object.entries(tf.activities).filter(([a]) => a !== "Extra Classes").map(([description, amount]) => ({ description, amount })) : [] }];
+      lines: tf ? Object.entries(tf.activities).map(([description, amount]) => ({ description, amount })) : [] }];
     // Classes: the full A4 school fees invoice, feeding included.
     const cls = classes.find((c) => c.id === t.classId)!;
     const fees = tf ? classFees(tf, cls).map((i) => ({ description: i.label, amount: i.amount })) : [];

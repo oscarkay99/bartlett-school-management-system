@@ -21,8 +21,8 @@ import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
 import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; terms: string[]; items: { label: string; amount: number }[] }
-export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; amount: number; method: string; date: string; ref: string; status: string; staff: string }
+export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; feedingOwed: number; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; terms: string[]; items: { label: string; amount: number }[] }
+export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; amount: number; feeding: number; feedingPeriod?: string; method: string; date: string; ref: string; status: string; staff: string }
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
 const TODAY = "2026-10-12";
 const daysAgo = (n: number) => { const d = new Date(TODAY + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
@@ -47,7 +47,7 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   const byMethod = useMemo(() => { const m = new Map<string, number>(); conf.filter((p) => p.date >= periodFrom).forEach((p) => m.set(p.method, (m.get(p.method) ?? 0) + p.amount / 100)); return [...m].map(([name, value]) => ({ name, value })); }, [conf, periodFrom]);
   const trend = useMemo(() => { const w = new Map<string, number>(); conf.forEach((p) => { const d = new Date(p.date + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); const k = d.toISOString().slice(5, 10); w.set(k, (w.get(k) ?? 0) + p.amount / 100); }); return [...w].sort().map(([week, collected]) => ({ week, collected })); }, [conf]);
   const byClass = useMemo(() => classes.map((c) => ({ name: c.name, outstanding: students.filter((s) => s.classId === c.id && s.balance > 0).reduce((a, s) => a + s.balance, 0) / 100 })), [classes, students]);
-  const payStudents: PayStudent[] = students.map((s) => ({ id: s.id, name: s.name, adm: s.adm, cls: s.cls, balance: s.balance, invoices: [{ no: s.invoice, balance: s.balance }] }));
+  const payStudents: PayStudent[] = students.map((s) => ({ id: s.id, name: s.name, adm: s.adm, cls: s.cls, balance: s.balance, feedingOwed: s.feedingOwed, invoices: [{ no: s.invoice, balance: s.balance }] }));
 
   const filters = (
     <div className="flex flex-wrap items-center gap-2">
@@ -168,7 +168,9 @@ function PaymentsTable({ rows }: { rows: PRow[] }) {
   const [m, setM] = useState("");
   const cols: Column<PRow>[] = [
     { key: "r", header: "Receipt", sort: (x) => x.receipt, render: (x) => <b className="num">{x.receipt}</b> }, { key: "s", header: "Student", sort: (x) => x.student, render: (x) => <Link href={`/students/${x.studentId}`} className="hover:text-info">{x.student}</Link> },
-    { key: "a", header: "Amount", align: "right", sort: (x) => x.amount, render: (x) => money(x.amount) }, { key: "m", header: "Method", hideOnMobile: true, render: (x) => x.method },
+    { key: "a", header: "Amount", align: "right", sort: (x) => x.amount, render: (x) => money(x.amount) },
+    { key: "f", header: "Feeding", align: "right", hideOnMobile: true, render: (x) => (x.feeding ? <span className="num">{money(x.feeding)}{x.feedingPeriod && <span className="block text-[11px] text-muted">{x.feedingPeriod === "Term" ? "for the term" : x.feedingPeriod.toLowerCase()}</span>}</span> : <span className="text-muted">—</span>) },
+    { key: "m", header: "Method", hideOnMobile: true, render: (x) => x.method },
     { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) }, { key: "ref", header: "Reference", hideOnMobile: true, render: (x) => <span className="num text-xs">{x.ref}</span> },
     { key: "st", header: "Status", render: (x) => <StatusBadge status={x.status} /> }, { key: "p", header: "", render: (x) => x.status === "Confirmed" ? <Link className="text-info" href={`/print/receipt/${x.id}`}>Receipt</Link> : null },
   ];

@@ -17,7 +17,7 @@ export interface TermFees {
   levels: Record<Level, LevelFees>;
   /** classId → lines that replace the level's line with the same label, or are added to it. Amount 0 drops the line. */
   overrides: Record<string, FeeItem[]>;
-  /** Extra classes (music, STEM, …) → price per term. */
+  /** Extra classes (Music (Piano), Extra Classes) → price per term. */
   activities: Record<string, Minor>;
 }
 export interface ClassRef { id: string; name: string; level: Level }

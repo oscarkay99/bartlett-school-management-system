@@ -13,12 +13,14 @@ import { feedingStatus, studentFeedingRate, validateException, type FeedingExcep
 import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-interface FStudent { id: string; name: string; adm: string; classId: string; cls: string }
+interface FStudent { id: string; name: string; adm: string; classId: string; cls: string; billed: number; paid: number }
+/** A payment that included feeding. `how`: "With school fees" or Daily / Weekly / Monthly / Term. */
+export interface FeedingPayment { id: string; receipt: string; studentId: string; name: string; classId: string; cls: string; date: string; feeding: number; how: string; method: string; status: string }
 interface KitchenItem { id: string; name: string; unit: string; onHand: number; reorder: number; expiry?: string }
 
 // Feeding module: who is on feeding this term, the daily meal register, and kitchen stock.
 // Billing stays on the school fees invoice; changes here decide each student's Feeding line when invoices are generated.
-export function FeedingWorkspace({ students, kitchen, today }: { students: FStudent[]; kitchen: KitchenItem[]; today: string }) {
+export function FeedingWorkspace({ students, payments, kitchen, today }: { students: FStudent[]; payments: FeedingPayment[]; kitchen: KitchenItem[]; today: string }) {
   const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const key = termKey(year, term);
   const feeding = useFeeding(); const { allow, role } = useRole();
   const canEdit = allow("invoices", "create") || allow("students", "edit");               // Owner, Admin, Bursar
@@ -29,7 +31,9 @@ export function FeedingWorkspace({ students, kitchen, today }: { students: FStud
     return { ...s, classRate, ex, status: feedingStatus(ex), rate: studentFeedingRate(classRate, ex) };
   }), [students, fs.classes, tf, feeding, key]);
   const byClass = fs.classes.map((c) => { const r = rows.filter((x) => x.classId === c.id); const on = r.filter((x) => x.rate > 0);
-    return { id: c.id, name: c.name, students: r.length, on: on.length, off: r.length - on.length, rate: tf ? feedingRate(tf, c) : 0, expected: on.reduce((a, x) => a + x.rate, 0) }; }).filter((c) => c.students > 0);
+    return { id: c.id, name: c.name, students: r.length, on: on.length, off: r.length - on.length, rate: tf ? feedingRate(tf, c) : 0, expected: on.reduce((a, x) => a + x.rate, 0),
+      paid: r.reduce((a, x) => a + x.paid, 0), owed: r.reduce((a, x) => a + Math.max(0, x.billed - x.paid), 0) }; }).filter((c) => c.students > 0);
+  const paidAll = rows.reduce((a, r) => a + r.paid, 0); const owedAll = rows.reduce((a, r) => a + Math.max(0, r.billed - r.paid), 0);
   const onFeeding = rows.filter((r) => r.rate > 0).length; const expected = rows.reduce((a, r) => a + r.rate, 0);
   const low = kitchen.filter((k) => k.onHand <= k.reorder);
 
@@ -39,13 +43,13 @@ export function FeedingWorkspace({ students, kitchen, today }: { students: FStud
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <Kpi label="On feeding" value={`${onFeeding} / ${rows.length}`} icon={Users} hint="Active students on feeding this term (everyone unless marked otherwise)." />
         <Kpi label="Expected feeding income" value={money(expected)} icon={Wallet} tone="ok" hint="Billed on the school fees invoice." />
-        <Kpi label="Meals recorded today" value={String(feeding.meals.filter((m) => m.date === today).reduce((a, m) => a + m.served, 0))} icon={Utensils} hint="From the meal register." />
-        <Kpi label="Kitchen items low" value={String(low.length)} icon={AlertTriangle} tone={low.length ? "danger" : "ok"} hint="At or below reorder level." />
+        <Kpi label="Feeding collected" value={money(paidAll)} icon={Wallet} tone="ok" hint="Feeding paid so far: with school fees at once, or daily / weekly / monthly." />
+        <Kpi label="Feeding still owed" value={money(owedAll)} icon={AlertTriangle} tone={owedAll ? "danger" : "ok"} hint="Feeding billed minus feeding paid." />
       </div>
       <Card><CardHeader title={`Feeding by class — ${term} ${year}`} sub="The rate per class is set in Settings → Fee schedule. Per-student changes are on the Students tab." />
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="px-3 text-right">Students</th><th className="px-3 text-right">On feeding</th><th className="px-3 text-right">Not on feeding</th><th className="px-3 text-right">Rate</th><th className="px-4 text-right">Expected</th></tr></thead>
-          <tbody className="divide-y divide-line">{byClass.map((c) => <tr key={c.id}><td className="px-4 py-2.5 font-medium">{c.name}</td><td className="num px-3 text-right">{c.students}</td><td className="num px-3 text-right">{c.on}</td><td className="num px-3 text-right">{c.off || "—"}</td><td className="num px-3 text-right">{money(c.rate)}</td><td className="num px-4 text-right font-medium">{money(c.expected)}</td></tr>)}</tbody>
-          <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-4 py-2.5">Total</td><td className="num px-3 text-right">{rows.length}</td><td className="num px-3 text-right">{onFeeding}</td><td className="num px-3 text-right">{rows.length - onFeeding}</td><td /><td className="num px-4 text-right">{money(expected)}</td></tr></tfoot></table></div></Card>
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="px-3 text-right">Students</th><th className="px-3 text-right">On feeding</th><th className="px-3 text-right">Not on feeding</th><th className="px-3 text-right">Rate</th><th className="px-3 text-right">Expected</th><th className="px-3 text-right">Paid</th><th className="px-4 text-right">Owed</th></tr></thead>
+          <tbody className="divide-y divide-line">{byClass.map((c) => <tr key={c.id}><td className="px-4 py-2.5 font-medium">{c.name}</td><td className="num px-3 text-right">{c.students}</td><td className="num px-3 text-right">{c.on}</td><td className="num px-3 text-right">{c.off || "—"}</td><td className="num px-3 text-right">{money(c.rate)}</td><td className="num px-3 text-right font-medium">{money(c.expected)}</td><td className="num px-3 text-right text-ok">{money(c.paid)}</td><td className={`num px-4 text-right ${c.owed ? "text-danger" : ""}`}>{money(c.owed)}</td></tr>)}</tbody>
+          <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-4 py-2.5">Total</td><td className="num px-3 text-right">{rows.length}</td><td className="num px-3 text-right">{onFeeding}</td><td className="num px-3 text-right">{rows.length - onFeeding}</td><td /><td className="num px-3 text-right">{money(expected)}</td><td className="num px-3 text-right">{money(paidAll)}</td><td className="num px-4 text-right">{money(owedAll)}</td></tr></tfoot></table></div></Card>
     </div>
   );
 
@@ -53,6 +57,7 @@ export function FeedingWorkspace({ students, kitchen, today }: { students: FStud
     <Tabs tabs={[
       { id: "overview", label: "Overview", content: overview },
       { id: "students", label: "Students", badge: String(rows.length - onFeeding || ""), content: <StudentsTab rows={rows} canEdit={canEdit} termLabel={`${term} ${year}`} onSave={(sid, ex) => feeding.updateException(sid, key, ex)} classes={fs.classes} termKey={key} /> },
+      { id: "payments", label: "Payments", content: <PaymentsTab payments={payments} classes={fs.classes} /> },
       { id: "meals", label: "Meal register", content: <MealsTab byClass={byClass} meals={feeding.meals} canEdit={canMeals} today={today} onSave={feeding.saveMeals} /> },
       { id: "kitchen", label: "Kitchen stock", badge: low.length ? String(low.length) : undefined, content: <KitchenTab items={kitchen} /> },
     ].map((t) => ({ ...t, badge: t.badge || undefined }))} />
@@ -69,6 +74,8 @@ function StudentsTab({ rows, canEdit, termLabel, onSave, classes, termKey: key }
     { key: "c", header: "Class", render: (x) => x.cls },
     { key: "s", header: "Feeding", render: (x) => <Badge tone={x.status === "On feeding" ? "ok" : x.status === "Not on feeding" ? "neutral" : "info"} dot>{x.status}</Badge> },
     { key: "r", header: "Charged", align: "right", sort: (x) => x.rate, render: (x) => (x.rate ? money(x.rate) : "—") },
+    { key: "p", header: "Paid", align: "right", sort: (x) => x.paid, render: (x) => <span className="num text-ok">{money(x.paid)}</span> },
+    { key: "o", header: "Owed", align: "right", sort: (x) => x.billed - x.paid, render: (x) => <span className={`num ${x.billed - x.paid > 0 ? "text-danger" : ""}`}>{money(Math.max(0, x.billed - x.paid))}</span> },
     { key: "why", header: "Reason", hideOnMobile: true, render: (x) => <span className="text-xs text-muted">{x.ex?.reason ?? ""}</span> },
     ...(canEdit ? [{ key: "e", header: "", render: (x: Row) => <Button size="sm" variant="ghost" onClick={() => setEdit(x)}>Change</Button> }] : []),
   ];
@@ -131,5 +138,27 @@ function KitchenTab({ items }: { items: KitchenItem[] }) {
     <Card><CardHeader title="Kitchen & Feeding stock" sub="From Inventory. Receive and issue stock there." action={<Link className="text-sm font-medium text-info hover:underline" href="/inventory">Open Inventory →</Link>} />
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Item</th><th className="px-3 text-right">On hand</th><th className="px-3 text-right">Reorder at</th><th className="px-4 text-left">Status</th></tr></thead>
         <tbody className="divide-y divide-line">{items.map((i) => <tr key={i.id}><td className="px-4 py-2.5">{i.name}{i.expiry && <span className="ml-2 text-xs text-muted">expires {fmtDate(i.expiry)}</span>}</td><td className="num px-3 text-right">{i.onHand} {i.unit}</td><td className="num px-3 text-right">{i.reorder}</td><td className="px-4">{i.onHand <= 0 ? <Badge tone="danger">Out of stock</Badge> : i.onHand <= i.reorder ? <Badge tone="warn">Low — reorder</Badge> : <Badge tone="ok">OK</Badge>}</td></tr>)}</tbody></table></div></Card>
+  );
+}
+
+// Every payment that included feeding, however it was paid: with the school fees at once, or daily / weekly / monthly / for the term.
+function PaymentsTab({ payments, classes }: { payments: FeedingPayment[]; classes: { id: string; name: string }[] }) {
+  const [how, setHow] = useState(""); const [cls, setCls] = useState("");
+  const data = payments.filter((p) => (!how || p.how === how) && (!cls || p.classId === cls));
+  const total = data.filter((p) => p.status === "Confirmed").reduce((a, p) => a + p.feeding, 0);
+  const label = (h: string) => (h === "Term" ? "For the term" : h);
+  const cols: Column<FeedingPayment>[] = [
+    { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) },
+    { key: "s", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={`/students/${x.studentId}?tab=feeding`}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
+    { key: "h", header: "Paid", render: (x) => <Badge tone={x.how === "With school fees" ? "neutral" : "info"}>{label(x.how)}</Badge> },
+    { key: "f", header: "Feeding", align: "right", sort: (x) => x.feeding, render: (x) => <b className="num">{money(x.feeding)}</b> },
+    { key: "m", header: "Method", hideOnMobile: true, render: (x) => x.method },
+    { key: "r", header: "Receipt", hideOnMobile: true, render: (x) => <Link className="num text-info hover:underline" href={`/print/receipt/${x.id}`}>{x.receipt}</Link> },
+  ];
+  return (
+    <Card><CardHeader title="Feeding payments" sub={`${data.length} payments · ${money(total)} confirmed. Feeding paid with the school fees at once shows the feeding part of that payment.`} />
+      <DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.receipt} pageSize={12}
+        filters={<><Select label="How it was paid" value={how} onChange={setHow} options={[{ value: "", label: "All payments" }, ...["With school fees", "Daily", "Weekly", "Monthly", "Term"].map((h) => ({ value: h, label: label(h) }))]} />
+          <Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} /></>} /></Card>
   );
 }

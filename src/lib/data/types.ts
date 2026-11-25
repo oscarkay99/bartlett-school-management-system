@@ -31,7 +31,12 @@ export interface Invoice {
 export interface Payment {
   id: string; receiptNo: string; account: FeeAccount; studentId: string; guardianId?: string; amount: Minor; method: PayMethod;
   date: string; ref: string; status: "Confirmed" | "Pending" | "Reversed"; staff: string; note?: string;
+  /** School fees payments only: how much of this payment is for feeding (feeding is billed on the school fees invoice). */
+  feeding?: Minor;
+  /** Set when the whole payment is for feeding, paid daily / weekly / monthly / for the term. */
+  feedingPeriod?: FeedingPeriod;
 }
+export type FeedingPeriod = "Daily" | "Weekly" | "Monthly" | "Term";
 export interface Staff {
   id: string; empNo: string; name: string; position: string; department: string; type: "Full-time" | "Part-time" | "Contract";
   phone: string; email: string; qualification: string; since: string; classIds: string[]; subjects: string[]; status: "Active" | "On leave";

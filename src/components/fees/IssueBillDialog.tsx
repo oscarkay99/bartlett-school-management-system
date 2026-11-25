@@ -6,7 +6,7 @@ import { Button, Field, inputClass } from "@/components/ui/primitives";
 import { Modal, useToast } from "@/components/ui/interactive";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
-import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
+import { ACCOUNTS, activitiesFor, type FeeAccount } from "@/lib/accounts";
 import { invoiceStem, termKey } from "@/lib/fees";
 import { money } from "@/lib/money";
 
@@ -22,7 +22,7 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
   const st = candidates.find((c) => c.id === sid);
   const cls = st && fs.classes.find((c) => c.id === st.classId);
   const billed = st?.billed[termKey(year, term)] ?? [];
-  const offered = cls?.level === "Kindergarten" ? ["Music (Piano)"] : [...ACTIVITIES];
+  const offered: string[] = cls ? activitiesFor(cls.level) : [];
   const items = ((): { label: string; amount: number }[] => {
     if (!st || !cls || !tf) return [];
     return acts.filter((a) => !billed.includes(a)).map((a) => ({ label: a, amount: tf.activities[a] ?? 0 }));

@@ -106,10 +106,10 @@ describe("Two accounts: school fees and standalone Extra Classes", () => {
     expect(new Set(Q.payments.map((p) => p.receiptNo)).size).toBe(Q.payments.length);
     for (const acc of Q.ACCOUNT_IDS) expect(Q.payments.some((p) => p.account === acc), acc).toBe(true);
   });
-  it("Ama: Music GHS 400 is separate from her GHS 1,650 school-fee balance", () => {
+  it("Ama: Music + Extra Classes (GH₵ 750) are separate from her GH₵ 1,650 school-fee balance", () => {
     const id = ama().id;
     expect(Q.feeSummary(id).balance).toBe(ghs(1650));
-    const ex = Q.accountSummary(id, "extra"); expect([ex.billed, ex.paid, ex.balance]).toEqual([ghs(400), 0, ghs(400)]);
+    const ex = Q.accountSummary(id, "extra"); expect([ex.billed, ex.paid, ex.balance]).toEqual([ghs(750), 0, ghs(750)]);
     expect(Q.totalOwed(id)).toBe(ghs(1650)); // school fees only: Extra Classes is never added
   });
   it("a payment only reduces the balance of its own account", () => {
@@ -119,10 +119,10 @@ describe("Two accounts: school fees and standalone Extra Classes", () => {
       expect(f.paid).toBe(paid);
     }
   });
-  it("Extra Classes invoices only contain Music (Piano), STEM or Extra Classes; KG only Music", () => {
+  it("everyone has an Extra Classes invoice: KG Music only, everyone else Music and Extra Classes", () => {
     for (const i of Q.invoices.filter((x) => x.account === "extra")) {
       const kg = Q.getClass(Q.getStudent(i.studentId)!.classId).level === "Kindergarten";
-      for (const it of i.items) expect(kg ? ["Music (Piano)"] : ["Music (Piano)", "STEM", "Extra Classes"]).toContain(it.label);
+      expect(i.items.map((x) => x.label), i.no).toEqual(kg ? ["Music (Piano)"] : ["Music (Piano)", "Extra Classes"]);
     }
   });
   it("Extra Classes reminders mention extra classes, not school fees", () => {

@@ -198,6 +198,21 @@ select pg_temp.check('only one Extra Classes sheet per term, and it has no class
   and pg_temp.err(:OWNER, $q$ insert into public.invoice_sheets (term_id, kind, class_id, title, period) values ('00000000-0000-0000-0000-0000000000c2', 'extra_classes', '00000000-0000-0000-0000-0000000000d2', 'x', 'x') $q$) is not null);
 select pg_temp.check('teacher cannot see invoice sheets', pg_temp.n(:TEACHER, 'select * from public.invoice_sheets') = 0);
 
+-- ---------- Extra classes enrolment & feeding payments ----------
+insert into public.activities (name, kindergarten_allowed) values ('Music (Piano)', true), ('Extra Classes', false) on conflict (name) do nothing;
+insert into public.classes (id, name, level, position) values ('00000000-0000-0000-0000-0000000000d3', 'KG 1', 'Kindergarten', 0);
+insert into public.students (id, admission_no, first_name, last_name, class_id) values
+  ('00000000-0000-0000-0000-0000000000f3', 'A3', 'Esi', 'KG', '00000000-0000-0000-0000-0000000000d3'),
+  ('00000000-0000-0000-0000-0000000000f4', 'A4', 'Yaw', 'P3', '00000000-0000-0000-0000-0000000000d1');
+select pg_temp.check('a new KG student is auto-enrolled in Music only', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f3') = array['Music (Piano)']);
+select pg_temp.check('a new Primary student is auto-enrolled in Music and Extra Classes', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f4') = array['Extra Classes', 'Music (Piano)']);
+select pg_temp.check('bursar records a weekly feeding payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 50000, 'Weekly') $q$) is null);
+select pg_temp.check('a feeding-only payment must be all feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 100, 'Daily') $q$) is not null);
+select pg_temp.check('the feeding part cannot exceed the payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('fees', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 200) $q$) is not null);
+select pg_temp.check('Extra Classes payments cannot carry feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('extra', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 100) $q$) is not null);
+select pg_temp.check('feeding balance: billed 600, paid 500 (weekly), owed 100', (select billed = 60000 and paid = 50000 and balance = 10000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
+select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 1 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
+
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from results;

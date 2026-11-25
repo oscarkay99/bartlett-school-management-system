@@ -55,6 +55,16 @@ export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SC
   });
   return { year, term, parts, total: parts.find((p) => p.account === "fees")!.net, extra: parts.find((p) => p.account === "extra")! };
 }
+/**
+ * Feeding for one student: billed (the Feeding line on their school fees invoices), paid (the feeding part of their
+ * confirmed school fees payments, whether paid with the fees at once or daily/weekly/monthly) and still owed.
+ */
+export function feedingAccount(studentId: string) {
+  const billed = invoicesOf(studentId, "fees").reduce((a, i) => a + (i.items.find((x) => x.label === "Feeding")?.amount ?? 0), 0);
+  const pays = paymentsOf(studentId, "fees").filter((p) => (p.feeding ?? 0) > 0).sort((a, b) => b.date.localeCompare(a.date));
+  const paid = pays.filter((p) => p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
+  return { billed, paid, balance: billed - paid, payments: pays };
+}
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
 export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };
 /** School fees still owed. Extra Classes is standalone: its balance is shown separately and never added here. */

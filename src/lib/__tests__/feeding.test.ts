@@ -40,4 +40,22 @@ describe("Feeding module", () => {
     expect(b.items.some((i) => i.label === "Feeding")).toBe(false);
     expect(c.items.find((i) => i.label === "Feeding")!.amount).toBe(ghs(300));
   });
+  it("feeding payments: never more feeding paid than billed; paying in full pays feeding in full", () => {
+    for (const st of Q.students) { const f = Q.feedingAccount(st.id); expect(f.paid, st.admissionNo).toBeLessThanOrEqual(f.billed); }
+    const fullPayers = Q.students.filter((s) => Q.feeSummary(s.id).balance === 0);
+    expect(fullPayers.length).toBeGreaterThan(0);
+    for (const s of fullPayers) { const f = Q.feedingAccount(s.id); expect(f.paid, s.admissionNo).toBe(f.billed); }
+  });
+  it("some families pay feeding on its own, daily / weekly / monthly, on school days; it reduces the school fees balance", () => {
+    const own = Q.payments.filter((p) => p.feedingPeriod);
+    expect(new Set(own.map((p) => p.feedingPeriod))).toEqual(new Set(["Daily", "Weekly", "Monthly"]));
+    for (const p of own) { expect(p.account).toBe("fees"); expect(p.feeding).toBe(p.amount); }
+    for (const p of own.filter((x) => x.feedingPeriod === "Daily")) expect([0, 6], p.receiptNo).not.toContain(new Date(p.date + "T00:00:00Z").getUTCDay());
+    const ama = Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
+    const fa = Q.feedingAccount(ama.id); expect([fa.billed, fa.paid, fa.balance]).toEqual([ghs(600), ghs(300), ghs(300)]);
+    expect(fa.payments[0].feedingPeriod).toBe("Monthly");
+  });
+  it("everyone is enrolled in extra classes", () => {
+    for (const s of Q.activeStudents()) expect(Q.invoicesOf(s.id, "extra").length, s.admissionNo).toBe(1);
+  });
 });

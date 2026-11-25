@@ -1,5 +1,5 @@
 // Class invoices: one full A4 school fees invoice per class (KG 1 … JHS 3), plus one small Extracurricular
-// invoice (music, STEM…) listed after JHS 3 that prints 10 to an A4 sheet for cutting.
+// invoice (Music, Extra Classes) listed after JHS 3 that prints 10 to an A4 sheet for cutting.
 // Standalone documents: they start as a copy of the current fees and editing them changes nothing else.
 // Pure helpers, safe on client and server.
 import type { Minor } from "./money";

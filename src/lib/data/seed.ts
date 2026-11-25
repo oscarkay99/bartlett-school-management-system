@@ -1,6 +1,6 @@
 import { ghs, type Minor } from "../money";
 import type * as T from "./types";
-import { ACTIVITIES, type Activity } from "../accounts";
+import { activitiesFor, type Activity } from "../accounts";
 import type { AcademicYear } from "../calendar";
 import { classFees, feedingRate, findTerm, termBillLines, type LevelFees, type TermFees } from "../fees";
 
@@ -51,13 +51,13 @@ const lvl = (tuition: number, books: number, levy: number, exam: number, feeding
   items: [{ label: "Tuition", amount: ghs(tuition) }, { label: "Books", amount: ghs(books) }, { label: "ICT & Development Levy", amount: ghs(levy) }, { label: "PTA", amount: ghs(50) }, ...(exam ? [{ label: "Examination", amount: ghs(exam) }] : [])],
   feeding: ghs(feeding),
 });
-const acts = (piano: number, stem: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), STEM: ghs(stem), "Extra Classes": ghs(extra) });
-const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 0, 420), Primary: lvl(2200, 250, 0, 0, 560), JHS: lvl(2750, 350, 0, 200, 560) }, overrides: {}, activities: acts(380, 320, 280) });
+const acts = (piano: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), "Extra Classes": ghs(extra) });
+const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 0, 420), Primary: lvl(2200, 250, 0, 0, 560), JHS: lvl(2750, 350, 0, 200, 560) }, overrides: {}, activities: acts(380, 320) });
 export const feeSchedule: TermFees[] = [
   lastYear("Term 1"), lastYear("Term 2"), { ...lastYear("Term 3"), overrides: { c11: [{ label: "BECE Registration", amount: ghs(300) }] } },
-  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 0, 450), Primary: lvl(2400, 250, 0, 0, 600), JHS: lvl(3000, 350, 0, 200, 600) }, overrides: {}, activities: acts(400, 350, 300) },
+  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 0, 450), Primary: lvl(2400, 250, 0, 0, 600), JHS: lvl(3000, 350, 0, 200, 600) }, overrides: {}, activities: acts(400, 350) },
   // Term 2: books are bought once a year (Term 1), Primary 6 pays a mock-exam fee, JHS 3 pays BECE registration.
-  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 0, 450), Primary: lvl(2400, 0, 0, 0, 600), JHS: lvl(3000, 0, 0, 200, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350, 300) },
+  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 0, 450), Primary: lvl(2400, 0, 0, 0, 600), JHS: lvl(3000, 0, 0, 200, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350) },
   // Term 3 of 2026/2027 has no fees yet — set it up in Settings → Fee schedule.
 ];
 const billingTerm = findTerm(feeSchedule, "2026/2027", "Term 1")!;
@@ -171,8 +171,8 @@ const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
   ai.items = [{ label: "Tuition", amount: ghs(2800) }, { label: "Books", amount: ghs(250) }, { label: "PTA", amount: ghs(50) }, { label: "Examination", amount: ghs(250) }, { label: "Feeding", amount: ghs(600) }];
   ai.discount = 0; ai.dueOn = "2026-10-30";
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id) payments.splice(i, 1);
-  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0] });
-  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(300), method: "Cash", date: "2026-09-21", ref: "CASH-0921", status: "Confirmed", staff: staffNames[0] });
+  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0], feeding: 0 }); // school fees only; feeding paid separately below
+  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(300), method: "Cash", date: "2026-09-21", ref: "CASH-0921", status: "Confirmed", staff: staffNames[0], feeding: ghs(300), feedingPeriod: "Monthly" });
 }
 // Demo: Kofi and Abena Mensah each part-paid, so their father gets one reminder covering all three children.
 for (const [first, paid, day, ref] of [["Kofi", 1500, "2026-09-18", "MM88241194"], ["Abena", 1000, "2026-09-25", "MM88241302"]] as const) {
@@ -184,6 +184,42 @@ for (const [first, paid, day, ref] of [["Kofi", 1500, "2026-09-18", "MM88241194"
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s20", amount: ghs(500), method: "Online Gateway", date: "2026-10-10", ref: "GW-PENDING-7781", status: "Pending", staff: "System" });
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s31", amount: ghs(800), method: "Online Gateway", date: "2026-10-09", ref: "GW-PENDING-7790", status: "Pending", staff: "System" });
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s44", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
+
+// ---------- Feeding payments ----------
+// Feeding is billed on the school fees invoice. Some families pay it with the school fees at once; others pay feeding
+// separately, daily, weekly or monthly. Own PRNG so this does not reshuffle the rest of the demo data.
+{
+  let k = 4242; const r3 = () => { k = (k * 48271) % 2147483647; return k / 2147483647; };
+  const feedingLine = (sid: string) => invoices.find((i) => i.studentId === sid && i.account === "fees")?.items.find((x) => x.label === "Feeding")?.amount ?? 0;
+  const paidSoFar = (sid: string) => payments.filter((p) => p.studentId === sid && p.account === "fees" && p.status === "Confirmed").reduce((a, p) => a + p.amount, 0);
+  const billedFees = (sid: string) => { const i = invoices.find((x) => x.studentId === sid && x.account === "fees")!; return i.items.reduce((a, x) => a + x.amount, 0) - i.discount; };
+  // n-th school day (Mon–Fri) from the start of term.
+  const schoolDay = (n: number) => { let d = "2026-09-07", left = n; while (left > 0) { d = addDays(d, 1); const w = new Date(d + "T00:00:00Z").getUTCDay(); if (w !== 0 && w !== 6) left--; } return d; };
+  const mensahKids = new Set(students.filter((x) => x.guardians.some((g) => g.guardianId === mensah.id)).map((x) => x.id));
+  for (const st of students) {
+    if (mensahKids.has(st.id) || st.status !== "Active" || r3() > 0.3) continue;
+    const rate = feedingLine(st.id); const room = Math.min(rate, billedFees(st.id) - paidSoFar(st.id)); if (room <= 0) continue;
+    const period = (["Daily", "Weekly", "Monthly"] as const)[Math.floor(r3() * 3)];
+    const each = Math.round(rate / (period === "Daily" ? 70 : period === "Weekly" ? 14 : 4) / 100) * 100;   // ~70 school days, 14 weeks, 4 months a term
+    const times = period === "Daily" ? 5 + Math.floor(r3() * 20) : period === "Weekly" ? 1 + Math.floor(r3() * 5) : 1 + Math.floor(r3() * 2);
+    let left = room;
+    for (let n = 0; n < times && left >= each && each > 0; n++) {
+      const day = period === "Daily" ? schoolDay(n) : addDays("2026-09-07", period === "Weekly" ? n * 7 : n * 30); if (day > TODAY) break;
+      payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: st.id, guardianId: st.guardians[0].guardianId, amount: each,
+        method: r3() < 0.6 ? "Cash" : "Mobile Money", date: day, ref: `FD-${pad(pay * 7, 6)}`, status: "Confirmed", staff: staffNames[Math.floor(r3() * staffNames.length)], feeding: each, feedingPeriod: period });
+      left -= each;
+    }
+  }
+  // Every other school fees payment covers feeding in proportion: paying the whole invoice at once pays feeding in full.
+  for (const st of students) {
+    const rate = feedingLine(st.id); const gross = billedFees(st.id);
+    let left = rate - payments.filter((p) => p.studentId === st.id && p.feedingPeriod && p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
+    for (const p of payments.filter((x) => x.studentId === st.id && x.account === "fees" && x.feeding === undefined).sort((a, b) => a.date.localeCompare(b.date))) {
+      const share = gross > 0 ? Math.min(left, Math.round((p.amount * rate) / gross)) : 0;
+      p.feeding = Math.max(0, share); if (p.status === "Confirmed") left -= p.feeding;
+    }
+  }
+}
 
 // ---------- Extra Classes (standalone invoice, receipted separately) ----------
 // Own PRNG so this account does not reshuffle the rest of the demo data.
@@ -201,20 +237,20 @@ const settle = (st: T.Student, total: Minor) => {
 };
 students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
-  // Extra classes are opt-in. Kindergarten only offers Music (Piano).
-  const offered: Activity[] = cls.level === "Kindergarten" ? ["Music (Piano)"] : [...ACTIVITIES];
-  const taken = offered.filter(() => rnd2() < (cls.level === "Kindergarten" ? 0.3 : 0.28));
-  if (taken.length) {
+  // Every student is enrolled in extra classes: Kindergarten in Music (Piano), everyone else in Music and Extra Classes.
+  const taken = activitiesFor(cls.level);
+  {
     const items = taken.map((a) => ({ label: a, amount: activityFees[a] }));
     invoices.push({ id: `exc${++xInv}`, no: `EXC-2627-T1-${pad(xInv, 4)}`, account: "extra", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount: 0, billedOn: "2026-09-08", dueOn: xInv % 5 === 0 ? "2026-10-09" : "2026-10-30" });
     settle(st, items.reduce((a, b) => a + b.amount, 0));
   }
 });
-// Demo: Ama Mensah — Music (Piano) GHS 400 on the Extra Classes invoice, unpaid.
+const getLevel = (st: T.Student) => classes.find((c) => c.id === st.classId)!.level;
+// Demo: Ama Mensah — Music (Piano) GH₵ 400 + Extra Classes GH₵ 350 on the Extra Classes invoice, unpaid.
 {
   for (let i = invoices.length - 1; i >= 0; i--) if (invoices[i].studentId === ama.id && invoices[i].account !== "fees") invoices.splice(i, 1);
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id && payments[i].account !== "fees") payments.splice(i, 1);
-  invoices.push({ id: `exc${++xInv}`, no: `EXC-2627-T1-${pad(xInv, 4)}`, account: "extra", studentId: ama.id, term: "Term 1", year: "2026/2027", items: [{ label: "Music (Piano)", amount: activityFees["Music (Piano)"] }], discount: 0, billedOn: "2026-09-08", dueOn: "2026-10-30" });
+  invoices.push({ id: `exc${++xInv}`, no: `EXC-2627-T1-${pad(xInv, 4)}`, account: "extra", studentId: ama.id, term: "Term 1", year: "2026/2027", items: activitiesFor(getLevel(ama)).map((a) => ({ label: a, amount: activityFees[a] })), discount: 0, billedOn: "2026-09-08", dueOn: "2026-10-30" });
 }
 
 // ---------- Staff ----------
