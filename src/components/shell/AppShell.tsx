@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BookOpen, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Utensils, Shapes, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, FileText, Boxes, CalendarCheck, ChevronLeft, GraduationCap, HeartHandshake, LayoutDashboard, Landmark, Menu, MessageSquare, Moon, Plus, Receipt, Search, Settings, ShieldCheck, Sun, Monitor, UserPlus, Users, UsersRound, FileBarChart, Briefcase, X, Lock, Utensils, Shapes, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
@@ -21,6 +21,7 @@ const NAV: Nav[] = [
   { href: "/fees", label: "School Fees", icon: Receipt, key: "fees" },
   { href: "/feeding", label: "Feeding", icon: Utensils, key: "feeding" },
   { href: "/extracurricular", label: "Extracurricular", icon: Shapes, key: "extracurricular" },
+  { href: "/invoices", label: "Invoices", icon: FileText, key: "invoices" },
   { href: "/finance", label: "Finance", icon: Landmark, key: "finance" },
   { href: "/inventory", label: "Inventory", icon: Boxes, key: "inventory" },
   { href: "/academics", label: "Academics", icon: BookOpen, key: "academics" },
@@ -89,8 +90,8 @@ export function AppShell({ children, school }: { children: ReactNode; school: { 
   return (
     <RoleCtx.Provider value={ctx}>
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[200] focus:rounded focus:bg-surface focus:p-2">Skip to content</a>
-      <aside className={cn("fixed inset-y-0 left-0 z-40 hidden transition-[width] lg:block", collapsed ? "w-[68px]" : "w-[250px]")}>{sidebar}</aside>
-      {mobile && <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setMobile(false)}><div className="absolute inset-0 bg-black/50" /><aside className="anim-slide relative h-full w-[260px]" style={{ animationName: "none" }} onClick={(e) => e.stopPropagation()}>{sidebar}<button className="absolute right-2 top-4 text-white" onClick={() => setMobile(false)} aria-label="Close menu"><X /></button></aside></div>}
+      <aside className={cn("no-print fixed inset-y-0 left-0 z-40 hidden transition-[width] lg:block", collapsed ? "w-[68px]" : "w-[250px]")}>{sidebar}</aside>
+      {mobile && <div className="no-print fixed inset-0 z-50 lg:hidden" onClick={() => setMobile(false)}><div className="absolute inset-0 bg-black/50" /><aside className="anim-slide relative h-full w-[260px]" style={{ animationName: "none" }} onClick={(e) => e.stopPropagation()}>{sidebar}<button className="absolute right-2 top-4 text-white" onClick={() => setMobile(false)} aria-label="Close menu"><X /></button></aside></div>}
       <div className={cn("transition-[padding]", collapsed ? "lg:pl-[68px]" : "lg:pl-[250px]")}>
         <Topbar school={school} onMenu={() => setMobile(true)} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
         <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">{blocked ? <NoAccess label={ROLES[role].label} /> : children}</main>
@@ -110,7 +111,7 @@ function Topbar({ school, onMenu, role, setRole }: { school: { name: string }; o
   const pop = "anim-pop absolute right-0 top-11 z-50 w-72 rounded-xl border border-line bg-surface p-1.5 shadow-xl";
   const notifs = [["3 grade batches awaiting approval", "/academics"], ["2 gateway payments pending verification", "/fees?tab=reconcile"], ["4 items below reorder level", "/inventory"], ["6 messages failed to deliver", "/communications"]];
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-line bg-surface/90 px-3 backdrop-blur sm:px-5">
+    <header className="no-print sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-line bg-surface/90 px-3 backdrop-blur sm:px-5">
       <button className="grid size-10 shrink-0 place-items-center rounded-lg hover:bg-surface-2 lg:hidden" onClick={onMenu} aria-label="Open menu"><Menu size={20} /></button>
       <SchoolLogo size={34} className="shrink-0 lg:hidden" />
       <div className="hidden min-w-0 xl:block"><div className="truncate text-sm font-semibold">{school.name}</div></div>

@@ -180,3 +180,12 @@ function pageWindow(cur: number, total: number): (number | "…")[] {
 export function Select({ value, onChange, options, label }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; label: string }) {
   return <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2.5 text-sm">{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
 }
+
+// ---------- Money input ----------
+const moneyBox = "h-9 rounded-lg border border-line bg-surface px-2.5 text-sm placeholder:text-muted/60 focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30";
+/** Cedi amount box that stores integer pesewas. Empty means 0. `className` sets the width (default: full width). */
+export function MoneyInput({ value, onChange, label, className }: { value: number; onChange: (m: number) => void; label: string; className?: string }) {
+  const [s, setS] = useState(value ? String(value / 100) : "");
+  return <input aria-label={label} inputMode="decimal" placeholder="0" className={cn(moneyBox, "num text-right", className ?? "w-full min-w-[84px]")} value={s} onFocus={(e) => e.target.select()}
+    onChange={(e) => { const v = e.target.value.replace(/,/g, ""); if (!/^\d*\.?\d{0,2}$/.test(v)) return; setS(v); onChange(Math.round(Number(v || 0) * 100)); }} />;
+}

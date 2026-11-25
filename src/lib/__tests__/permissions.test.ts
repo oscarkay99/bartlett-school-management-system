@@ -11,7 +11,7 @@ describe("Owner role", () => {
   it("can create, edit, delete and approve on every resource", () => {
     for (const r of RESOURCES) for (const o of OPS) expect(allowed("owner", r, o), `${r}.${o}`).toBe(true);
   });
-  it("sees every module, including Feeding and Extracurricular", () => { expect(ROLES.owner.nav).toHaveLength(15); expect(ROLES.owner.nav).toEqual(expect.arrayContaining(["feeding", "extracurricular"])); });
+  it("sees every module, including Feeding and Extracurricular", () => { expect(ROLES.owner.nav).toHaveLength(16); expect(ROLES.owner.nav).toEqual(expect.arrayContaining(["feeding", "extracurricular"])); });
   it("old saved roles fall back to Owner instead of breaking", () => {
     expect(normalizeRole("headmaster")).toBe("owner"); expect(normalizeRole("proprietor")).toBe("owner"); expect(normalizeRole(null)).toBe("owner"); expect(normalizeRole("bursar")).toBe("bursar");
   });

@@ -69,7 +69,16 @@ body {
 .anim-pop { animation: pop .16s ease-out; }
 .anim-slide { animation: slidein .2s ease-out; }
 @media print {
-  aside, header, .no-print { display: none !important; }
+  /* Only the app's own chrome (sidebar, top bar) is marked no-print; documents keep their own <header>. */
+  .no-print { display: none !important; }
+  /* Print colours exactly as on screen (table header shading, borders, badges). */
+  *, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body { background: #fff; color: #000; }
   main { padding: 0 !important; }
+}
+/* Invoices page: print only the open invoice (html.print-invoice is set just while printing). */
+@media print {
+  html.print-invoice body * { visibility: hidden !important; }
+  html.print-invoice .invoice-doc, html.print-invoice .invoice-doc * { visibility: visible !important; }
+  html.print-invoice .invoice-doc { position: fixed; inset: 0; padding: 14mm; font-size: 12px; }
 }

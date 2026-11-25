@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Copy, FilePlus2, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { AlertBanner, Badge, Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { Modal, useToast } from "@/components/ui/interactive";
+import { Modal, MoneyInput, useToast } from "@/components/ui/interactive";
 import { PeriodSelect, useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
@@ -65,13 +65,6 @@ function RequestChange({ year, term }: { year: string; term: string }) {
   </>);
 }
 
-/** Cedi amount box; stores integer pesewas. Empty means 0. */
-function Amount({ value, onChange, label, className }: { value: number; onChange: (m: number) => void; label: string; className?: string }) {
-  const [s, setS] = useState(value ? String(value / 100) : "");
-  return <input aria-label={label} inputMode="decimal" placeholder="0" className={cn(box, "num text-right", className ?? "w-full min-w-[84px]")} value={s} onFocus={(e) => e.target.select()}
-    onChange={(e) => { const v = e.target.value.replace(/,/g, ""); if (!/^\d*\.?\d{0,2}$/.test(v)) return; setS(v); onChange(Math.round(Number(v || 0) * 100)); }} />;
-}
-
 // One table: a row per fee, a column per level. Boarding and feeding are rows too.
 function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => void; onSave: (tf: TermFees) => void }) {
   const { classes } = useFeeSchedule(); const toast = useToast();
@@ -91,20 +84,20 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
             {g.rows.map((r, i) => (
               <tr key={i}>
                 <td className="px-4 py-2"><input aria-label={`Fee ${i + 1} name`} placeholder="Fee name" className={cn(box, "w-full min-w-[150px]")} value={r.label} onChange={(e) => setRow(i, { label: e.target.value })} /></td>
-                {LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><Amount label={`${r.label || "Fee"} for ${lv}`} value={r.amounts[lv]} onChange={(m) => setRow(i, { amounts: { ...r.amounts, [lv]: m } })} /></td>)}
+                {LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`${r.label || "Fee"} for ${lv}`} value={r.amounts[lv]} onChange={(m) => setRow(i, { amounts: { ...r.amounts, [lv]: m } })} /></td>)}
                 <td className="pr-3"><button type="button" aria-label={`Remove ${r.label || "fee"}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => setG({ ...g, rows: g.rows.filter((_, j) => j !== i) })}><Trash2 size={15} /></button></td>
               </tr>))}
             <tr><td colSpan={5} className="px-4 py-2"><Button size="sm" variant="ghost" onClick={() => setG({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] })}><Plus size={13} />Add a fee</Button></td></tr>
           </tbody>
           <tbody className="border-t-2 border-line bg-surface-2/40">
             <tr className="font-semibold"><td className="px-4 py-2.5">School fees total</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv))}</td>)}<td /></tr>
-            <tr><td className="px-4 py-2"><div className="font-medium">Boarding</div><div className="text-xs text-muted">Added for boarders only</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><Amount label={`Boarding for ${lv}`} value={g.boarding[lv]} onChange={(m) => setG({ ...g, boarding: { ...g.boarding, [lv]: m } })} /></td>)}<td /></tr>
-            <tr><td className="px-4 py-2"><div className="font-medium">Feeding</div><div className="text-xs text-muted">Billed separately</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><Amount label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
+            <tr><td className="px-4 py-2"><div className="font-medium">Boarding</div><div className="text-xs text-muted">Added for boarders only</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Boarding for ${lv}`} value={g.boarding[lv]} onChange={(m) => setG({ ...g, boarding: { ...g.boarding, [lv]: m } })} /></td>)}<td /></tr>
+            <tr><td className="px-4 py-2"><div className="font-medium">Feeding</div><div className="text-xs text-muted">Billed separately</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
           </tbody>
         </table></div></Card>
 
       <Card><CardHeader title="Activities" sub="Price per term. Billed separately when a student joins." />
-        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">{Object.entries(g.activities).map(([a, m]) => <label key={a} className="block text-sm"><span className="mb-1 block font-medium">{a}</span><Amount label={`${a} price`} value={m} onChange={(v) => setG({ ...g, activities: { ...g.activities, [a]: v } })} /></label>)}</div></Card>
+        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">{Object.entries(g.activities).map(([a, m]) => <label key={a} className="block text-sm"><span className="mb-1 block font-medium">{a}</span><MoneyInput label={`${a} price`} value={m} onChange={(v) => setG({ ...g, activities: { ...g.activities, [a]: v } })} /></label>)}</div></Card>
 
       <Exceptions g={g} setG={setG} classes={classes} />
 
@@ -131,7 +124,7 @@ function Exceptions({ g, setG, classes }: { g: FeeGrid; setG: (g: FeeGrid) => vo
           <div key={i} className="flex flex-wrap items-center gap-2">
             <select aria-label={`Exception ${i + 1} class`} className={cn(box, "w-36")} value={e.classId} onChange={(x) => set(i, { classId: x.target.value })}><option value="">Class…</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
             <input list="fee-names" aria-label={`Exception ${i + 1} fee`} placeholder="Fee, e.g. BECE Registration" className={cn(box, "min-w-[180px] flex-1")} value={e.label} onChange={(x) => set(i, { label: x.target.value })} />
-            <Amount className="w-28 flex-none" label={`Exception ${i + 1} amount`} value={e.amount} onChange={(m) => set(i, { amount: m })} />
+            <MoneyInput className="w-28 flex-none" label={`Exception ${i + 1} amount`} value={e.amount} onChange={(m) => set(i, { amount: m })} />
             <button type="button" aria-label={`Remove exception ${i + 1}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => setG({ ...g, exceptions: g.exceptions.filter((_, j) => j !== i) })}><Trash2 size={15} /></button>
           </div>))}
         <Button size="sm" variant="ghost" onClick={add}><Plus size={13} />Add exception</Button>
