@@ -52,7 +52,7 @@ const lvl = (tuition: number, books: number, levy: number, feeding: number): Lev
   items: [{ label: "Tuition", amount: ghs(tuition) }, { label: "Books", amount: ghs(books) }, { label: "ICT & Development Levy", amount: ghs(levy) }, { label: "PTA", amount: ghs(50) }],
   feeding: ghs(feeding),
 });
-const acts = (piano: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), "Extra Classes": ghs(extra) });
+const acts = (piano: number, extra: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), "STEM": ghs(extra) });
 const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 420), Primary: lvl(2200, 250, 0, 560), JHS: lvl(2750, 350, 0, 560) }, overrides: {}, activities: acts(380, 320) });
 export const feeSchedule: TermFees[] = [
   lastYear("Term 1"), lastYear("Term 2"), { ...lastYear("Term 3"), overrides: { c11: [{ label: "BECE Registration", amount: ghs(300) }] } },
@@ -236,7 +236,7 @@ feedingPlans.push({ studentId: ama.id, term: "2026/2027|Term 1", frequency: "Mon
   }
 }
 
-// ---------- Extra Classes (standalone invoice, receipted separately) ----------
+// ---------- Extracurricular (standalone invoice, receipted separately) ----------
 // Own PRNG so this account does not reshuffle the rest of the demo data.
 let s2 = 20261123;
 const rnd2 = () => { s2 |= 0; s2 = (s2 + 0x6d2b79f5) | 0; let t = Math.imul(s2 ^ (s2 >>> 15), 1 | s2); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -252,7 +252,7 @@ const settle = (st: T.Student, total: Minor) => {
 };
 students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
-  // Every student is enrolled in extra classes: Kindergarten in Music (Piano), everyone else in Music and Extra Classes.
+  // Every student is enrolled in extracurricular activities: Kindergarten in Music (Piano), everyone else in Music and STEM.
   const taken = activitiesFor(cls.level);
   {
     const items = taken.map((a) => ({ label: a, amount: activityFees[a] }));
@@ -261,7 +261,7 @@ students.forEach((st) => {
   }
 });
 const getLevel = (st: T.Student) => classes.find((c) => c.id === st.classId)!.level;
-// Demo: Ama Mensah — Music (Piano) GH₵ 400 + Extra Classes GH₵ 350 on the Extra Classes invoice, unpaid.
+// Demo: Ama Mensah — Music (Piano) GH₵ 400 + STEM GH₵ 350 on the Extracurricular invoice, unpaid.
 {
   for (let i = invoices.length - 1; i >= 0; i--) if (invoices[i].studentId === ama.id && invoices[i].account !== "fees") invoices.splice(i, 1);
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id && payments[i].account !== "fees") payments.splice(i, 1);

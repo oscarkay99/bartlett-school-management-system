@@ -31,4 +31,9 @@ describe("Class invoices", () => {
     const c = cleanInvoice({ ...inv(" School Fees ", []), lines: [{ description: " Tuition ", amount: 5 }, { description: "ICT & Development Levy", amount: 0 }, { description: "  ", amount: 9 }] });
     expect(c.title).toBe("School Fees"); expect(c.lines).toEqual([{ description: "Tuition", amount: 5 }, { description: "ICT & Development Levy", amount: 0 }]);
   });
+  it("an invoice saved with the old \"Extra Classes\" line shows it as STEM", () => {
+    const d = { extra: { title: "Extracurricular", period: "Term 1", notes: "", lines: [] } };
+    const m = mergeInvoices(d, { extra: { title: "Extracurricular", period: "Term 1", notes: "", lines: [{ description: "Music (Piano)", amount: 1 }, { description: "Extra Classes", amount: 2 }] } });
+    expect(m.extra.lines.map((l) => l.description)).toEqual(["Music (Piano)", "STEM"]);
+  });
 });

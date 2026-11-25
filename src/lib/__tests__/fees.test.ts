@@ -62,7 +62,7 @@ describe("Fee schedule — setting up a new term", () => {
     copy.levels.Primary.items[0].amount = 1; expect(prev.levels.Primary.items[0].amount).toBe(ghs(2400)); // deep copy
   });
   it("a blank term must have amounts before it can be saved", () => {
-    const b = blankTerm("2026/2027", "Term 3", ["Extra Classes"]);
+    const b = blankTerm("2026/2027", "Term 3", ["STEM"]);
     expect(validateTermFees(b, classes)).toMatch(/add up to zero/);
   });
   it("rejects unnamed, duplicate and negative entries", () => {
@@ -90,6 +90,11 @@ describe("Fee schedule — locking and saved edits", () => {
     expect(findTerm(m, "2026/2027", "Term 3")).toBeDefined(); expect(findTerm(m, "2027/2028", "Term 1")).toBeUndefined();
     expect(mergeSchedule(Q.feeSchedule, "nope", locked, classes)).toBe(Q.feeSchedule);
   });
+  it("a price saved under the old name \"Extra Classes\" carries over to STEM", () => {
+    const old = structuredClone(t2) as typeof t2; const { STEM: price, ...rest } = old.activities; old.activities = { ...rest, ["Extra Classes"]: ghs(420) }; void price;
+    const m = mergeSchedule(Q.feeSchedule, [old], locked, classes);
+    expect(findTerm(m, "2026/2027", "Term 2")!.activities).toEqual({ "Music (Piano)": old.activities["Music (Piano)"], STEM: ghs(420) });
+  });
   it("invoice numbers follow the term", () => {
     expect(invoiceStem("INV", "2026/2027", "Term 2")).toBe("INV-2627-T2");
     expect(invoiceStem("FDG", "2025/2026", "Term 1")).toBe("FDG-2526-T1");
@@ -99,7 +104,7 @@ describe("Fee schedule — locking and saved edits", () => {
 
 describe("What a parent owes for the term", () => {
   const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
-  it("term total is school fees only (feeding included only if paid with the fees); Extra Classes is reported separately", () => {
+  it("term total is school fees only (feeding included only if paid with the fees); Extracurricular is reported separately", () => {
     const tc = Q.termCharges(ama().id, "2026/2027", "Term 1");
     expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3100)], ["extra", ghs(750)]]);
     expect(tc.total).toBe(ghs(3100)); // Ama pays feeding monthly, so it is not on her school fees invoice expect(tc.extra.net).toBe(ghs(750));
@@ -137,7 +142,7 @@ describe("Fee schedule — spreadsheet editor", () => {
     expect(g.exceptions).toContainEqual({ classId: cls("JHS 3").id, label: "BECE Registration", amount: ghs(320) });
   });
   it("explains what's missing in plain words", () => {
-    const blank = toGrid(blankTerm("2027/2028", "Term 1", ["Extra Classes"]));
+    const blank = toGrid(blankTerm("2027/2028", "Term 1", ["STEM"]));
     expect(validateGrid(blank, classes)).toBe("Enter the fees for Kindergarten, Primary, JHS");
     const g = toGrid(t2); expect(validateGrid(g, classes)).toBe("");
     expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toBe("Give every fee a name");

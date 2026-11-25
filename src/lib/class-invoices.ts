@@ -1,5 +1,5 @@
 // Class invoices: one full A4 school fees invoice per class (KG 1 … JHS 3), plus one small Extracurricular
-// invoice (Music, Extra Classes) listed after JHS 3 that prints 10 to an A4 sheet for cutting.
+// invoice (Music, STEM) listed after JHS 3 that prints 10 to an A4 sheet for cutting.
 // Standalone documents: they start as a copy of the current fees and editing them changes nothing else.
 // Pure helpers, safe on client and server.
 import type { Minor } from "./money";
@@ -50,7 +50,7 @@ const isInvoice = (v: unknown): v is ClassInvoice => {
 export function mergeInvoices(defaults: Record<string, ClassInvoice>, saved: unknown): Record<string, ClassInvoice> {
   if (!saved || typeof saved !== "object") return defaults;
   const out = { ...defaults };
-  for (const [id, inv] of Object.entries(saved as Record<string, unknown>)) if (id in defaults && isInvoice(inv)) out[id] = inv;
+  for (const [id, inv] of Object.entries(saved as Record<string, unknown>)) if (id in defaults && isInvoice(inv)) out[id] = { ...inv, lines: inv.lines.map((l) => (l.description === "Extra Classes" ? { ...l, description: "STEM" } : l)) };
   return out;
 }
 

@@ -57,7 +57,7 @@ describe("Feeding module", () => {
     const fa = Q.feedingAccount(ama.id); expect([fa.billed, fa.paid, fa.balance, fa.separate]).toEqual([ghs(600), ghs(300), ghs(300), true]);
     expect(fa.payments[0].feedingPeriod).toBe("Monthly");
   });
-  it("everyone is enrolled in extra classes", () => {
+  it("everyone is enrolled in extracurricular", () => {
     for (const s of Q.activeStudents()) expect(Q.invoicesOf(s.id, "extra").length, s.admissionNo).toBe(1);
   });
   describe("payment plans", () => {

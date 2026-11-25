@@ -12,17 +12,18 @@ import { feedingRate, termKey } from "@/lib/fees";
 import { expectedByToday, feedingStatus, PLAN_FREQUENCIES, periodWord, perPeriod, planLabel, planStatus, studentFeedingRate, validateException, type FeedingException, type FeedingPlan, type PlanFrequency, type PlanStatus, type TermDates } from "@/lib/feeding";
 import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
 import { PlanDialog } from "./PlanDialog";
+import { FeedingPaymentDialog } from "./FeedingPaymentDialog";
 import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-interface FStudent { id: string; name: string; adm: string; classId: string; cls: string; billed: number; paid: number; dueOn?: string }
+interface FStudent { id: string; name: string; adm: string; classId: string; cls: string; billed: number; paid: number; dueOn?: string; payer?: { name: string; phone?: string } }
 /** A payment that included feeding. `how`: "With school fees" or Daily / Weekly / Monthly / Term. */
 export interface FeedingPayment { id: string; receipt: string; studentId: string; name: string; classId: string; cls: string; date: string; feeding: number; how: string; method: string; status: string }
 interface KitchenItem { id: string; name: string; unit: string; onHand: number; reorder: number; expiry?: string }
 
 // Feeding module: who is on feeding this term, the daily meal register, and kitchen stock.
 // Billing stays on the school fees invoice; changes here decide each student's Feeding line when invoices are generated.
-export function FeedingWorkspace({ students, payments, kitchen, today }: { students: FStudent[]; payments: FeedingPayment[]; kitchen: KitchenItem[]; today: string }) {
+export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs = [] }: { students: FStudent[]; payments: FeedingPayment[]; kitchen: KitchenItem[]; today: string; usedRefs?: string[] }) {
   const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const key = termKey(year, term);
   const feeding = useFeeding(); const { allow, role } = useRole();
   const canEdit = allow("invoices", "create") || allow("students", "edit");               // Owner, Admin, Bursar
@@ -67,7 +68,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
       { id: "overview", label: "Overview", content: overview },
       { id: "students", label: "Students", badge: String(rows.length - onFeeding || ""), content: <StudentsTab rows={rows} canEdit={canEdit} termLabel={`${term} ${year}`} onSave={(sid, ex) => feeding.updateException(sid, key, ex)} classes={fs.classes} termKey={key} /> },
       { id: "plans", label: "Payment plans", badge: behind.length ? String(behind.length) : undefined, content: <PlansTab rows={rows} canEdit={canEdit} td={td} today={today} termLabel={`${term} ${year}`} termKey={key} classes={fs.classes} history={plans.history} onPlan={plans.setPlan} /> },
-      { id: "payments", label: "Payments", content: <PaymentsTab payments={payments} classes={fs.classes} /> },
+      { id: "payments", label: "Payments", content: <PaymentsTab payments={payments} classes={fs.classes} payees={canEdit ? rows : undefined} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} /> },
       { id: "meals", label: "Meal register", content: <MealsTab byClass={byClass} meals={feeding.meals} canEdit={canMeals} today={today} onSave={feeding.saveMeals} /> },
       { id: "kitchen", label: "Kitchen stock", badge: low.length ? String(low.length) : undefined, content: <KitchenTab items={kitchen} /> },
     ].map((t) => ({ ...t, badge: t.badge || undefined }))} />
@@ -152,8 +153,8 @@ function KitchenTab({ items }: { items: KitchenItem[] }) {
 }
 
 // Every payment that included feeding, however it was paid: with the school fees at once, or daily / weekly / monthly / for the term.
-function PaymentsTab({ payments, classes }: { payments: FeedingPayment[]; classes: { id: string; name: string }[] }) {
-  const [how, setHow] = useState(""); const [cls, setCls] = useState("");
+function PaymentsTab({ payments, classes, payees, usedRefs, termLabel, today }: { payments: FeedingPayment[]; classes: { id: string; name: string }[]; payees?: Row[]; usedRefs: string[]; termLabel: string; today: string }) {
+  const [how, setHow] = useState(""); const [cls, setCls] = useState(""); const [pay, setPay] = useState(false);
   const data = payments.filter((p) => (!how || p.how === how) && (!cls || p.classId === cls));
   const total = data.filter((p) => p.status === "Confirmed").reduce((a, p) => a + p.feeding, 0);
   const label = (h: string) => (h === "Term" ? "For the term" : h);
@@ -166,7 +167,9 @@ function PaymentsTab({ payments, classes }: { payments: FeedingPayment[]; classe
     { key: "r", header: "Receipt", hideOnMobile: true, render: (x) => <Link className="num text-info hover:underline" href={`/print/receipt/${x.id}`}>{x.receipt}</Link> },
   ];
   return (
-    <Card><CardHeader title="Feeding payments" sub={`${data.length} payments · ${money(total)} confirmed. Feeding paid with the school fees at once shows the feeding part of that payment.`} />
+    <Card><CardHeader title="Feeding payments" sub={`${data.length} payments · ${money(total)} confirmed. Feeding paid with the school fees at once shows the feeding part of that payment.`}
+      action={payees && <Button variant="primary" onClick={() => setPay(true)}>Record feeding payment</Button>} />
+      {pay && payees && <FeedingPaymentDialog students={payees} usedRefs={usedRefs} termLabel={termLabel} today={today} onClose={() => setPay(false)} />}
       <DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.receipt} pageSize={12}
         filters={<><Select label="How it was paid" value={how} onChange={setHow} options={[{ value: "", label: "All payments" }, ...["With school fees", "Daily", "Weekly", "Monthly", "Term"].map((h) => ({ value: h, label: label(h) }))]} />
           <Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} /></>} /></Card>

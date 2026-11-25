@@ -1,4 +1,4 @@
-// Builds the props for the billing pages (School Fees, Extra Classes) from the data layer.
+// Builds the props for the billing pages (School Fees, Extracurricular) from the data layer.
 // Amounts to bill come from the fee schedule on the client (Settings → Fee schedule), for the selected term.
 import * as Q from "./queries";
 import type { FeeAccount } from "../accounts";
@@ -11,7 +11,7 @@ export function billingProps(account: FeeAccount) {
     const f = Q.accountSummary(s.id, account); if (!f.enrolled) return [];
     const inv = Q.invoicesOf(s.id, account);
     const fd = account === "fees" ? Q.feedingAccount(s.id) : undefined;
-    return [{ id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, feedingOwed: Math.max(0, fd?.balance ?? 0), feedingRate: fd?.billed ?? 0, billed: f.billed, paid: f.paid, balance: f.balance, dueOn: f.dueOn, overdue: f.overdue, status: f.status, invoice: inv[0].no, terms: inv.map((i) => termKey(i.year, i.term)), items: inv.flatMap((i) => i.items) }];
+    return [{ id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, feedingOwed: Math.max(0, fd?.balance ?? 0), feedingRate: fd?.billed ?? 0, payer: Q.payerOf(s), billed: f.billed, paid: f.paid, balance: f.balance, dueOn: f.dueOn, overdue: f.overdue, status: f.status, invoice: inv[0].no, terms: inv.map((i) => termKey(i.year, i.term)), items: inv.flatMap((i) => i.items) }];
   });
   const payments: PRow[] = Q.accountPayments(account).map((p) => { const s = Q.getStudent(p.studentId)!; return { id: p.id, receipt: p.receiptNo, studentId: s.id, student: Q.fullName(s), classId: s.classId, amount: p.amount, feeding: p.feeding ?? 0, feedingPeriod: p.feedingPeriod, method: p.method, date: p.date, ref: p.ref, status: p.status, staff: p.staff }; });
   const reminders: RRow[] = Q.reminderRows({ account }).map((r) => ({ gid: r.guardian.id, name: `${r.guardian.title} ${r.guardian.name}`, channel: r.channel, eligible: r.eligible, reason: r.reason, last: r.lastReminder, total: r.total, overdue: r.lines.some((l) => l.overdue), classIds: r.lines.map((l) => l.student.classId), students: r.lines.map((l) => ({ id: l.student.id, name: Q.fullName(l.student), balance: l.balance })), message: Q.buildReminder(r, Q.SCHOOL, account) }));

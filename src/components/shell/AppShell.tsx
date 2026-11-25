@@ -7,11 +7,14 @@ import { Bell, BookOpen, FileText, Utensils, Boxes, CalendarCheck, ChevronLeft, 
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/primitives";
 import { SchoolLogo } from "@/components/SchoolLogo";
-import { PeriodSelect } from "./CalendarContext";
+import { PeriodSelect, useCalendar } from "./CalendarContext";
+import { createPortal } from "react-dom";
+import { termOfDate } from "@/lib/calendar";
 import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, canVisit, type MoneyAccess, type Op, type Resource } from "@/lib/permissions";
 export { ROLES };
 
-export interface SearchItem { type: string; label: string; sub: string; href: string }
+/** `year`/`term` (invoices) or `date` (receipts) tie a result to a term; those only show for the term selected in the top bar. */
+export interface SearchItem { type: string; label: string; sub: string; href: string; year?: string; term?: string; date?: string }
 interface Nav { href: string; label: string; icon: LucideIcon; key: string }
 const NAV: Nav[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
@@ -20,7 +23,7 @@ const NAV: Nav[] = [
   { href: "/admissions", label: "Admissions", icon: UserPlus, key: "admissions" },
   { href: "/fees", label: "School Fees", icon: Receipt, key: "fees" },
   { href: "/feeding", label: "Feeding", icon: Utensils, key: "feeding" },
-  { href: "/extra-classes", label: "Extra Classes", icon: Shapes, key: "extra-classes" },
+  { href: "/extracurricular", label: "Extracurricular", icon: Shapes, key: "extracurricular" },
   { href: "/invoices", label: "Invoices", icon: FileText, key: "invoices" },
   { href: "/finance", label: "Finance", icon: Landmark, key: "finance" },
   { href: "/inventory", label: "Inventory", icon: Boxes, key: "inventory" },
@@ -123,7 +126,7 @@ function Topbar({ school, onMenu, role, setRole }: { school: { name: string }; o
       </button>
       <div className="relative">
         <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "quick" ? null : "quick")} aria-label="Quick actions" aria-expanded={open === "quick"}><Plus size={19} /></button>
-        {open === "quick" && <div className={pop}>{[["Register student", "/students/new", "students"], ["Record school fees payment", "/fees?pay=1", "fees"], ["Record extra classes payment", "/extra-classes?pay=1", "extra-classes"], ["Prepare fee reminders", "/fees?tab=reminders", "fees"], ["Mark attendance", "/attendance", "attendance"], ["Issue inventory", "/inventory?issue=1", "inventory"]].filter(([l, , k]) => ROLES[role].nav.includes(k) && (!l.startsWith("Record") || allowedOp(role, "payments", "create"))).map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
+        {open === "quick" && <div className={pop}>{[["Register student", "/students/new", "students"], ["Record school fees payment", "/fees?pay=1", "fees"], ["Record extracurricular payment", "/extracurricular?pay=1", "extracurricular"], ["Prepare fee reminders", "/fees?tab=reminders", "fees"], ["Mark attendance", "/attendance", "attendance"], ["Issue inventory", "/inventory?issue=1", "inventory"]].filter(([l, , k]) => ROLES[role].nav.includes(k) && (!l.startsWith("Record") || allowedOp(role, "payments", "create"))).map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
       </div>
       <div className="relative">
         <button className="relative grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "notif" ? null : "notif")} aria-label="Notifications"><Bell size={19} /><span className="absolute right-2 top-2 size-2 rounded-full bg-danger" /></button>
@@ -163,23 +166,38 @@ function CommandSearch({ onClose }: { onClose: () => void }) {
       .then((d: SearchItem[]) => { searchCache = d; if (live) { setIndex(d); setLoading(false); } }).catch(() => { if (live) { setFailed(true); setLoading(false); } });
     return () => { live = false; };
   }, []);
+  const { calendar, year, term } = useCalendar();
+  // Term-bound results (invoices, receipts) only for the selected year and term; people and items always.
+  const scoped = useMemo(() => index.filter((x) => {
+    if (x.year && x.term) return x.year === year && x.term === term;
+    if (x.date) { const t = termOfDate(calendar, x.date); return !!t && t.year === year && t.term === term; }
+    return true;
+  }), [index, calendar, year, term]);
   const [q, setQ] = useState(""); const [i, setI] = useState(0); const router = useRouter(); const ref = useRef<HTMLInputElement>(null);
   useEffect(() => ref.current?.focus(), []);
-  const results = useMemo(() => { const n = q.trim().toLowerCase(); if (!n) return index.slice(0, 8); return index.filter((x) => (x.label + " " + x.sub).toLowerCase().includes(n)).slice(0, 12); }, [q, index]);
+  const results = useMemo(() => { const n = q.trim().toLowerCase(); if (!n) return scoped.filter((x) => x.type === "Student").slice(0, 8);
+    return scoped.filter((x) => (x.label + " " + x.sub).toLowerCase().includes(n)).slice(0, 12); }, [q, scoped]);
   const go = (r?: SearchItem) => { if (r) { router.push(r.href); onClose(); } };
-  return (
-    <div className="fixed inset-0 z-[90] grid place-items-start bg-black/50 p-4 pt-[12vh]" onMouseDown={onClose}>
+  const icon: Record<string, typeof Search> = { Student: GraduationCap, Parent: UsersRound, Staff: Users, Invoice: FileText, Receipt, Item: Boxes };
+  // Rendered on <body> so the backdrop covers the whole screen (inside the top bar it was clipped to the bar).
+  return createPortal(
+    <div className="fixed inset-0 z-[90] bg-black/50 p-4 pt-[12vh] backdrop-blur-[2px]" onMouseDown={onClose}>
       <div role="dialog" aria-label="Global search" onMouseDown={(e) => e.stopPropagation()} className="anim-pop mx-auto w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-2xl">
-        <div className="flex items-center gap-2 border-b border-line px-4"><Search size={16} className="text-muted" />
+        <div className="flex items-center gap-3 border-b border-line px-4"><Search size={18} className="shrink-0 text-muted" />
           <input ref={ref} value={q} onChange={(e) => { setQ(e.target.value); setI(0); }} onKeyDown={(e) => { if (e.key === "ArrowDown") { e.preventDefault(); setI((x) => Math.min(x + 1, results.length - 1)); } if (e.key === "ArrowUp") { e.preventDefault(); setI((x) => Math.max(x - 1, 0)); } if (e.key === "Enter") go(results[i]); }}
-            placeholder="Student, admission no., parent, phone, invoice, receipt, item…" className="h-12 flex-1 bg-transparent outline-none" aria-label="Search" /></div>
-        <ul className="max-h-[50vh] overflow-y-auto p-1.5" role="listbox">
-          {results.map((r, k) => <li key={r.href + r.label} role="option" aria-selected={k === i}><button onMouseEnter={() => setI(k)} onClick={() => go(r)} className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left", k === i && "bg-surface-2")}><span className="w-16 shrink-0 text-[11px] uppercase text-muted">{r.type}</span><span className="min-w-0"><span className="block truncate font-medium">{r.label}</span><span className="block truncate text-xs text-muted">{r.sub}</span></span></button></li>)}
-          {loading && <li className="p-6 text-center text-muted">Loading search…</li>}{failed && <li className="p-6 text-center text-danger">Search is unavailable right now.</li>}{!loading && !failed && results.length === 0 && <li className="p-6 text-center text-muted">No results for “{q}”</li>}
+            placeholder="Search students, parents, invoices, receipts…" className="search-input h-14 min-w-0 flex-1 bg-transparent text-[15px]" aria-label="Search" />
+          <span className="shrink-0 rounded-md bg-surface-2 px-2 py-1 text-[11px] text-muted" title="Invoices and receipts are limited to the term selected in the top bar">{term} · {year}</span></div>
+        <ul className="max-h-[55vh] overflow-y-auto p-2" role="listbox">
+          {!q.trim() && !loading && !failed && results.length > 0 && <li className="px-3 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted">Students</li>}
+          {results.map((r, k) => { const Icon = icon[r.type] ?? FileText; return <li key={r.href + r.label} role="option" aria-selected={k === i}>
+            <button onMouseEnter={() => setI(k)} onClick={() => go(r)} className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left", k === i && "bg-surface-2")}>
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted"><Icon size={15} /></span>
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{r.label}</span><span className="block truncate text-xs text-muted">{r.sub}</span></span>
+              <span className="shrink-0 text-[11px] text-muted">{r.type}</span></button></li>; })}
+          {loading && <li className="p-6 text-center text-muted">Loading search…</li>}{failed && <li className="p-6 text-center text-danger">Search is unavailable right now.</li>}{!loading && !failed && results.length === 0 && <li className="p-6 text-center text-muted">No results for “{q}” in {term} {year}</li>}
         </ul>
         <div className="flex gap-4 border-t border-line px-4 py-2 text-[11px] text-muted"><span>↑↓ navigate</span><span>↵ open</span><span>esc close</span></div>
       </div>
-    </div>
-  );
+    </div>, document.body);
 }
 export const _unused = HeartHandshake; export const _u2 = Users;

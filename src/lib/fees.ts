@@ -17,7 +17,7 @@ export interface TermFees {
   levels: Record<Level, LevelFees>;
   /** classId → lines that replace the level's line with the same label, or are added to it. Amount 0 drops the line. */
   overrides: Record<string, FeeItem[]>;
-  /** Extra classes (Music (Piano), Extra Classes) → price per term. */
+  /** Extracurricular activities (Music (Piano), STEM) → price per term. */
   activities: Record<string, Minor>;
 }
 export interface ClassRef { id: string; name: string; level: Level }
@@ -128,11 +128,16 @@ export function invoiceStem(prefix: string, year: string, term: string) {
   return `${prefix}-${yy ? yy[1].slice(2) + yy[2].slice(2) : year.replace(/\W/g, "")}-T${n}`;
 }
 
+const OLD_STEM = "Extra Classes";
+
 /** Seed schedule plus fees saved in this browser. Locked terms (already invoiced) always keep the seed's fees. */
 export function mergeSchedule(seed: TermFees[], saved: unknown, locked: string[], classes: ClassRef[]): TermFees[] {
   if (!Array.isArray(saved)) return seed;
   let out = seed;
-  for (const t of saved as TermFees[]) {
+  for (const raw of saved as TermFees[]) {
+    // The old "Extra Classes" activity is called STEM again; carry saved prices across.
+    const t = raw && raw.activities && OLD_STEM in raw.activities
+      ? { ...raw, activities: Object.fromEntries(Object.entries(raw.activities).map(([k, v]) => [k === OLD_STEM ? "STEM" : k, v])) } : raw;
     if (!t || typeof t.year !== "string" || typeof t.term !== "string" || !t.levels || !t.overrides || !t.activities) continue;
     if (locked.includes(termKey(t.year, t.term)) || validateTermFees(t, classes)) continue;
     out = [...out.filter((x) => termKey(x.year, x.term) !== termKey(t.year, t.term)), t];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addTerm, addYear, mergeCalendar, suggestTerm, suggestYear, validateTerm, validateYear } from "../calendar";
+import { addTerm, addYear, mergeCalendar, suggestTerm, suggestYear, termOfDate, validateTerm, validateYear } from "../calendar";
 import { SCHOOL } from "../data/seed";
 
 const cal = SCHOOL.calendar;
@@ -49,5 +49,15 @@ describe("Saved additions", () => {
     expect(m.map((y) => y.name)).toEqual(["2027/2028", "2026/2027", "2025/2026"]);
     expect(m[1].terms.map((t) => t.name)).toEqual(["Term 1", "Term 2", "Vacation class", "Term 3"]);
     expect(mergeCalendar(cal, "garbage")).toBe(cal);
+  });
+});
+
+describe("Which term a date belongs to (search and lists follow the selected term)", () => {
+  it("a date in a term belongs to it; a holiday date belongs to the term just ended", () => {
+    expect(termOfDate(cal, "2026-10-12")).toEqual({ year: "2026/2027", term: "Term 1" });
+    expect(termOfDate(cal, "2026-12-28")).toEqual({ year: "2026/2027", term: "Term 1" });
+    expect(termOfDate(cal, "2027-01-11")).toEqual({ year: "2026/2027", term: "Term 2" });
+    expect(termOfDate(cal, "2026-08-01")).toEqual({ year: "2025/2026", term: "Term 3" });
+    expect(termOfDate(cal, "2020-01-01")).toBeUndefined();
   });
 });

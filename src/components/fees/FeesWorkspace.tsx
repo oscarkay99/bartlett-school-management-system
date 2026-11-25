@@ -13,6 +13,7 @@ import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { TermFeeStructure } from "@/components/settings/FeeScheduleEditor";
 import { feedingRate, invoiceStem, termKey } from "@/lib/fees";
+import { termOfDate } from "@/lib/calendar";
 import { studentFeedingRate } from "@/lib/feeding";
 import { useFeeding } from "@/components/feeding/useFeeding";
 import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
@@ -22,7 +23,7 @@ import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
 import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; feedingOwed: number; feedingRate: number; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; terms: string[]; items: { label: string; amount: number }[] }
+export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; feedingOwed: number; feedingRate: number; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; terms: string[]; items: { label: string; amount: number }[]; payer?: { name: string; phone?: string } }
 export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; amount: number; feeding: number; feedingPeriod?: string; method: string; date: string; ref: string; status: string; staff: string }
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
 const TODAY = "2026-10-12";
@@ -34,21 +35,25 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   const { ready, money: access, allow } = useRole(); const full = access === "full"; const canPay = allow("payments", "create"); const canBill = allow("invoices", "create");
   const [cls, setCls] = useState(""); const [range, setRange] = useState("term"); const [payOpen, setPayOpen] = useState(!!openPay); const [billOpen, setBillOpen] = useState(false);
   const router = useRouter();
-  const { year, term } = useCalendar();
-  const ss = useMemo(() => students.filter((s) => (!cls || s.classId === cls)), [students, cls]);
-  const pp = useMemo(() => payments.filter((p) => (!cls || p.classId === cls)), [payments, cls]);
+  const { year, term, calendar } = useCalendar();
+  // Everything here is for the year and term picked in the top bar: students invoiced that term, payments made in it.
+  const tk = termKey(year, term); const td = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term);
+  const ss = useMemo(() => students.filter((s) => s.terms.includes(tk) && (!cls || s.classId === cls)), [students, cls, tk]);
+  const pp = useMemo(() => payments.filter((p) => { const t = termOfDate(calendar, p.date); return t?.year === year && t?.term === term && (!cls || p.classId === cls); }), [payments, cls, calendar, year, term]);
+  const inTerm = useMemo(() => new Set(ss.map((s) => s.id)), [ss]);
   const conf = useMemo(() => pp.filter((p) => p.status === "Confirmed"), [pp]);
   const billed = ss.reduce((a, s) => a + s.billed, 0), paid = ss.reduce((a, s) => a + s.paid, 0);
   const owing = ss.filter((s) => s.balance > 0), outstanding = owing.reduce((a, s) => a + s.balance, 0);
   const od = owing.filter((s) => s.overdue), overdue = od.reduce((a, s) => a + s.balance, 0);
   const sum = (from: string) => conf.filter((p) => p.date >= from).reduce((a, p) => a + p.amount, 0);
-  const periodFrom = range === "today" ? TODAY : range === "week" ? daysAgo(6) : range === "month" ? daysAgo(29) : "2026-09-01";
-  const eligible = reminders.filter((r) => r.eligible && (!cls || r.classIds.includes(cls)));
+  const periodFrom = range === "today" ? TODAY : range === "week" ? daysAgo(6) : range === "month" ? daysAgo(29) : (td?.start ?? "2026-09-01");
+  const termReminders = reminders.filter((r) => r.students.some((x) => inTerm.has(x.id)) && (!cls || r.classIds.includes(cls)));
+  const eligible = termReminders.filter((r) => r.eligible);
   const upcoming = owing.filter((s) => !s.overdue).reduce((a, s) => a + s.balance, 0);
   const byMethod = useMemo(() => { const m = new Map<string, number>(); conf.filter((p) => p.date >= periodFrom).forEach((p) => m.set(p.method, (m.get(p.method) ?? 0) + p.amount / 100)); return [...m].map(([name, value]) => ({ name, value })); }, [conf, periodFrom]);
   const trend = useMemo(() => { const w = new Map<string, number>(); conf.forEach((p) => { const d = new Date(p.date + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); const k = d.toISOString().slice(5, 10); w.set(k, (w.get(k) ?? 0) + p.amount / 100); }); return [...w].sort().map(([week, collected]) => ({ week, collected })); }, [conf]);
-  const byClass = useMemo(() => classes.map((c) => ({ name: c.name, outstanding: students.filter((s) => s.classId === c.id && s.balance > 0).reduce((a, s) => a + s.balance, 0) / 100 })), [classes, students]);
-  const payStudents: PayStudent[] = students.map((s) => ({ id: s.id, name: s.name, adm: s.adm, cls: s.cls, balance: s.balance, feedingOwed: s.feedingOwed, feedingRate: s.feedingRate, invoices: [{ no: s.invoice, balance: s.balance }] }));
+  const byClass = useMemo(() => classes.map((c) => ({ name: c.name, outstanding: ss.filter((s) => s.classId === c.id && s.balance > 0).reduce((a, s) => a + s.balance, 0) / 100 })), [classes, ss]);
+  const payStudents: PayStudent[] = students.map((s) => ({ id: s.id, name: s.name, adm: s.adm, cls: s.cls, balance: s.balance, feedingOwed: s.feedingOwed, feedingRate: s.feedingRate, payer: s.payer, items: [...new Set(s.items.map((i) => i.label))], invoices: [{ no: s.invoice, balance: s.balance }] }));
 
   const filters = (
     <div className="flex flex-wrap items-center gap-2">
@@ -91,7 +96,7 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   const tabs = ([
     full && { id: "overview", label: "Dashboard", content: overview },
     { id: "outstanding", label: "Outstanding", badge: String(owing.length), content: <OutstandingTable rows={ss.filter((s) => s.balance > 0)} overdueOnly={overdueOnly} account={account} showTotals={full} /> },
-    { id: "reminders", label: "Reminders", badge: String(eligible.length), content: <Reminders rows={reminders.filter((r) => !cls || r.classIds.includes(cls))} /> },
+    { id: "reminders", label: "Reminders", badge: String(eligible.length), content: <Reminders rows={termReminders} /> },
     full && { id: "payments", label: "Payments & receipts", content: <PaymentsTable rows={pp} /> },
     full && { id: "invoices", label: "Invoices", content: <Invoices students={ss} candidates={candidates.filter((c) => !cls || c.classId === cls)} account={account} canBill={canBill} onIssue={() => setBillOpen(true)} /> },
     full && { id: breakdown.id, label: breakdown.label, content: breakdown.node },
@@ -273,7 +278,7 @@ function ItemBreakdown({ students, sections }: { students: SRow[]; sections: { k
   );
 }
 
-// Extra Classes: one card per class/activity (enrolment and billed), plus the full roster.
+// Extracurricular: one card per class/activity (enrolment and billed), plus the full roster.
 function Activities({ students }: { students: SRow[] }) {
   const [act, setAct] = useState(""); const r = useRouter();
   const per = ACTIVITIES.map((a) => { const kids = students.filter((s) => s.items.some((i) => i.label === a)); return { a, kids: kids.length, billed: kids.reduce((x, s) => x + (s.items.find((i) => i.label === a)?.amount ?? 0), 0) }; });

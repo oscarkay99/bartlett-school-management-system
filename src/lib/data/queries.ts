@@ -14,6 +14,8 @@ export const lockedFeeTerms = () => [...new Set(invoices.map((i) => termKey(i.ye
 export const getClass = (id: string) => classes.find((c) => c.id === id)!;
 export const getStudent = (id: string) => students.find((s) => s.id === id);
 export const getGuardian = (id: string) => guardians.find((g) => g.id === id);
+/** Who a receipt is made out to: the student's primary guardian. */
+export const payerOf = (s: Student) => { const g = getGuardian((s.guardians.find((x) => x.primary) ?? s.guardians[0])?.guardianId ?? ""); return g ? { name: `${g.title} ${g.name}`, phone: g.phone } : undefined; };
 export const getStaff = (id: string) => staff.find((s) => s.id === id);
 export const fullName = (s: Student) => [s.first, s.middle, s.last].filter(Boolean).join(" ");
 export const shortName = (s: Student) => `${s.first} ${s.last}`;
@@ -33,7 +35,7 @@ export const paymentsOf = (studentId: string, account: FeeAccount): Payment[] =>
 export const accountPayments = (account: FeeAccount) => payments.filter((p) => p.account === account && !isFeedingPlanPayment(p));
 
 const feeCache = new Map<string, FeeSummary>();
-/** School-fees balance (tuition, books, levies…). Use accountSummary for Extra Classes. */
+/** School-fees balance (tuition, books, levies…). Use accountSummary for Extracurricular. */
 export const feeSummary = (studentId: string) => accountSummary(studentId, "fees");
 export function accountSummary(studentId: string, account: FeeAccount): FeeSummary {
   const key = `${account}:${studentId}`; const hit = feeCache.get(key); if (hit) return hit;
@@ -51,7 +53,7 @@ export function accountSummary(studentId: string, account: FeeAccount): FeeSumma
 }
 /**
  * What one term costs for a student: each account's bills for that term (net of discounts).
- * `total` is SCHOOL FEES ONLY. Extra Classes is standalone and is never added to it (see `extra`).
+ * `total` is SCHOOL FEES ONLY. Extracurricular is standalone and is never added to it (see `extra`).
  */
 export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SCHOOL.term) {
   const parts = ACCOUNT_IDS.map((account) => {
@@ -77,7 +79,7 @@ export function feedingAccount(studentId: string) {
 }
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
 export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };
-/** School fees still owed. Extra Classes is standalone: its balance is shown separately and never added here. */
+/** School fees still owed. Extracurricular is standalone: its balance is shown separately and never added here. */
 export const totalOwed = (studentId: string) => Math.max(0, accountSummary(studentId, "fees").balance);
 
 // Chronological, append-only ledger for one account with running balance.
@@ -229,7 +231,7 @@ export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverv
 export const OPENING_CASH: Minor = 1_845_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
 // Feeding is a line on the school fees invoice, but its income is still posted to its own account.
-const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extra Classes Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : "4400 Levies & Other Fees");
+const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extracurricular Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : "4400 Levies & Other Fees");
 const expenseAccount = (c: string) => `5${({ Salaries: "100", Utilities: "200", Internet: "250", Repairs: "300", Stationery: "350", "Food Supplies": "400", Transport: "450", "Inventory Purchases": "500", Software: "550", Building: "600", Maintenance: "650" } as Record<string, string>)[c] ?? "900"} ${c}`;
 export function generalLedger(): GLLine[] {
   const L: GLLine[] = [{ date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "1100 Bank & Cash", dr: OPENING_CASH, cr: 0 }, { date: "2026-08-31", ref: "OPEN", memo: "Opening balances", account: "3100 Accumulated Fund", dr: 0, cr: OPENING_CASH }];

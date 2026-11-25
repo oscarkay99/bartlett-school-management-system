@@ -65,3 +65,10 @@ export function mergeCalendar(seed: AcademicYear[], saved: unknown): AcademicYea
   }
   return cal;
 }
+
+/** The term a date belongs to: the latest term that has started by then (holidays count towards the term just ended). */
+export function termOfDate(cal: AcademicYear[], date: string): { year: string; term: string } | undefined {
+  let best: { year: string; term: string; start: string } | undefined;
+  for (const y of cal) for (const t of y.terms) if (t.start <= date && (!best || t.start > best.start)) best = { year: y.name, term: t.name, start: t.start };
+  return best && { year: best.year, term: best.term };
+}
