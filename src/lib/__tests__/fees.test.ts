@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { blankTerm, classFees, copyTerm, termBillLines, fromGrid, toGrid, validateGrid, feedingRate, findTerm, invoiceStem, mergeSchedule, previousTermWithFees, sumItems, termKey, validateTermFees, type ClassRef } from "../fees";
 import { ghs } from "../money";
 import * as Q from "../data/queries";
+import { buildTermInvoices, generatedTotal, readGenerated } from "../generated-invoices";
 
 const classes: ClassRef[] = Q.classes.map((c) => ({ id: c.id, name: c.name, level: c.level }));
 const cls = (name: string) => classes.find((c) => c.name === name)!;
@@ -142,5 +143,25 @@ describe("Fee schedule — spreadsheet editor", () => {
     expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] }, classes)).toBe(""); // empty extra row is ignored
     expect(validateGrid({ ...g, rows: [...g.rows, { label: "pta", amounts: { Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toMatch(/listed twice/);
     expect(validateGrid({ ...g, exceptions: [{ classId: "", label: "X", amount: 1 }] }, classes)).toMatch(/Choose a class/);
+  });
+});
+
+describe("Generate term invoices", () => {
+  const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!;
+  const cand = (name: string, classId: string, boarding = false, scholarship = false) => ({ id: name, name, adm: "A", classId, boarding, scholarship });
+  it("builds one numbered invoice per student from the fee schedule, feeding included", () => {
+    const inv = buildTermInvoices([cand("a", cls("Primary 3").id), cand("b", cls("JHS 1").id, true)], classes, t2, "2027-01-11");
+    expect(inv.map((i) => i.no)).toEqual(["INV-2627-T2-0001", "INV-2627-T2-0002"]);
+    expect(generatedTotal(inv[0])).toBe(ghs(2450 + 600));
+    expect(inv[1].items.map((i) => i.label)).toEqual(["Tuition", "PTA", "Examination", "Boarding", "Feeding"]);
+    expect([inv[0].billedOn, inv[0].dueOn]).toEqual(["2027-01-11", "2027-02-08"]);
+  });
+  it("continues numbering and gives scholarship students 25% off tuition", () => {
+    const [i] = buildTermInvoices([cand("c", cls("KG 1").id, false, true)], classes, t2, "2027-01-11", 176);
+    expect(i.no).toBe("INV-2627-T2-0177"); expect(i.discount).toBe(ghs(450));
+  });
+  it("ignores malformed saved invoices", () => {
+    const [ok] = buildTermInvoices([cand("a", cls("KG 1").id)], classes, t2, "2027-01-11");
+    expect(readGenerated([ok, { no: 1 }, null])).toEqual([ok]); expect(readGenerated("x")).toEqual([]);
   });
 });

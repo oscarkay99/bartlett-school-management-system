@@ -17,7 +17,7 @@ export function billingProps(account: FeeAccount) {
   const candidates: BillCandidate[] = Q.activeStudents().map((s) => {
     const billed: Record<string, string[]> = {};
     for (const i of Q.invoicesOf(s.id, account)) (billed[termKey(i.year, i.term)] ??= []).push(...i.items.map((x) => x.label));
-    return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, boarding: s.category === "Boarding", billed };
+    return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, boarding: s.category === "Boarding", scholarship: !!s.scholarship, billed };
   });
   return { account, students, payments, reminders, candidates, classes: Q.classes.map((c) => ({ id: c.id, name: c.name })), usedRefs: Q.payments.map((p) => p.ref.toUpperCase()) };
 }

@@ -12,7 +12,9 @@ import { useRole } from "@/components/shell/AppShell";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { TermFeeStructure } from "@/components/settings/FeeScheduleEditor";
-import { invoiceStem, sumItems, termBillLines, termKey } from "@/lib/fees";
+import { invoiceStem, termKey } from "@/lib/fees";
+import { buildTermInvoices, generatedTotal, type GeneratedInvoice } from "@/lib/generated-invoices";
+import { GeneratedInvoiceDialog, useGeneratedInvoices } from "./GeneratedInvoices";
 import { ACCOUNTS, ACTIVITIES, type FeeAccount } from "@/lib/accounts";
 import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
@@ -172,42 +174,66 @@ function PaymentsTable({ rows }: { rows: PRow[] }) {
   return <Card><DataTable rows={rows.filter((r) => !m || r.method === m)} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.receipt} ${x.student} ${x.ref}`} filters={<Select label="Method" value={m} onChange={setM} options={[{ value: "", label: "All methods" }, ...["Cash", "Mobile Money", "Bank Transfer", "Card", "Cheque"].map((v) => ({ value: v, label: v }))]} />} pageSize={12} /></Card>;
 }
 
+// One row of the Invoices tab: a recorded invoice, or one generated in this browser with "Generate Term N invoices".
+type InvRow = { id: string; invoice: string; name: string; cls: string; activities: string; total: number; paid: number; dueOn: string; status: string; gen?: GeneratedInvoice };
+
 function Invoices({ students, candidates, account, canBill, onIssue }: { students: SRow[]; candidates: BillCandidate[]; account: FeeAccount; canBill: boolean; onIssue: () => void }) {
-  const [o, setO] = useState(false); const A = ACCOUNTS[account];
-  const { year, term } = useCalendar(); const key = termKey(year, term);
-  const rows = students.filter((s) => s.terms.includes(key));
+  const [o, setO] = useState(false); const [view, setView] = useState<InvRow | null>(null); const A = ACCOUNTS[account];
+  const { year, term } = useCalendar(); const key = termKey(year, term); const fs = useFeeSchedule();
+  const generated = useGeneratedInvoices(year, term); const gen = account === "fees" ? generated.list : [];
+  const ids = new Set(candidates.map((c) => c.id));
+  const rows: InvRow[] = [
+    ...students.filter((s) => s.terms.includes(key)).map((s) => ({ id: s.id, invoice: s.invoice, name: s.name, cls: s.cls, activities: s.items.map((i) => i.label).join(", "), total: s.billed, paid: s.paid, dueOn: s.dueOn, status: s.status })),
+    ...gen.filter((g) => ids.has(g.studentId)).map((g) => ({ id: g.no, invoice: g.no, name: g.name, cls: fs.classes.find((c) => c.id === g.classId)?.name ?? "", activities: "", total: generatedTotal(g), paid: 0, dueOn: g.dueOn, status: "Outstanding", gen: g })),
+  ];
   return (
     <Card><CardHeader title={`${A.label} invoices — ${term} ${year}`} sub={`Numbered ${invoiceStem(A.invoicePrefix, year, term)}-… and receipted separately (${A.receiptPrefix}-…)`} action={canBill ? (account === "fees" ? <Button variant="primary" size="sm" onClick={() => setO(true)}>Generate {term} invoices</Button> : <Button variant="primary" size="sm" onClick={onIssue}><FilePlus2 size={13} />Issue new bill</Button>) : undefined} />
+      {gen.length > 0 && <div className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-info/30 bg-info/8 px-3 py-2 text-sm">
+        <span><b>{gen.length}</b> {term} invoices generated · {money(gen.reduce((a, g) => a + generatedTotal(g), 0))}. Saved in this browser until the backend is connected; payments against them are recorded once it is.</span>
+        {canBill && <DiscardGenerated count={gen.length} term={term} onDiscard={generated.clear} />}</div>}
       <DataTable rows={rows} empty={<EmptyState icon={FileText} title={`No ${A.label.toLowerCase()} invoices for ${term} ${year} yet`} body={account === "fees" ? "Generate this term's invoices once its fees are set." : "Issue bills to students as they enrol."} />} columns={[
         { key: "i", header: "Invoice", render: (x) => <b className="num">{x.invoice}</b> }, { key: "n", header: "Student", sort: (x) => x.name, render: (x) => x.name }, { key: "c", header: "Class", render: (x) => x.cls },
-        ...(account === "extra" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: SRow) => x.items.map((i) => i.label).join(", ") }] : []),
-        { key: "b", header: "Total", align: "right", sort: (x) => x.billed, render: (x) => money(x.billed) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
-        { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> }, { key: "pdf", header: "", render: (x) => <Link className="text-info" href={`/print/invoice/${x.invoice}`}>PDF</Link> },
+        ...(account === "extra" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: InvRow) => x.activities }] : []),
+        { key: "b", header: "Total", align: "right", sort: (x) => x.total, render: (x) => money(x.total) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
+        { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
+        { key: "pdf", header: "", render: (x) => x.gen ? <button className="text-info hover:underline" onClick={() => setView(x)}>View</button> : <Link className="text-info" href={`/print/invoice/${x.invoice}`}>PDF</Link> },
       ]} rowId={(x) => x.id} searchText={(x) => x.name + x.invoice} pageSize={10} />
-      {o && <GenerateInvoices candidates={candidates} onClose={() => setO(false)} />}
+      {o && <GenerateInvoices candidates={candidates} already={new Set(gen.map((g) => g.studentId))} startSeq={gen.length} onGenerate={generated.add} onClose={() => setO(false)} />}
+      {view?.gen && <GeneratedInvoiceDialog inv={view.gen} cls={view.cls} onClose={() => setView(null)} />}
     </Card>
   );
 }
 
+function DiscardGenerated({ count, term, onDiscard }: { count: number; term: string; onDiscard: () => void }) {
+  const [open, setOpen] = useState(false); const toast = useToast();
+  return (<>
+    <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>Discard</Button>
+    <Modal open={open} onClose={() => setOpen(false)} title={`Discard ${count} generated ${term} invoices?`} footer={<><Button onClick={() => setOpen(false)}>Keep them</Button><Button variant="danger" onClick={() => { onDiscard(); setOpen(false); toast(`${count} ${term} invoices discarded`); }}>Discard</Button></>}>
+      <p className="text-sm">Use this if the fees were wrong: change them in Settings → Fee schedule, then generate again. Nothing has been paid against these invoices yet.</p>
+    </Modal>
+  </>);
+}
+
 // Bulk school-fee billing for the selected term: every active student without an invoice that term is billed
-// from the fee schedule (their class's fees, plus boarding for boarders). Idempotent by student + term.
-function GenerateInvoices({ candidates, onClose }: { candidates: BillCandidate[]; onClose: () => void }) {
-  const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const toast = useToast();
+// from the fee schedule (their class's fees, boarding for boarders, feeding). Idempotent by student + term.
+function GenerateInvoices({ candidates, already, startSeq, onGenerate, onClose }: { candidates: BillCandidate[]; already: Set<string>; startSeq: number; onGenerate: (inv: GeneratedInvoice[]) => void; onClose: () => void }) {
+  const { year, term, calendar } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const toast = useToast();
   const key = termKey(year, term);
-  const todo = candidates.filter((c) => !c.billed[key]?.length);
-  const lines = tf ? todo.map((c) => { const cls = fs.classes.find((x) => x.id === c.classId)!; return { c, cls, total: sumItems(termBillLines(tf, cls, c.boarding)) }; }) : [];
-  const byClass = fs.classes.map((cls) => { const l = lines.filter((x) => x.cls.id === cls.id); return { cls, n: l.length, total: l.reduce((a, x) => a + x.total, 0) }; }).filter((r) => r.n > 0);
+  const todo = candidates.filter((c) => !c.billed[key]?.length && !already.has(c.id));
+  const termStart = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term)?.start ?? new Date().toISOString().slice(0, 10);
+  const built = tf ? buildTermInvoices(todo, fs.classes, tf, termStart, startSeq) : [];
+  const byClass = fs.classes.map((cls) => { const l = built.filter((x) => x.classId === cls.id); return { cls, n: l.length, total: l.reduce((a, x) => a + generatedTotal(x), 0) }; }).filter((r) => r.n > 0);
   const total = byClass.reduce((a, r) => a + r.total, 0);
   return (
-    <Modal open onClose={onClose} title={`Generate ${term} ${year} invoices`} wide footer={<><Button onClick={onClose}>Close</Button>{tf && lines.length > 0 && <Button variant="primary" onClick={() => { toast(`${lines.length} ${term} invoices generated · ${money(total)}`); onClose(); }}>Generate {lines.length} invoices · {money(total)}</Button>}</>}>
+    <Modal open onClose={onClose} title={`Generate ${term} ${year} invoices`} wide footer={<><Button onClick={onClose}>Close</Button>{built.length > 0 && <Button variant="primary" onClick={() => { onGenerate(built); toast(`${built.length} ${term} invoices generated · ${money(total)}`); onClose(); }}>Generate {built.length} invoices · {money(total)}</Button>}</>}>
       {!tf ? <div className="space-y-2"><p>{term} {year} has no fees set, so invoices can&apos;t be generated yet.</p><Link className="text-sm font-medium text-info hover:underline" href="/settings?tab=fees">Set {term} fees in Settings →</Link></div>
-        : lines.length === 0 ? <><p>All <b>{candidates.length}</b> active students in the current filter already have a {term} invoice.</p><p className="mt-2 text-sm text-muted">Generation is idempotent: each student can only have one invoice per term, so running it again never creates duplicates. New students admitted later are picked up automatically.</p></>
+        : built.length === 0 ? <><p>All <b>{candidates.length}</b> active students in the current filter already have a {term} invoice.</p><p className="mt-2 text-sm text-muted">Each student can only have one invoice per term, so running this again never creates duplicates. New students admitted later are picked up automatically.</p></>
         : <div className="space-y-3">
-            <p><b>{lines.length}</b> students have no {term} invoice yet. Each is billed their class&apos;s {term} fees from the fee schedule, including feeding, plus boarding for boarders.</p>
+            <p><b>{built.length}</b> students have no {term} invoice yet. Each is billed their class&apos;s {term} fees from the fee schedule, including feeding, plus boarding for boarders.</p>
             <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-3 py-2 text-left">Class</th><th className="px-3 text-right">Students</th><th className="px-3 text-right">Total</th></tr></thead>
               <tbody className="divide-y divide-line">{byClass.map((r) => <tr key={r.cls.id}><td className="px-3 py-2">{r.cls.name}</td><td className="num px-3 text-right">{r.n}</td><td className="num px-3 text-right">{money(r.total)}</td></tr>)}</tbody>
-              <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-3 py-2">Total</td><td className="num px-3 text-right">{lines.length}</td><td className="num px-3 text-right">{money(total)}</td></tr></tfoot></table></div>
-            <p className="text-xs text-muted">Numbered {invoiceStem("INV", year, term)}-0001 onwards. Scholarships are applied as discounts on each invoice. Front-end preview — invoices are saved once the backend is connected.</p>
+              <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-3 py-2">Total</td><td className="num px-3 text-right">{built.length}</td><td className="num px-3 text-right">{money(total)}</td></tr></tfoot></table></div>
+            <p className="text-xs text-muted">Numbered {built[0].no} onwards. Scholarship students get 25% off tuition.</p>
           </div>}
     </Modal>
   );
