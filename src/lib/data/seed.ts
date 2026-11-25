@@ -134,6 +134,13 @@ demoKids.forEach(([f, l, c], i) => {
   st.guardians = [{ guardianId: mensah.id, relationship: "Father", primary: true, legal: true, emergency: true, pickup: true, financial: true, financialShare: 100, receivesFeeReminders: true, receivesAcademic: true, verified: true }];
 });
 
+// Students were generated class by class; mix them so lists and invoice numbers don't run KG → JHS.
+// Own PRNG so the shuffle doesn't change any other generated value.
+{
+  let k = 7; const r = () => { k = (k * 16807) % 2147483647; return k / 2147483647; };
+  for (let i = students.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [students[i], students[j]] = [students[j], students[i]]; }
+}
+
 // ---------- Invoices & payments (balance is DERIVED from these) ----------
 export const invoices: T.Invoice[] = [];
 export const payments: T.Payment[] = [];
@@ -163,6 +170,12 @@ const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
   ai.discount = 0; ai.dueOn = "2026-10-30";
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id) payments.splice(i, 1);
   payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0] });
+}
+// Demo: Kofi and Abena Mensah each part-paid, so their father gets one reminder covering all three children.
+for (const [first, paid, day, ref] of [["Kofi", 1500, "2026-09-18", "MM88241194"], ["Abena", 1000, "2026-09-25", "MM88241302"]] as const) {
+  const kid = students.find((x) => x.first === first && x.last === "Mensah" && x.guardians[0].guardianId === mensah.id)!;
+  for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === kid.id && payments[i].account === "fees") payments.splice(i, 1);
+  payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: kid.id, guardianId: mensah.id, amount: ghs(paid), method: "Mobile Money", date: day, ref, status: "Confirmed", staff: staffNames[0] });
 }
 // Exceptions for reconciliation
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s20", amount: ghs(500), method: "Online Gateway", date: "2026-10-10", ref: "GW-PENDING-7781", status: "Pending", staff: "System" });

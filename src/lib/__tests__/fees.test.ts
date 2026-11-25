@@ -89,3 +89,27 @@ describe("Fee schedule — locking and saved edits", () => {
     expect(Q.invoices.filter((i) => i.account === "fees").every((i) => i.no.startsWith(invoiceStem("INV", i.year, i.term)))).toBe(true);
   });
 });
+
+describe("What a parent owes for the term", () => {
+  const ama = () => Q.students.find((s) => s.first === "Ama" && s.last === "Mensah")!;
+  it("term total = school fees + feeding + activities for that term, each net of discounts", () => {
+    const tc = Q.termCharges(ama().id, "2026/2027", "Term 1");
+    expect(tc.parts.map((p) => [p.account, p.net])).toEqual([["fees", ghs(3500)], ["feeding", ghs(600)], ["extra", ghs(400)]]);
+    expect(tc.total).toBe(ghs(4500));
+    expect(Q.termCharges(ama().id, "2026/2027", "Term 2").total).toBe(0); // nothing billed for Term 2 yet
+  });
+  it("a scholarship is its own named line, taken off tuition only", () => {
+    const s = Q.students.find((x) => x.scholarship && Q.invoicesOf(x.id, "fees")[0].discount > 0)!;
+    const inv = Q.invoicesOf(s.id, "fees")[0]; const tc = Q.termCharges(s.id);
+    expect(inv.discount).toBe(Math.round(inv.items.find((i) => i.label === "Tuition")!.amount * 0.25));
+    expect(tc.parts[0].net).toBe(tc.parts[0].gross - inv.discount);
+    expect(Q.discountLabel(s.id)).toBe("Merit Scholarship (25%) on tuition");
+    expect(Q.accountLedger(s.id, "fees").some((l) => l.desc === "Merit Scholarship (25%) on tuition" && l.credit === inv.discount)).toBe(true);
+  });
+  it("demo students are mixed across classes, not listed KG first", () => {
+    const firstTen = new Set(Q.students.slice(0, 10).map((s) => Q.getClass(s.classId).level));
+    expect(firstTen.size).toBeGreaterThan(1);
+    const firstInvoices = Q.invoices.filter((i) => i.account === "fees").slice(0, 10).map((i) => Q.getClass(Q.getStudent(i.studentId)!.classId).level);
+    expect(new Set(firstInvoices).size).toBeGreaterThan(1);
+  });
+});

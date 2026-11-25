@@ -33,6 +33,7 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
   void row;
 
   const accts = ACCOUNT_IDS.map((id) => ({ id, a: ACCOUNTS[id], f: Q.accountSummary(s.id, id) }));
+  const tc = Q.termCharges(s.id); const owedAll = Q.totalOwed(s.id);
 
   const directory = Q.guardians.map((g) => ({ id: g.id, title: g.title, name: g.name, phone: g.phone, email: g.email, children: Q.studentsOfGuardian(g.id).length }));
   const payStudentFor = (account: FeeAccount) => { const af = Q.accountSummary(s.id, account); return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: cls.name, balance: af.balance, invoices: Q.invoicesOf(s.id, account).map((i) => ({ no: i.no, balance: af.balance })) }; };
@@ -77,6 +78,14 @@ export default async function StudentProfile({ params }: PageProps<"/students/[i
         <div className="flex flex-wrap gap-2"><StatusBadge status={s.status} />{s.medicalAlert && <Badge tone="danger"><AlertTriangle size={11} />Medical alert</Badge>}{s.scholarship && <Badge tone="info">{s.scholarship}</Badge>}</div>
       </div>
       <MoneyGate level="balances">
+      <div className="mb-3 rounded-xl border border-line bg-surface px-4 py-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div><div className="text-xs text-muted">Total for {tc.term} {tc.year}</div><div className="num text-2xl font-semibold">{money(tc.total)}</div></div>
+          <div className="text-right"><div className="text-xs text-muted">Still owed, all accounts</div><div className={`num text-lg font-semibold ${owedAll > 0 ? "text-danger" : "text-ok"}`}>{money(owedAll)}</div></div>
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">{tc.parts.filter((p) => p.billed).map((p, i) => <span key={p.account}>{i > 0 && <span className="mr-2">+</span>}{p.label} <b className="num text-fg">{money(p.net)}</b>{p.discount > 0 && <span className="text-xs"> (after {money(p.discount)} {Q.discountLabel(s.id).toLowerCase()})</span>}</span>)}
+          <span className="basis-full text-xs">Each is billed and receipted separately; a payment only reduces the account it was made to.</span></div>
+      </div>
       <div className="mb-3 grid gap-2 sm:grid-cols-3">{accts.map(({ id: acc, a, f: af }) => <Link key={acc} href={`/students/${s.id}?tab=${acc}`} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">{a.label}</span><span className={`num font-semibold ${af.balance > 0 ? "text-danger" : ""}`}>{af.enrolled ? money(Math.max(0, af.balance)) : "Not enrolled"}</span></span>{af.enrolled && <StatusBadge status={af.status} />}</Link>)}</div>
       {f.balance > 0 ? (
         <div role="alert" className={`mb-5 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${f.overdue ? "border-danger/30 bg-danger/8" : "border-warn/30 bg-warn/10"}`}>
@@ -108,7 +117,7 @@ function AccountPanel({ studentId, account, payStudent, usedRefs }: { studentId:
       <Card><CardHeader title={`${a.label} ledger`} sub="Append-only. Corrections appear as reversals, never as edits." />
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Date</th><th className="text-left">Reference</th><th className="text-left">Description</th><th className="px-3 text-right">Debit</th><th className="px-3 text-right">Credit</th><th className="px-4 text-right">Balance</th></tr></thead>
           <tbody className="divide-y divide-line">{ledger.map((l, i) => <tr key={i}><td className="px-4 py-2.5 whitespace-nowrap">{fmtDate(l.date)}</td><td className="num">{l.ref}</td><td>{l.desc}</td><td className="num px-3 text-right">{l.debit ? money(l.debit) : ""}</td><td className="num px-3 text-right text-ok">{l.credit ? money(l.credit) : ""}</td><td className="num px-4 text-right font-medium">{money(l.bal)}</td></tr>)}</tbody></table></div></Card>
-      <Card><CardHeader title={account === "feeding" ? "Bills" : "Invoices"} />{inv.map((i) => <div key={i.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b className="num">{i.no}</b><div className="text-xs text-muted">{i.items.map((x) => `${x.label} ${money(x.amount)}`).join(" · ")}</div></div><LinkButton size="sm" href={`/print/invoice/${i.id}`}><FileText size={14} />{account === "feeding" ? "Bill" : "Invoice"} PDF</LinkButton></div>)}</Card>
+      <Card><CardHeader title={account === "feeding" ? "Bills" : "Invoices"} />{inv.map((i) => { const net = i.items.reduce((x, y) => x + y.amount, 0) - i.discount; return <div key={i.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline gap-x-2"><b className="num">{i.no}</b><span className="text-xs text-muted">{i.term} {i.year}</span></div><div className="text-xs text-muted">{[...i.items.map((x) => `${x.label} ${money(x.amount)}`), ...(i.discount ? [`${Q.discountLabel(studentId)} −${money(i.discount)}`] : [])].join(" · ")}</div></div><div className="flex items-center gap-3"><div className="text-right"><div className="text-xs text-muted">Total</div><b className="num">{money(net)}</b></div><LinkButton size="sm" href={`/print/invoice/${i.id}`}><FileText size={14} />{account === "feeding" ? "Bill" : "Invoice"} PDF</LinkButton></div></div>; })}</Card>
       <Card><CardHeader title="Payments & receipts" />{pays.length === 0 ? <p className="px-4 pb-4 text-muted">No {a.label.toLowerCase()} payments recorded yet.</p> : pays.map((p) => <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b className="num">{p.receiptNo}</b> <StatusBadge status={p.status} /><div className="text-xs text-muted">{p.method} · {fmtDate(p.date)} · {p.ref} · received by {p.staff}</div></div><div className="flex items-center gap-3"><b className="num">{money(p.amount)}</b>{p.status === "Confirmed" && <LinkButton size="sm" href={`/print/receipt/${p.id}`}>Receipt</LinkButton>}</div></div>)}</Card>
     </div>
   );

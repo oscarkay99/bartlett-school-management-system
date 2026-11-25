@@ -43,6 +43,20 @@ export function accountSummary(studentId: string, account: FeeAccount): FeeSumma
   const r = { billed, discount, paid, balance, dueOn, status, overdue, enrolled: inv.length > 0 };
   feeCache.set(key, r); return r;
 }
+/**
+ * What one term costs for a student: each account's bills for that term (net of discounts), and the sum.
+ * Accounts are still billed, receipted and settled separately; this is the one figure a parent asks for.
+ */
+export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SCHOOL.term) {
+  const parts = ACCOUNT_IDS.map((account) => {
+    const inv = invoicesOf(studentId, account).filter((i) => i.year === year && i.term === term);
+    const gross = inv.reduce((a, i) => a + i.items.reduce((x, y) => x + y.amount, 0), 0); const discount = inv.reduce((a, i) => a + i.discount, 0);
+    return { account, label: ACCOUNTS[account].label, billed: inv.length > 0, gross, discount, net: gross - discount };
+  });
+  return { year, term, parts, total: parts.reduce((a, p) => a + p.net, 0) };
+}
+/** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
+export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };
 /** Total owed across all three accounts (never netted: a credit in one account does not pay another). */
 export const totalOwed = (studentId: string) => ACCOUNT_IDS.reduce((a, acc) => a + Math.max(0, accountSummary(studentId, acc).balance), 0);
 
@@ -51,7 +65,7 @@ export function accountLedger(studentId: string, account: FeeAccount) {
   const inv = invoicesOf(studentId, account); const pays = paymentsOf(studentId, account);
   const rows = [
     ...inv.map((i) => ({ date: i.billedOn, ref: i.no, desc: `${ACCOUNTS[account].label} invoice — ${i.term} ${i.year}`, debit: i.items.reduce((a, b) => a + b.amount, 0), credit: 0 })),
-    ...inv.filter((i) => i.discount > 0).map((i) => ({ date: i.billedOn, ref: i.no, desc: "Scholarship / discount", debit: 0, credit: i.discount })),
+    ...inv.filter((i) => i.discount > 0).map((i) => ({ date: i.billedOn, ref: i.no, desc: discountLabel(studentId), debit: 0, credit: i.discount })),
     ...pays.filter((p) => p.status === "Confirmed").map((p) => ({ date: p.date, ref: p.receiptNo, desc: `Payment — ${p.method} (${p.ref})`, debit: 0, credit: p.amount })),
     ...pays.filter((p) => p.status === "Reversed").flatMap((p) => [{ date: p.date, ref: p.receiptNo, desc: `Payment — ${p.method} (${p.ref})`, debit: 0, credit: p.amount }, { date: p.date, ref: `REV-${p.receiptNo}`, desc: `Reversal of ${p.receiptNo}: ${p.note ?? ""}`, debit: p.amount, credit: 0 }]),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.debit - b.debit);
