@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyFeeding, feedingStatus, readExceptions, recordMeals, setException, studentFeedingRate, validateException, type FeedingException } from "../feeding";
+import { addPlan, applyFeeding, currentPlan, expectedByToday, feedingStatus, periodsElapsed, perPeriod, planStatus, schoolDays, termPeriods, validatePlan, readExceptions, recordMeals, setException, studentFeedingRate, validateException, type FeedingException } from "../feeding";
 import { buildTermInvoices } from "../generated-invoices";
 import { findTerm } from "../fees";
 import * as Q from "../data/queries";
@@ -57,5 +57,47 @@ describe("Feeding module", () => {
   });
   it("everyone is enrolled in extra classes", () => {
     for (const s of Q.activeStudents()) expect(Q.invoicesOf(s.id, "extra").length, s.admissionNo).toBe(1);
+  });
+  describe("payment plans", () => {
+    const t1 = { start: "2026-09-07", end: "2026-12-18" }; const today = "2026-10-12";
+    it("Term 1 has 75 school days, 15 weeks and 4 months", () => {
+      expect(schoolDays(t1.start, t1.end)).toBe(75);
+      expect([termPeriods(t1, "Daily"), termPeriods(t1, "Weekly"), termPeriods(t1, "Monthly"), termPeriods(t1, "Term")]).toEqual([75, 15, 4, 1]);
+    });
+    it("GH₵ 600 a term is GH₵ 8 a school day, GH₵ 40 a week, GH₵ 150 a month", () => {
+      expect([perPeriod(ghs(600), t1, "Daily"), perPeriod(ghs(600), t1, "Weekly"), perPeriod(ghs(600), t1, "Monthly")]).toEqual([ghs(8), ghs(40), ghs(150)]);
+      expect(perPeriod(ghs(450), t1, "Weekly")).toBe(ghs(30));
+    });
+    it("expected by 12 Oct: daily 208, weekly 240, monthly 300, termly 600; with school fees only after the due date", () => {
+      expect(periodsElapsed(t1, "Daily", today)).toBe(26);
+      expect([expectedByToday(ghs(600), t1, "Daily", today), expectedByToday(ghs(600), t1, "Weekly", today), expectedByToday(ghs(600), t1, "Monthly", today), expectedByToday(ghs(600), t1, "Term", today)])
+        .toEqual([ghs(208), ghs(240), ghs(300), ghs(600)]);
+      expect(expectedByToday(ghs(600), t1, "With school fees", today, "2026-10-30")).toBe(0);
+      expect(expectedByToday(ghs(600), t1, "With school fees", "2026-11-02", "2026-10-30")).toBe(ghs(600));
+      expect(expectedByToday(ghs(600), t1, "Weekly", "2027-01-05")).toBe(ghs(600)); // never more than the term's feeding
+    });
+    it("status: behind, on track, paid in full", () => {
+      expect(planStatus(ghs(600), ghs(100), ghs(240))).toEqual({ label: "Behind", behind: ghs(140) });
+      expect(planStatus(ghs(600), ghs(240), ghs(240)).label).toBe("On track");
+      expect(planStatus(ghs(600), ghs(600), ghs(240)).label).toBe("Paid in full");
+      expect(planStatus(0, 0, 0).label).toBe("Not on feeding");
+    });
+    it("switching daily → weekly keeps the history; the plan in force depends on the date", () => {
+      let plans = addPlan([], { studentId: "s", term: "T", frequency: "Daily", from: "2026-09-07" });
+      plans = addPlan(plans, { studentId: "s", term: "T", frequency: "Weekly", from: "2026-10-12" });
+      expect(currentPlan(plans, "s", "T", "2026-10-01")!.frequency).toBe("Daily");
+      expect(currentPlan(plans, "s", "T", "2026-10-12")!.frequency).toBe("Weekly");
+      expect(plans).toHaveLength(2);
+      plans = addPlan(plans, { studentId: "s", term: "T", frequency: "Monthly", from: "2026-10-12" });   // same start day replaces
+      expect(plans).toHaveLength(2); expect(currentPlan(plans, "s", "T", "2026-10-12")!.frequency).toBe("Monthly");
+      expect(validatePlan({ studentId: "s", term: "T", frequency: "Weekly", from: "2027-02-01" }, t1)).toMatch(/within the term/);
+    });
+    it("demo: every family paying feeding separately has the matching plan; Ama (monthly, paid 300) is on track", () => {
+      for (const p of Q.payments.filter((x) => x.feedingPeriod)) expect(currentPlan(Q.feedingPlans, p.studentId, "2026/2027|Term 1", p.date)?.frequency, p.receiptNo).toBe(p.feedingPeriod);
+      const ama = Q.students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
+      const plan = currentPlan(Q.feedingPlans, ama.id, "2026/2027|Term 1", Q.TODAY)!; expect(plan.frequency).toBe("Monthly");
+      const fa = Q.feedingAccount(ama.id);
+      expect(planStatus(fa.billed, fa.paid, expectedByToday(fa.billed, t1, plan.frequency, Q.TODAY)).label).toBe("On track");
+    });
   });
 });

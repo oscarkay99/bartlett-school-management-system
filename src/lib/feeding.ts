@@ -50,3 +50,80 @@ export function recordMeals(list: MealEntry[], date: string, counts: Record<stri
   const rest = list.filter((m) => !(m.date === date && m.classId in counts));
   return [...rest, ...Object.entries(counts).map(([classId, served]) => ({ date, classId, served }))].sort((a, b) => b.date.localeCompare(a.date));
 }
+
+// ---------- Feeding payment plans ----------
+// How a family pays feeding this term. "With school fees" (the default) = feeding is paid with the school fees invoice.
+// The others pay feeding on its own, a fixed amount per period. A change keeps the history (each entry has a start date).
+export const PLAN_FREQUENCIES = ["With school fees", "Daily", "Weekly", "Monthly", "Term"] as const;
+export type PlanFrequency = (typeof PLAN_FREQUENCIES)[number];
+export interface FeedingPlan { studentId: string; term: string; frequency: PlanFrequency; from: string; note?: string }
+export interface TermDates { start: string; end: string }
+export const planLabel = (f: PlanFrequency) => (f === "Term" ? "Termly" : f);
+const perWord: Record<PlanFrequency, string> = { "With school fees": "term", Daily: "school day", Weekly: "week", Monthly: "month", Term: "term" };
+export const periodWord = (f: PlanFrequency) => perWord[f];
+
+const day = (iso: string) => new Date(iso + "T00:00:00Z");
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+/** School days (Mon–Fri) from `a` to `b` inclusive. */
+export function schoolDays(a: string, b: string): number {
+  if (b < a) return 0; let n = 0;
+  for (let d = day(a); iso(d) <= b; d.setUTCDate(d.getUTCDate() + 1)) { const w = d.getUTCDay(); if (w !== 0 && w !== 6) n++; }
+  return n;
+}
+const monthsSpanned = (a: string, b: string) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7)) + 1;
+
+/** How many payment periods a term has for a plan. */
+export function termPeriods(t: TermDates, f: PlanFrequency): number {
+  if (f === "Daily") return Math.max(1, schoolDays(t.start, t.end));
+  if (f === "Weekly") return Math.max(1, Math.ceil((day(t.end).getTime() - day(t.start).getTime() + 86400000) / (7 * 86400000)));
+  if (f === "Monthly") return Math.max(1, monthsSpanned(t.start, t.end));
+  return 1;
+}
+/** Amount per period, rounded up to a whole cedi (the last period can be smaller; the total never exceeds the rate). */
+export const perPeriod = (rate: number, t: TermDates, f: PlanFrequency) => Math.ceil(rate / termPeriods(t, f) / 100) * 100;
+
+/** Periods that have started by `today`. "With school fees" is due by the invoice due date. */
+export function periodsElapsed(t: TermDates, f: PlanFrequency, today: string, dueOn?: string): number {
+  if (today < t.start) return 0;
+  const upTo = today > t.end ? t.end : today;
+  if (f === "Daily") return schoolDays(t.start, upTo);
+  if (f === "Weekly") return Math.min(termPeriods(t, f), Math.floor((day(upTo).getTime() - day(t.start).getTime()) / (7 * 86400000)) + 1);
+  if (f === "Monthly") return Math.min(termPeriods(t, f), monthsSpanned(t.start, upTo));
+  if (f === "Term") return 1;
+  return dueOn && today > dueOn ? 1 : 0;   // With school fees
+}
+
+/** Feeding that should have been paid by today under the plan (never more than the term's feeding). */
+export function expectedByToday(rate: number, t: TermDates, f: PlanFrequency, today: string, dueOn?: string): number {
+  if (f === "With school fees" || f === "Term") return periodsElapsed(t, f, today, dueOn) > 0 ? rate : 0;
+  return Math.min(rate, perPeriod(rate, t, f) * periodsElapsed(t, f, today, dueOn));
+}
+
+export type PlanStatus = { label: "Paid in full" | "On track" | "Behind" | "Not on feeding"; behind: number };
+export function planStatus(rate: number, paid: number, expected: number): PlanStatus {
+  if (rate <= 0) return { label: "Not on feeding", behind: 0 };
+  if (paid >= rate) return { label: "Paid in full", behind: 0 };
+  return expected > paid ? { label: "Behind", behind: expected - paid } : { label: "On track", behind: 0 };
+}
+
+/** The plan in force on `onDate` (latest start on or before it); none = "With school fees". */
+export function currentPlan(plans: FeedingPlan[], studentId: string, term: string, onDate: string): FeedingPlan | undefined {
+  return plans.filter((p) => p.studentId === studentId && p.term === term && p.from <= onDate).sort((a, b) => b.from.localeCompare(a.from))[0];
+}
+export const planHistory = (plans: FeedingPlan[], studentId: string, term: string) =>
+  plans.filter((p) => p.studentId === studentId && p.term === term).sort((a, b) => a.from.localeCompare(b.from));
+
+export function validatePlan(p: FeedingPlan, t?: TermDates): string {
+  if (!PLAN_FREQUENCIES.includes(p.frequency)) return "Choose a plan";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(p.from)) return "Choose the date the plan starts";
+  if (t && (p.from < t.start || p.from > t.end)) return `The start date must be within the term (${t.start} – ${t.end})`;
+  return "";
+}
+/** Add a plan change; a change starting on the same day as an earlier one replaces it. */
+export function addPlan(list: FeedingPlan[], p: FeedingPlan): FeedingPlan[] {
+  return [...list.filter((x) => !(x.studentId === p.studentId && x.term === p.term && x.from === p.from)), p];
+}
+export function readPlans(saved: unknown): FeedingPlan[] {
+  if (!Array.isArray(saved)) return [];
+  return saved.filter((p): p is FeedingPlan => !!p && typeof p.studentId === "string" && typeof p.term === "string" && validatePlan(p) === "");
+}

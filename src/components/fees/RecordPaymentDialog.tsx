@@ -3,11 +3,15 @@ import { useMemo, useState } from "react";
 import { CheckCircle2, Printer } from "lucide-react";
 import { Badge, Button, Field, inputClass } from "@/components/ui/primitives";
 import { Modal, MoneyInput, useToast } from "@/components/ui/interactive";
+import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
+import { useCalendar } from "@/components/shell/CalendarContext";
+import { termKey } from "@/lib/fees";
+import { perPeriod } from "@/lib/feeding";
 import { money } from "@/lib/money";
 import { ACCOUNTS, type FeeAccount } from "@/lib/accounts";
 
 /** `feedingOwed`: feeding still owed on the school fees invoice (feeding is billed there). */
-export interface PayStudent { id: string; name: string; adm: string; cls: string; balance: number; feedingOwed?: number; invoices: { no: string; balance: number }[] }
+export interface PayStudent { id: string; name: string; adm: string; cls: string; balance: number; feedingOwed?: number; feedingRate?: number; invoices: { no: string; balance: number }[] }
 const PERIODS = ["Daily", "Weekly", "Monthly", "Term"] as const;
 const METHODS = ["Cash", "Mobile Money", "Bank Transfer", "Card", "Cheque", "Sponsor"];
 
@@ -18,11 +22,18 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
   const [filter, setFilter] = useState(""); const toast = useToast();
   // School fees only: what the payment is for. Feeding is billed on the school fees invoice and can be paid with the fees
   // at once, or on its own daily / weekly / monthly / for the term.
-  const [purpose, setPurpose] = useState<"fees" | "feeding">("fees"); const [period, setPeriod] = useState<(typeof PERIODS)[number]>("Weekly");
+  const [purpose, setPurpose] = useState<"fees" | "feeding">("fees"); const [periodSel, setPeriod] = useState<(typeof PERIODS)[number] | null>(null);
   const [feedPart, setFeedPart] = useState<number | null>(null);
   const st = students.find((s) => s.id === sid);
   const minor = Math.round(parseFloat(amount || "0") * 100);
   const isFees = account === "fees"; const feedingOwed = Math.max(0, st?.feedingOwed ?? 0);
+  // The student's feeding payment plan pre-selects the period and suggests the amount per period.
+  const plans = useFeedingPlans(); const { calendar, year, term } = useCalendar();
+  const td = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term);
+  const planFreq = st ? plans.planOn(st.id, termKey(year, term), date)?.frequency : undefined;
+  const planned = planFreq && planFreq !== "With school fees" ? planFreq : undefined;
+  const period = periodSel ?? planned ?? "Weekly";
+  const suggested = planned && td && st?.feedingRate ? Math.min(perPeriod(st.feedingRate, td, planned), feedingOwed || Infinity) : 0;
   // Feeding part of this payment: all of it for a feeding-only payment; otherwise what the bursar entered,
   // defaulting to the feeding still owed (never more than the payment).
   const feeding = !isFees ? 0 : purpose === "feeding" ? minor : Math.min(minor, feedPart ?? feedingOwed);
@@ -34,7 +45,7 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
     return "";
   }, [sid, minor, method, ref, usedRefs, isFees, purpose, feedPart]);
   const alloc = useMemo(() => { if (!st || !(minor > 0)) return []; let left = minor; const out = st.invoices.map((i) => { const a = Math.min(left, Math.max(0, i.balance)); left -= a; return { no: i.no, applied: a }; }); if (left > 0) out.push({ no: "Credit on account", applied: left }); return out; }, [st, minor]);
-  const reset = () => { setDone(null); setAmount(""); setRef(""); setNote(""); setPurpose("fees"); setFeedPart(null); if (!studentId) setSid(""); onClose(); };
+  const reset = () => { setDone(null); setAmount(""); setRef(""); setNote(""); setPurpose("fees"); setFeedPart(null); setPeriod(null); if (!studentId) setSid(""); onClose(); };
   const candidates = students.filter((s) => !filter || (s.name + s.adm).toLowerCase().includes(filter.toLowerCase())).slice(0, 6);
   return (
     <Modal open={open} onClose={reset} title={done ? `${A.label} payment recorded` : `Record ${A.label.toLowerCase()} payment`} wide
@@ -64,7 +75,8 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
                 {st && <span className="text-xs text-muted">Feeding still owed: {money(feedingOwed)}</span>}</div>
               : <div className="mt-3 flex flex-wrap items-center gap-3 text-sm"><span>Paid</span>
                 <select aria-label="Feeding period" className="h-9 rounded-lg border border-line bg-surface px-2 text-sm" value={period} onChange={(e) => setPeriod(e.target.value as typeof period)}>{PERIODS.map((p) => <option key={p} value={p}>{p === "Term" ? "For the term" : p}</option>)}</select>
-                {st && <span className="text-xs text-muted">Feeding still owed: {money(feedingOwed)}</span>}</div>}
+                {st && <span className="text-xs text-muted">Feeding still owed: {money(feedingOwed)}</span>}
+                {planned && <span className="basis-full text-xs">Plan: <b>{planned === "Term" ? "Termly" : planned}</b>{suggested > 0 && <> · {money(suggested)} per period <button type="button" className="ml-1 font-medium text-info hover:underline" onClick={() => setAmount(String(suggested / 100))}>Use {money(suggested)}</button></>}</span>}</div>}
           </fieldset>}
           <Field label="Payment method *"><select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
           <Field label="External reference" hint="Momo transaction ID, bank ref or cheque no."><input className={inputClass} value={ref} onChange={(e) => setRef(e.target.value)} /></Field>

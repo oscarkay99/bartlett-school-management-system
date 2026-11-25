@@ -3,6 +3,7 @@ import type * as T from "./types";
 import { activitiesFor, type Activity } from "../accounts";
 import type { AcademicYear } from "../calendar";
 import { classFees, feedingRate, findTerm, termBillLines, type LevelFees, type TermFees } from "../fees";
+import { perPeriod, type FeedingPlan } from "../feeding";
 
 // Deterministic PRNG so server & client agree and screenshots are stable.
 let s = 20261012;
@@ -173,6 +174,7 @@ const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
   for (let i = payments.length - 1; i >= 0; i--) if (payments[i].studentId === ama.id) payments.splice(i, 1);
   payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(2000), method: "Mobile Money", date: "2026-09-18", ref: "MM88241193", status: "Confirmed", staff: staffNames[0], feeding: 0 }); // school fees only; feeding paid separately below
   payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: ama.id, guardianId: mensah.id, amount: ghs(300), method: "Cash", date: "2026-09-21", ref: "CASH-0921", status: "Confirmed", staff: staffNames[0], feeding: ghs(300), feedingPeriod: "Monthly" });
+  // Ama: feeding on a monthly plan (paid separately from her school fees). Pushed once feedingPlans exists, below.
 }
 // Demo: Kofi and Abena Mensah each part-paid, so their father gets one reminder covering all three children.
 for (const [first, paid, day, ref] of [["Kofi", 1500, "2026-09-18", "MM88241194"], ["Abena", 1000, "2026-09-25", "MM88241302"]] as const) {
@@ -185,7 +187,10 @@ payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fee
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s31", amount: ghs(800), method: "Online Gateway", date: "2026-10-09", ref: "GW-PENDING-7790", status: "Pending", staff: "System" });
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s44", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
 
-// ---------- Feeding payments ----------
+// ---------- Feeding payments & payment plans ----------
+/** Feeding payment plans: families who pay feeding on its own (daily / weekly / monthly). Everyone else pays it with the school fees. */
+export const feedingPlans: FeedingPlan[] = [];
+feedingPlans.push({ studentId: ama.id, term: "2026/2027|Term 1", frequency: "Monthly", from: "2026-09-07", note: "Pays feeding monthly in cash" });
 // Feeding is billed on the school fees invoice. Some families pay it with the school fees at once; others pay feeding
 // separately, daily, weekly or monthly. Own PRNG so this does not reshuffle the rest of the demo data.
 {
@@ -200,7 +205,8 @@ payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fee
     if (mensahKids.has(st.id) || st.status !== "Active" || r3() > 0.3) continue;
     const rate = feedingLine(st.id); const room = Math.min(rate, billedFees(st.id) - paidSoFar(st.id)); if (room <= 0) continue;
     const period = (["Daily", "Weekly", "Monthly"] as const)[Math.floor(r3() * 3)];
-    const each = Math.round(rate / (period === "Daily" ? 70 : period === "Weekly" ? 14 : 4) / 100) * 100;   // ~70 school days, 14 weeks, 4 months a term
+    const each = perPeriod(rate, { start: "2026-09-07", end: "2026-12-18" }, period);   // the plan's amount per period
+    feedingPlans.push({ studentId: st.id, term: "2026/2027|Term 1", frequency: period, from: "2026-09-07" });
     const times = period === "Daily" ? 5 + Math.floor(r3() * 20) : period === "Weekly" ? 1 + Math.floor(r3() * 5) : 1 + Math.floor(r3() * 2);
     let left = room;
     for (let n = 0; n < times && left >= each && each > 0; n++) {

@@ -213,6 +213,19 @@ select pg_temp.check('Extra Classes payments cannot carry feeding', pg_temp.err(
 select pg_temp.check('feeding balance: billed 600, paid 500 (weekly), owed 100', (select billed = 60000 and paid = 50000 and balance = 10000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
 select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 1 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
 
+-- ---------- Feeding payment plans ----------
+select pg_temp.check('bursar puts a student on a daily plan, then switches to weekly (history kept)',
+  pg_temp.err(:BURSAR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Daily', '2026-09-07') $q$) is null
+  and pg_temp.err(:BURSAR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from, note) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Weekly', '2026-10-12', 'Parent asked') $q$) is null);
+select pg_temp.check('…both changes are kept, newest in force', (select array_agg(frequency order by effective_from) from public.feeding_plans where student_id = '00000000-0000-0000-0000-0000000000f1') = array['Daily', 'Weekly']
+  and (select frequency from public.feeding_plans where student_id = '00000000-0000-0000-0000-0000000000f1' and effective_from <= '2026-10-20' order by effective_from desc limit 1) = 'Weekly');
+select pg_temp.check('a plan must start within the term', pg_temp.err(:OWNER, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Monthly', '2027-02-01') $q$) is not null);
+select pg_temp.check('an unknown plan is refused', pg_temp.err(:OWNER, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Yearly', '2026-10-01') $q$) is not null);
+select pg_temp.check('teacher and storekeeper cannot see or set plans', pg_temp.n(:TEACHER, 'select * from public.feeding_plans') = 0 and pg_temp.n(:STORE, 'select * from public.feeding_plans') = 0
+  and pg_temp.err(:TEACHER, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Monthly', '2026-11-02') $q$) is not null);
+select pg_temp.check('auditor reads plans but cannot set them', pg_temp.n(:AUDITOR, 'select * from public.feeding_plans') = 2
+  and pg_temp.err(:AUDITOR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Monthly', '2026-11-02') $q$) is not null);
+
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from results;

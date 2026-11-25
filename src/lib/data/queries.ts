@@ -6,7 +6,7 @@ import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "../accounts";
 import { termKey } from "../fees";
 export { ACCOUNTS, ACCOUNT_IDS, type FeeAccount };
 
-export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, feeSchedule, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
+export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, feeSchedule, feedingPlans, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
 
 /** Terms that already have invoices in any account. Their fees are locked: changing them needs an approved adjustment. */
 export const lockedFeeTerms = () => [...new Set(invoices.map((i) => termKey(i.year, i.term)))];

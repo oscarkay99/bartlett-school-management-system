@@ -9,11 +9,13 @@ import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
 import { useFeeding } from "./useFeeding";
 import { feedingRate, termKey } from "@/lib/fees";
-import { feedingStatus, studentFeedingRate, validateException, type FeedingException } from "@/lib/feeding";
+import { expectedByToday, feedingStatus, PLAN_FREQUENCIES, periodWord, perPeriod, planLabel, planStatus, studentFeedingRate, validateException, type FeedingException, type FeedingPlan, type PlanFrequency, type PlanStatus, type TermDates } from "@/lib/feeding";
+import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
+import { PlanDialog } from "./PlanDialog";
 import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
-interface FStudent { id: string; name: string; adm: string; classId: string; cls: string; billed: number; paid: number }
+interface FStudent { id: string; name: string; adm: string; classId: string; cls: string; billed: number; paid: number; dueOn?: string }
 /** A payment that included feeding. `how`: "With school fees" or Daily / Weekly / Monthly / Term. */
 export interface FeedingPayment { id: string; receipt: string; studentId: string; name: string; classId: string; cls: string; date: string; feeding: number; how: string; method: string; status: string }
 interface KitchenItem { id: string; name: string; unit: string; onHand: number; reorder: number; expiry?: string }
@@ -25,11 +27,17 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
   const feeding = useFeeding(); const { allow, role } = useRole();
   const canEdit = allow("invoices", "create") || allow("students", "edit");               // Owner, Admin, Bursar
   const canMeals = canEdit || role === "storekeeper";                                      // plus the kitchen
+  const plans = useFeedingPlans(); const { calendar } = useCalendar();
+  const td = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term);
   const rows = useMemo(() => students.map((s) => {
     const cls = fs.classes.find((c) => c.id === s.classId);
-    const classRate = tf && cls ? feedingRate(tf, cls) : 0; const ex = feeding.exceptionFor(s.id, key);
-    return { ...s, classRate, ex, status: feedingStatus(ex), rate: studentFeedingRate(classRate, ex) };
-  }), [students, fs.classes, tf, feeding, key]);
+    const classRate = tf && cls ? feedingRate(tf, cls) : 0; const ex = feeding.exceptionFor(s.id, key); const rate = studentFeedingRate(classRate, ex);
+    // Payment plan: how this family pays feeding, and whether they are keeping up with it.
+    const freq: PlanFrequency = plans.planOn(s.id, key, today)?.frequency ?? "With school fees";
+    const expected = td ? expectedByToday(rate, td, freq, today, s.dueOn) : 0;
+    return { ...s, classRate, ex, status: feedingStatus(ex), rate, freq, perPeriod: td && freq !== "With school fees" ? perPeriod(rate, td, freq) : 0, plan: planStatus(rate, s.paid, expected) };
+  }), [students, fs.classes, tf, feeding, key, plans, td, today]);
+  const behind = rows.filter((r) => r.plan.label === "Behind");
   const byClass = fs.classes.map((c) => { const r = rows.filter((x) => x.classId === c.id); const on = r.filter((x) => x.rate > 0);
     return { id: c.id, name: c.name, students: r.length, on: on.length, off: r.length - on.length, rate: tf ? feedingRate(tf, c) : 0, expected: on.reduce((a, x) => a + x.rate, 0),
       paid: r.reduce((a, x) => a + x.paid, 0), owed: r.reduce((a, x) => a + Math.max(0, x.billed - x.paid), 0) }; }).filter((c) => c.students > 0);
@@ -40,10 +48,11 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
   const overview = (
     <div className="space-y-4">
       {!tf && <AlertBanner tone="warn" icon={AlertTriangle} title={`No fees set for ${term} ${year}`} actions={<Link className="text-sm font-medium text-info hover:underline" href="/settings?tab=fees">Set fees in Settings →</Link>}>The feeding rate per class comes from the fee schedule.</AlertBanner>}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-5">
         <Kpi label="On feeding" value={`${onFeeding} / ${rows.length}`} icon={Users} hint="Active students on feeding this term (everyone unless marked otherwise)." />
         <Kpi label="Expected feeding income" value={money(expected)} icon={Wallet} tone="ok" hint="Billed on the school fees invoice." />
         <Kpi label="Feeding collected" value={money(paidAll)} icon={Wallet} tone="ok" hint="Feeding paid so far: with school fees at once, or daily / weekly / monthly." />
+        <Kpi label="Behind on plan" value={`${behind.length} · ${money(behind.reduce((a, r) => a + r.plan.behind, 0))}`} icon={Users} tone={behind.length ? "danger" : "ok"} hint="Students who have paid less feeding than their payment plan expects by today." />
         <Kpi label="Feeding still owed" value={money(owedAll)} icon={AlertTriangle} tone={owedAll ? "danger" : "ok"} hint="Feeding billed minus feeding paid." />
       </div>
       <Card><CardHeader title={`Feeding by class — ${term} ${year}`} sub="The rate per class is set in Settings → Fee schedule. Per-student changes are on the Students tab." />
@@ -56,7 +65,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
   return (
     <Tabs tabs={[
       { id: "overview", label: "Overview", content: overview },
-      { id: "students", label: "Students", badge: String(rows.length - onFeeding || ""), content: <StudentsTab rows={rows} canEdit={canEdit} termLabel={`${term} ${year}`} onSave={(sid, ex) => feeding.updateException(sid, key, ex)} classes={fs.classes} termKey={key} /> },
+      { id: "students", label: "Students", badge: String(rows.length - onFeeding || ""), content: <StudentsTab rows={rows} canEdit={canEdit} td={td} today={today} onPlan={plans.setPlan} termLabel={`${term} ${year}`} onSave={(sid, ex) => feeding.updateException(sid, key, ex)} classes={fs.classes} termKey={key} /> },
       { id: "payments", label: "Payments", content: <PaymentsTab payments={payments} classes={fs.classes} /> },
       { id: "meals", label: "Meal register", content: <MealsTab byClass={byClass} meals={feeding.meals} canEdit={canMeals} today={today} onSave={feeding.saveMeals} /> },
       { id: "kitchen", label: "Kitchen stock", badge: low.length ? String(low.length) : undefined, content: <KitchenTab items={kitchen} /> },
@@ -64,11 +73,12 @@ export function FeedingWorkspace({ students, payments, kitchen, today }: { stude
   );
 }
 
-type Row = FStudent & { classRate: number; ex?: FeedingException; status: string; rate: number };
+type Row = FStudent & { classRate: number; ex?: FeedingException; status: string; rate: number; freq: PlanFrequency; perPeriod: number; plan: PlanStatus };
 
-function StudentsTab({ rows, canEdit, termLabel, onSave, classes, termKey: key }: { rows: Row[]; canEdit: boolean; termLabel: string; onSave: (sid: string, ex: FeedingException | null) => void; classes: { id: string; name: string }[]; termKey: string }) {
+function StudentsTab({ rows, canEdit, td, today, onPlan, termLabel, onSave, classes, termKey: key }: { rows: Row[]; canEdit: boolean; td?: TermDates; today: string; onPlan: (p: FeedingPlan) => void; termLabel: string; onSave: (sid: string, ex: FeedingException | null) => void; classes: { id: string; name: string }[]; termKey: string }) {
   const [cls, setCls] = useState(""); const [st, setSt] = useState(""); const [edit, setEdit] = useState<Row | null>(null);
-  const data = rows.filter((r) => (!cls || r.classId === cls) && (!st || r.status === st));
+  const [plan, setPlan] = useState(""); const [behindOnly, setBehindOnly] = useState(""); const [planFor, setPlanFor] = useState<Row | null>(null);
+  const data = rows.filter((r) => (!cls || r.classId === cls) && (!st || r.status === st) && (!plan || r.freq === plan) && (!behindOnly || r.plan.label === "Behind"));
   const cols: Column<Row>[] = [
     { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div> },
     { key: "c", header: "Class", render: (x) => x.cls },
@@ -76,13 +86,18 @@ function StudentsTab({ rows, canEdit, termLabel, onSave, classes, termKey: key }
     { key: "r", header: "Charged", align: "right", sort: (x) => x.rate, render: (x) => (x.rate ? money(x.rate) : "—") },
     { key: "p", header: "Paid", align: "right", sort: (x) => x.paid, render: (x) => <span className="num text-ok">{money(x.paid)}</span> },
     { key: "o", header: "Owed", align: "right", sort: (x) => x.billed - x.paid, render: (x) => <span className={`num ${x.billed - x.paid > 0 ? "text-danger" : ""}`}>{money(Math.max(0, x.billed - x.paid))}</span> },
-    { key: "why", header: "Reason", hideOnMobile: true, render: (x) => <span className="text-xs text-muted">{x.ex?.reason ?? ""}</span> },
-    ...(canEdit ? [{ key: "e", header: "", render: (x: Row) => <Button size="sm" variant="ghost" onClick={() => setEdit(x)}>Change</Button> }] : []),
+    { key: "pl", header: "Plan", render: (x) => <div><div className="text-sm">{planLabel(x.freq)}</div>{x.perPeriod > 0 && <div className="num text-[11px] text-muted">{money(x.perPeriod)} / {periodWord(x.freq)}</div>}</div> },
+    { key: "ps", header: "Status", sort: (x) => x.plan.behind, render: (x) => <Badge tone={x.plan.label === "Behind" ? "danger" : x.plan.label === "Not on feeding" ? "neutral" : "ok"} dot>{x.plan.label === "Behind" ? `Behind ${money(x.plan.behind)}` : x.plan.label}</Badge> },
+    ...(canEdit ? [{ key: "e", header: "", render: (x: Row) => <div className="flex justify-end gap-1"><Button size="sm" variant="ghost" disabled={!td || !x.rate} onClick={() => setPlanFor(x)}>Plan</Button><Button size="sm" variant="ghost" onClick={() => setEdit(x)}>Change</Button></div> }] : []),
   ];
   return (<>
     <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} pageSize={12}
       filters={<><Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} />
+        <Select label="Plan" value={plan} onChange={setPlan} options={[{ value: "", label: "All plans" }, ...PLAN_FREQUENCIES.map((f) => ({ value: f, label: planLabel(f) }))]} />
+        <Select label="Behind" value={behindOnly} onChange={setBehindOnly} options={[{ value: "", label: "Everyone" }, { value: "1", label: "Behind only" }]} />
         <Select label="Feeding" value={st} onChange={setSt} options={[{ value: "", label: "Everyone" }, { value: "On feeding", label: "On feeding" }, { value: "Different rate", label: "Different rate" }, { value: "Not on feeding", label: "Not on feeding" }]} /></>} /></Card>
+    {planFor && td && <PlanDialog student={{ id: planFor.id, name: planFor.name }} current={planFor.freq} rate={planFor.rate} term={td} termLabel={termLabel} termKey={key} today={today}
+      onClose={() => setPlanFor(null)} onSave={(p) => { onPlan(p); setPlanFor(null); }} />}
     {edit && <ChangeFeeding row={edit} termLabel={termLabel} termKey={key} onClose={() => setEdit(null)} onSave={(ex) => { onSave(edit.id, ex); setEdit(null); }} />}
   </>);
 }

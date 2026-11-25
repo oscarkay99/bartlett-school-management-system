@@ -6,7 +6,8 @@ import { AppShell } from "@/components/shell/AppShell";
 import { CalendarProvider } from "@/components/shell/CalendarContext";
 import { ToastProvider } from "@/components/ui/interactive";
 import { FeeScheduleProvider } from "@/components/shell/FeeScheduleContext";
-import { SCHOOL, classes, feeSchedule, lockedFeeTerms } from "@/lib/data/queries";
+import { SCHOOL, classes, feeSchedule, feedingPlans, lockedFeeTerms } from "@/lib/data/queries";
+import { FeedingPlansProvider } from "@/components/shell/FeedingPlansContext";
 import { ACTIVITIES } from "@/lib/accounts";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -21,7 +22,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <ToastProvider>
             <CalendarProvider seed={SCHOOL.calendar} current={{ year: SCHOOL.year, term: SCHOOL.term }}>
               <FeeScheduleProvider seed={feeSchedule} locked={lockedFeeTerms()} classes={classes.map((c) => ({ id: c.id, name: c.name, level: c.level }))} activities={[...ACTIVITIES]}>
-                <AppShell school={{ name: SCHOOL.name, short: SCHOOL.short }}>{children}</AppShell>
+                <FeedingPlansProvider seed={feedingPlans}>
+                  <AppShell school={{ name: SCHOOL.name, short: SCHOOL.short }}>{children}</AppShell>
+                </FeedingPlansProvider>
               </FeeScheduleProvider>
             </CalendarProvider>
           </ToastProvider>
