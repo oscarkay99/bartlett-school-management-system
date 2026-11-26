@@ -6,6 +6,7 @@ import { Button, Field, inputClass } from "@/components/ui/primitives";
 import { Modal, useToast } from "@/components/ui/interactive";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
+import { useRole } from "@/components/shell/AppShell";
 import { ACCOUNTS, activitiesFor, type FeeAccount } from "@/lib/accounts";
 import { LIVE } from "@/lib/live/config";
 import { useLiveData } from "@/lib/live/data";
@@ -20,7 +21,7 @@ export interface BillCandidate { id: string; name: string; adm: string; classId:
 // Prices come from that term's fee schedule. Front-end preview: the backend assigns the real number.
 export function IssueBillDialog({ open, onClose, account, candidates }: { open: boolean; onClose: () => void; account: FeeAccount; candidates: BillCandidate[] }) {
   const A = ACCOUNTS[account]; const toast = useToast(); const { reload } = useLiveData(); const [saving, setSaving] = useState(false); const [saveErr, setSaveErr] = useState("");
-  const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term);
+  const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const owner = useRole().role === "owner";
   const [sid, setSid] = useState(""); const [filter, setFilter] = useState(""); const [acts, setActs] = useState<string[]>([]); const [done, setDone] = useState<string | null>(null);
   const st = candidates.find((c) => c.id === sid);
   const cls = st && fs.classes.find((c) => c.id === st.classId);
@@ -38,15 +39,15 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
     <Modal open={open} onClose={close} title={done ? "Bill issued" : `Enrol & bill student — ${term} ${year}`} wide
       footer={done ? <Button variant="primary" onClick={close}>Done</Button> : <><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={!!err || saving} onClick={async () => {
           if (!LIVE) { const no = demoBillNo(A.invoicePrefix, year, term); setDone(no); toast(`${A.label} bill ${no} issued`); return; }
-          // Live: enrol in the activities, then the bill goes to the Owner for approval (it gets its number when approved).
+          // Live: enrol in the activities and bill. The Owner's bill is issued at once; anyone else's waits for the Owner's approval.
           setSaving(true); setSaveErr("");
-          const e = (await enrolActivities(sid, year, term, items.map((i) => i.label))) || (await createInvoices([{ studentId: sid, account, year, term, items }]));
+          const e = (await enrolActivities(sid, year, term, items.map((i) => i.label))) || (await createInvoices([{ studentId: sid, account, year, term, items }], true, owner));
           setSaving(false); if (e) { setSaveErr(e); return; }
-          setDone("awaiting the Owner's approval"); toast(`${A.label} bill sent for approval`); void reload();
+          setDone(owner ? "issued" : "awaiting the Owner's approval"); toast(owner ? `${A.label} bill issued` : `${A.label} bill sent for approval`); void reload();
         }}>{saving ? "Saving…" : `Issue bill · ${money(total)}`}</Button></>}>
       {done ? (
         <div className="space-y-2 text-center"><CheckCircle2 className="mx-auto text-ok" size={40} />
-          <p>{A.label} bill <b className="num">{done}</b> issued to {st?.name} for <b>{money(total)}</b>.</p>
+          <p>{LIVE ? <>{A.label} bill for {st?.name}, <b>{money(total)}</b>: <b>{done}</b>.</> : <>{A.label} bill <b className="num">{done}</b> issued to {st?.name} for <b>{money(total)}</b>.</>}</p>
           <p className="text-sm text-muted">This bill is separate from school fees. Payments against it get their own {A.receiptPrefix}- receipts.</p>
           {!LIVE && <p className="text-xs text-muted">Front-end preview — the bill is saved once the backend is connected.</p>}</div>
       ) : !tf ? (

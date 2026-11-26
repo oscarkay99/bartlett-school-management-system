@@ -65,7 +65,8 @@ export async function saveTermFees(tf: { year: string; term: string; levels: Rec
   return "";
 }
 /** Creates draft invoices (one per student) and submits them for the Owner's approval. */
-export async function createInvoices(list: { studentId: string; account: string; year: string; term: string; items: { label: string; amount: number }[]; dueOn?: string; discount?: number }[], submit = true) {
+/** `approve`: also issue them at once (Owner only; the database refuses anyone else). */
+export async function createInvoices(list: { studentId: string; account: string; year: string; term: string; items: { label: string; amount: number }[]; dueOn?: string; discount?: number }[], submit = true, approve = false) {
   const ids: string[] = [];
   for (const i of list) {
     const tid = termId(i.year, i.term); if (!tid) return `Add ${i.term} ${i.year} to the calendar first.`;
@@ -76,6 +77,7 @@ export async function createInvoices(list: { studentId: string; account: string;
     ids.push(inv.id);
   }
   if (submit && ids.length) { const { error } = await db().rpc("submit_invoices", { p_ids: ids }); if (error) return err(error); }
+  if (submit && approve && ids.length) { const { error } = await db().rpc("approve_invoices", { p_ids: ids }); if (error) return err(error); }
   return "";
 }
 /** Takes back invoices not yet approved: submitted ones are returned to draft, then all drafts are deleted. */

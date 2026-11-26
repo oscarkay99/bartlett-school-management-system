@@ -3,6 +3,7 @@
 import * as Q from "./queries";
 import type { FeeAccount } from "../accounts";
 import { termKey } from "../fees";
+import { liveExtra } from "../live/hydrate";
 import type { PRow, RRow, SRow } from "@/components/fees/FeesWorkspace";
 import type { BillCandidate } from "@/components/fees/IssueBillDialog";
 
@@ -18,6 +19,8 @@ export function billingProps(account: FeeAccount) {
   const candidates: BillCandidate[] = Q.activeStudents().map((s) => {
     const billed: Record<string, string[]> = {};
     for (const i of Q.invoicesOf(s.id, account)) (billed[termKey(i.year, i.term)] ??= []).push(...i.items.map((x) => x.label));
+    // Bills not issued yet (live: drafts / awaiting approval) count too, so a student is never billed twice.
+    for (const d of liveExtra.data?.drafts ?? []) if (d.studentId === s.id && d.account === account) (billed[termKey(d.year, d.term)] ??= []).push(...d.items.map((x) => x.label));
     return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, scholarship: !!s.scholarship, billed };
   });
   return { account, students, payments, reminders, candidates, classes: Q.classes.map((c) => ({ id: c.id, name: c.name })), usedRefs: Q.payments.map((p) => p.ref.toUpperCase()) };

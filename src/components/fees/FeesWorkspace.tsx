@@ -211,26 +211,26 @@ type InvRow = { id: string; invoice: string; name: string; cls: string; activiti
 function Invoices({ students, candidates, account, canBill, onIssue }: { students: SRow[]; candidates: BillCandidate[]; account: FeeAccount; canBill: boolean; onIssue: () => void }) {
   const [o, setO] = useState(false); const [view, setView] = useState<InvRow | null>(null); const A = ACCOUNTS[account]; const { role } = useRole();
   const { year, term } = useCalendar(); const key = termKey(year, term); const fs = useFeeSchedule();
-  const generated = useGeneratedInvoices(year, term); const gen = account === "fees" ? generated.list : [];
+  const generated = useGeneratedInvoices(year, term, account); const gen = generated.list;
   const ids = new Set(candidates.map((c) => c.id));
   const rows: InvRow[] = [
     ...students.filter((s) => s.terms.includes(key)).map((s) => ({ id: s.id, invoice: s.invoice, name: s.name, cls: s.cls, activities: s.items.map((i) => i.label).join(", "), total: s.billed, paid: s.paid, dueOn: s.dueOn, status: s.status })),
-    ...gen.filter((g) => ids.has(g.studentId)).map((g) => ({ id: g.no, invoice: g.no, name: g.name, cls: fs.classes.find((c) => c.id === g.classId)?.name ?? "", activities: "", total: generatedTotal(g), paid: 0, dueOn: g.dueOn, status: "Outstanding", gen: g })),
+    ...gen.filter((g) => ids.has(g.studentId)).map((g) => ({ id: g.no, invoice: g.no, name: g.name, cls: fs.classes.find((c) => c.id === g.classId)?.name ?? "", activities: g.items.map((i) => i.label).join(", "), total: generatedTotal(g), paid: 0, dueOn: g.dueOn, status: generated.live ? (g.no.startsWith("Awaiting") ? "Awaiting approval" : "Draft") : "Outstanding", gen: g })),
   ];
   return (
     <Card><CardHeader title={`${A.label} invoices — ${term} ${year}`} sub={`Numbered ${invoiceStem(A.invoicePrefix, year, term)}-… and receipted separately (${A.receiptPrefix}-…)`} action={canBill ? (account === "fees" ? <Button variant="primary" size="sm" onClick={() => setO(true)}>Generate {term} invoices</Button> : <Button variant="primary" size="sm" onClick={onIssue}><FilePlus2 size={13} />Issue new bill</Button>) : undefined} />
       {gen.length > 0 && <div className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-info/30 bg-info/8 px-3 py-2 text-sm">
-        <span><b>{gen.length}</b> {term} invoices generated · {money(gen.reduce((a, g) => a + generatedTotal(g), 0))}. {generated.live
+        <span><b>{gen.length}</b> {term} {account === "fees" ? "invoices generated" : "bills not issued yet"} · {money(gen.reduce((a, g) => a + generatedTotal(g), 0))}. {generated.live
           ? <>Not issued yet: {generated.awaiting > 0 ? <>{generated.awaiting} await the Owner&apos;s approval. Approving issues them with their numbers and adds them to balances.</> : "they are drafts."}</>
           : "Saved in this browser until the backend is connected; payments against them are recorded once it is."}</span>
-        <span className="flex gap-2">{generated.live && role === "owner" && generated.awaiting > 0 && <Button size="sm" variant="primary" onClick={generated.approve}>Approve {generated.awaiting} invoices</Button>}
+        <span className="flex gap-2">{generated.live && role === "owner" && generated.awaiting > 0 && <Button size="sm" variant="primary" onClick={generated.approve}>Approve {generated.awaiting} {account === "fees" ? "invoices" : generated.awaiting === 1 ? "bill" : "bills"}</Button>}
         {(LIVE ? role === "owner" : canBill) && <DiscardGenerated count={gen.length} term={term} onDiscard={generated.clear} />}</span></div>}
       <DataTable rows={rows} empty={<EmptyState icon={FileText} title={`No ${A.label.toLowerCase()} invoices for ${term} ${year} yet`} body={account === "fees" ? "Generate this term's invoices once its fees are set." : "Issue bills to students as they enrol."} />} columns={[
         { key: "i", header: "Invoice", render: (x) => <b className="num">{x.invoice}</b> }, { key: "n", header: "Student", sort: (x) => x.name, render: (x) => x.name }, { key: "c", header: "Class", render: (x) => x.cls },
         ...(account !== "fees" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: InvRow) => x.activities }] : []),
         { key: "b", header: "Total", align: "right", sort: (x) => x.total, render: (x) => money(x.total) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
         { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
-        { key: "pdf", header: "", render: (x) => x.gen ? <button className="text-info hover:underline" onClick={() => setView(x)}>View</button> : <Link className="text-info" href={printHref("invoice", x.invoice)}>PDF</Link> },
+        { key: "pdf", header: "", render: (x) => x.gen ? (account === "fees" ? <button className="text-info hover:underline" onClick={() => setView(x)}>View</button> : null) : <Link className="text-info" href={printHref("invoice", x.invoice)}>PDF</Link> },
       ]} rowId={(x) => x.id} searchText={(x) => `${x.name} ${x.invoice}`} pageSize={10} />
       {o && <GenerateInvoices candidates={candidates} already={new Set(gen.map((g) => g.studentId))} startSeq={gen.length} onGenerate={generated.add} onClose={() => setO(false)} />}
       {view?.gen && <GeneratedInvoiceDialog inv={view.gen} cls={view.cls} onClose={() => setView(null)} />}

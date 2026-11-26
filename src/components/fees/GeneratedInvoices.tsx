@@ -18,6 +18,7 @@ import { termKey } from "@/lib/fees";
 import { money } from "@/lib/money";
 import { fmtDateLong } from "@/lib/utils";
 import { SCHOOL } from "@/lib/data/seed";
+import type { FeeAccount } from "@/lib/accounts";
 
 const KEY = "generated-invoices-v1";
 const load = (): Record<string, unknown> => { try { return JSON.parse(localStorage.getItem(KEY) ?? "{}") ?? {}; } catch { return {}; } };
@@ -25,22 +26,22 @@ const load = (): Record<string, unknown> => { try { return JSON.parse(localStora
 /** School fees invoices generated for one term, kept in this browser (front-end stand-in until the backend stores them). */
 /** The term's school fees invoices that are not issued yet. Live: drafts / awaiting the Owner's approval in the database.
  *  Demo: kept in this browser. `approve` is Owner-only (the database refuses anyone else). */
-export function useGeneratedInvoices(year: string, term: string) { return useGeneratedImpl(year, term); }
+export function useGeneratedInvoices(year: string, term: string, account: FeeAccount = "fees") { return useGeneratedImpl(year, term, account); }
 
-function useLiveGenerated(year: string, term: string) {
+function useLiveGenerated(year: string, term: string, account: FeeAccount) {
   const { version } = useLiveData(); const run = useSave();
-  const drafts = useMemo(() => (liveExtra.data?.drafts ?? []).filter((d) => d.account === "fees" && d.year === year && d.term === term), [version, year, term]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const drafts = useMemo(() => (liveExtra.data?.drafts ?? []).filter((d) => d.account === account && d.year === year && d.term === term), [version, year, term, account]);   // eslint-disable-line react-hooks/exhaustive-deps
   const list: GeneratedInvoice[] = drafts.map((d) => { const s = Q.getStudent(d.studentId);
     return { no: `${d.status === "submitted" ? "Awaiting approval" : "Draft"} · ${d.id.slice(0, 4).toUpperCase()}`, year, term, studentId: d.studentId, name: s ? Q.fullName(s) : "", adm: s?.admissionNo ?? "",
       classId: s?.classId ?? "", items: d.items, discount: 0, billedOn: "", dueOn: "" }; });
   return { list, live: true as const, awaiting: drafts.filter((d) => d.status === "submitted").length,
-    add: (inv: GeneratedInvoice[]) => { void run(() => createInvoices(inv.map((i) => ({ studentId: i.studentId, account: "fees", year, term, items: i.items, dueOn: i.dueOn, discount: i.discount }))), `${inv.length} invoices sent to the Owner for approval`); },
+    add: (inv: GeneratedInvoice[]) => { void run(() => createInvoices(inv.map((i) => ({ studentId: i.studentId, account, year, term, items: i.items, dueOn: i.dueOn, discount: i.discount }))), `${inv.length} invoices sent to the Owner for approval`); },
     clear: () => { void run(() => discardInvoices(drafts.map((d) => d.id)), "Invoices not yet approved were discarded"); },
     approve: () => { void run(() => approveInvoices(drafts.filter((d) => d.status === "submitted").map((d) => d.id)), "Invoices approved and issued — numbers assigned"); } };
 }
 
-function useDemoGenerated(year: string, term: string) {
-  const key = termKey(year, term);
+function useDemoGenerated(year: string, term: string, account: FeeAccount) {
+  const key = account === "fees" ? termKey(year, term) : `${account}|${termKey(year, term)}`;
   const [list, setList] = useState<GeneratedInvoice[]>([]);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { setList(readGenerated(load()[key])); }, [key]);
