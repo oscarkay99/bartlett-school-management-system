@@ -24,12 +24,15 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
   const [filter, setFilter] = useState(""); const toast = useToast(); const { year, term } = useCalendar(); const { reload } = useLiveData(); const [saving, setSaving] = useState(false); const [saveErr, setSaveErr] = useState("");
   const st = students.find((s) => s.id === sid);
   const minor = Math.round(parseFloat(amount || "0") * 100);
+  const maxPay = Math.max(0, st?.balance ?? 0);   // the most that can be paid now
   const err = useMemo(() => {
     if (!sid) return "Select a student"; if (!(minor > 0)) return "Enter an amount greater than zero";
+    // Never more than is owed (the database refuses it too).
+    if (minor > maxPay) return maxPay === 0 ? `Nothing is owed for ${A.label.toLowerCase()} — no payment can be recorded.` : `Only ${money(maxPay)} is owed — a payment can't be more than that.`;
     if (method !== "Cash" && !ref.trim()) return "An external reference is required for non-cash payments";
     if (ref.trim() && usedRefs.includes(ref.trim().toUpperCase())) return "This reference was already recorded — duplicate payment blocked";
     return "";
-  }, [sid, minor, method, ref, usedRefs]);
+  }, [sid, minor, maxPay, A.label, method, ref, usedRefs]);
   const alloc = useMemo(() => { if (!st || !(minor > 0)) return []; let left = minor; const out = st.invoices.map((i) => { const a = Math.min(left, Math.max(0, i.balance)); left -= a; return { no: i.no, applied: a }; }); if (left > 0) out.push({ no: "Credit on account", applied: left }); return out; }, [st, minor]);
   const reset = () => { setDone(null); setAmount(""); setRef(""); setNote(""); if (!studentId) setSid(""); onClose(); };
   const candidates = students.filter((s) => !filter.trim() || `${s.name} ${s.adm}`.toLowerCase().includes(filter.trim().toLowerCase())).slice(0, 6);
@@ -60,7 +63,8 @@ export function RecordPaymentDialog({ open, onClose, students, studentId, usedRe
           <p className="sm:col-span-2 -mb-1 text-xs text-muted">This payment is applied to {A.label} only and gets its own {A.receiptPrefix}- receipt. It does not reduce any other balance.{account === "fees" && " Feeding paid on its own is recorded in the Feeding module."}</p>
           {st && <div className="sm:col-span-2 flex items-center justify-between rounded-lg bg-surface-2 p-3"><span><b>{st.name}</b> · {st.cls}</span><span className="text-right">{A.label} outstanding <b className="num text-danger">{money(st.balance)}</b>
             {st.invoices.some((i) => i.balance > 0) && <span className="block text-xs text-muted">from {st.invoices.filter((i) => i.balance > 0).map((i) => i.no).join(", ")}{st.items?.length ? ` (${st.items.join(", ")})` : ""}</span>}</span></div>}
-          <Field label="Amount (GH₵) *"><input className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" /></Field>
+          <Field label="Amount (GH₵) *" hint={st ? (maxPay > 0 ? `At most ${money(maxPay)} (what is owed)` : "Nothing is owed") : undefined}><div className="flex gap-2"><input className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" />
+            {st && maxPay > 0 && <Button type="button" size="sm" onClick={() => setAmount(String(maxPay / 100))}>Pay all</Button>}</div></Field>
           <Field label="Payment method *"><select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
           <Field label="External reference" hint="Momo transaction ID, bank ref or cheque no."><input className={inputClass} value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
           <Field label="Payment date"><input type="date" className={inputClass} value={date} max={Q.TODAY} onChange={(e) => setDate(e.target.value)} /></Field>

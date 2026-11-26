@@ -78,7 +78,9 @@ export function feedingAccount(studentId: string) {
   const ex = feedingExceptions.find((e) => e.studentId === studentId && e.term === termKey(SCHOOL.year, SCHOOL.term));
   const classRate = st ? feeStructure.find((f) => f.classId === st.classId)?.feeding ?? 0 : 0;
   const billed = st && st.status === "Active" ? studentFeedingRate(classRate, ex) : 0;
-  const pays = payments.filter((p) => p.studentId === studentId && p.account === "fees" && (p.feeding ?? 0) > 0).sort((a, b) => b.date.localeCompare(a.date));
+  // This term's feeding payments: from 30 days before the term starts to its end (same window as the database).
+  const from = SCHOOL.termStart ? new Date(Date.parse(SCHOOL.termStart) - 30 * 86400000).toISOString().slice(0, 10) : "";
+  const pays = payments.filter((p) => p.studentId === studentId && p.account === "fees" && (p.feeding ?? 0) > 0 && (!from || (p.date >= from && p.date <= SCHOOL.termEnd))).sort((a, b) => b.date.localeCompare(a.date));
   const paid = pays.filter((p) => p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
   return { billed, paid, balance: billed - paid, payments: pays, separate: true };
 }

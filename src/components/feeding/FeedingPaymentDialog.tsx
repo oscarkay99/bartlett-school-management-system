@@ -33,10 +33,12 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
     const suggest = p === "Term" ? left : Math.min(s.perPeriod, left); if (suggest > 0) setAmount(String(suggest / 100)); };
   const err = useMemo(() => {
     if (!sid) return "Select a student"; if (!(minor > 0)) return "Enter an amount greater than zero";
+    // Never more than this term's feeding still owed (the database refuses it too).
+    if (minor > owed) return owed === 0 ? "Nothing is owed for feeding this term — no payment can be recorded." : `Only ${money(owed)} is owed for feeding — a payment can't be more than that.`;
     if (method !== "Cash" && !ref.trim()) return "An external reference is required for non-cash payments";
     if (ref.trim() && usedRefs.includes(ref.trim().toUpperCase())) return "This reference was already recorded — duplicate payment blocked";
     return "";
-  }, [sid, minor, method, ref, usedRefs]);
+  }, [sid, minor, owed, method, ref, usedRefs]);
   const candidates = students.filter((s) => !filter || `${s.name} ${s.adm}`.toLowerCase().includes(filter.trim().toLowerCase())).slice(0, 6);
   return (
     <Modal open onClose={onClose} title={done ? "Feeding payment recorded" : "Record feeding payment"} wide
@@ -65,7 +67,8 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
             {!st && filter && <ul className="mt-1 rounded-lg border border-line">{candidates.map((s) => <li key={s.id}><button className="flex w-full justify-between px-3 py-2 text-left hover:bg-surface-2" onClick={() => pick(s)}><span>{s.name} <span className="text-xs text-muted">{s.cls} · {s.adm}</span></span><span className="text-xs text-muted">{planLabel(s.freq)}</span></button></li>)}</ul>}</div>
           <p className="sm:col-span-2 -mb-1 text-xs text-muted">Feeding paid on its own. It is not part of school fees and does not change the school fees balance.</p>
           {st && <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 p-3 text-sm"><span><b>{st.name}</b> · {st.cls} · Plan: <b>{planLabel(st.freq)}</b>{st.perPeriod > 0 && ` (${money(st.perPeriod)} per period)`}</span><span>Feeding still owed <b className="num text-danger">{money(owed)}</b></span></div>}
-          <Field label="Amount (GH₵) *"><input className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" /></Field>
+          <Field label="Amount (GH₵) *" hint={st ? (owed > 0 ? `At most ${money(owed)} (feeding still owed)` : "Nothing is owed") : undefined}><div className="flex gap-2"><input className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" />
+            {st && owed > 0 && <Button type="button" size="sm" onClick={() => setAmount(String(owed / 100))}>Pay all</Button>}</div></Field>
           <Field label="Paid for"><select className={inputClass} value={period} onChange={(e) => setPeriod(e.target.value as Period)}>{PERIODS.map((p) => <option key={p} value={p}>{p === "Term" ? "The term" : `One ${p === "Daily" ? "day" : p === "Weekly" ? "week" : "month"}`}</option>)}</select></Field>
           <Field label="Payment method *"><select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
           <Field label="External reference" hint="Momo transaction ID, bank ref or cheque no."><input className={inputClass} value={ref} onChange={(e) => setRef(e.target.value)} /></Field>

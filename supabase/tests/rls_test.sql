@@ -123,6 +123,7 @@ select pg_temp.check('a draft invoice can be deleted (with its lines)',
 -- ---------- Payments ----------
 select pg_temp.check('bursar records a payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (id, account, student_id, amount, method, reference) values ('00000000-0000-0000-0000-000000000201', 'fees', '00000000-0000-0000-0000-0000000000f1', 100000, 'Mobile Money', 'MM123') $q$) is null);
 select pg_temp.check('…receipt RCT-00001 assigned and recorded by the bursar', (select receipt_no = 'RCT-00001' and received_by = '00000000-0000-0000-0000-0000000000a3' from public.payments where id = '00000000-0000-0000-0000-000000000201'));
+select pg_temp.check('a school fees payment above what is owed is refused', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('fees', '00000000-0000-0000-0000-0000000000f1', 99999999, 'Cash') $q$) like 'Only GH₵ % is owed for school fees%');
 select pg_temp.check('the same MoMo reference cannot be recorded twice',
   pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, reference) values ('fees', '00000000-0000-0000-0000-0000000000f1', 100, 'Mobile Money', 'mm123') $q$) is not null);
 select pg_temp.err(:OWNER, $q$ update public.payments set amount = 1 $q$), pg_temp.err(:BURSAR, $q$ delete from public.payments $q$);
@@ -206,12 +207,14 @@ insert into public.students (id, admission_no, first_name, last_name, class_id) 
   ('00000000-0000-0000-0000-0000000000f4', 'A4', 'Yaw', 'P3', '00000000-0000-0000-0000-0000000000d1');
 select pg_temp.check('a new KG student is auto-enrolled in Music only', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f3') = array['Music (Piano)']);
 select pg_temp.check('a new Primary student is auto-enrolled in Music, STEM and Extra Classes', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f4') = array['Extra Classes', 'Music (Piano)', 'STEM']);
-select pg_temp.check('bursar records a weekly feeding payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 50000, 'Weekly') $q$) is null);
+-- f1 is on half-day feeding (300 this term): more than that can't be paid.
+select pg_temp.check('a feeding payment above what is owed (500 of 300) is refused', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 50000, 'Weekly') $q$) like 'Only GH₵ 300.00 is owed for feeding this term%');
+select pg_temp.check('bursar records a weekly feeding payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 20000, 'Cash', 20000, 'Weekly') $q$) is null);
 select pg_temp.check('a feeding-only payment must be all feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 100, 'Daily') $q$) is not null);
 select pg_temp.check('the feeding part cannot exceed the payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('fees', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 200) $q$) is not null);
 select pg_temp.check('Extracurricular payments cannot carry feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('extra', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 100) $q$) is not null);
--- Feeding is never on the school fees invoice: f1 owes the half-day rate (300) set above, and paid 500 weekly.
-select pg_temp.check('feeding balance: half-day rate 300 billed, 500 paid weekly, 200 in credit', (select billed = 30000 and paid = 50000 and balance = -20000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
+-- Feeding is never on the school fees invoice: f1 owes the half-day rate (300) set above, and paid 200 weekly.
+select pg_temp.check('feeding balance: half-day rate 300 billed, 200 paid weekly, 100 owed', (select billed = 30000 and paid = 20000 and balance = 10000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
 -- Everyone on feeding with a rate this term is listed (f1 half-day, f4 Primary); f2 opted out, KG has no rate here.
 select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 2 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
 
@@ -236,6 +239,12 @@ select pg_temp.check('a weekly feeding payment does not count towards school fee
 select pg_temp.check('plan family: feeding billed at the rate (600), paid 40, owed 560', (select billed = 60000 and paid = 4000 and balance = 56000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f4'));
 
 -- ---------- Extra Classes: its own account, separate from Extracurricular ----------
+select pg_temp.check('nothing owed (no Extra Classes invoice): a payment is refused', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('classes', '00000000-0000-0000-0000-0000000000f4', 100, 'Cash') $q$) like 'Nothing is owed for Extra Classes%');
+-- Issue f4 an Extra Classes bill (300) and an Extracurricular bill (400) so there is something to pay.
+insert into public.invoices (id, account, student_id, term_id) values ('00000000-0000-0000-0000-000000000301', 'classes', '00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2'), ('00000000-0000-0000-0000-000000000302', 'extra', '00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2');
+insert into public.invoice_lines (invoice_id, label, amount, position) values ('00000000-0000-0000-0000-000000000301', 'Extra Classes', 30000, 0), ('00000000-0000-0000-0000-000000000302', 'STEM', 40000, 0);
+set app.invoice_fn = 'on'; update public.invoices set status = 'issued', no = 'TEST-' || right(id::text, 3) where id in ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000302'); set app.invoice_fn = 'off';
+select pg_temp.check('a payment above the bill (301 of 300) is refused', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('classes', '00000000-0000-0000-0000-0000000000f4', 30100, 'Cash') $q$) like 'Only GH₵ 300.00 is owed for Extra Classes%');
 select pg_temp.check('bursar records an Extra Classes and an Extracurricular payment',
   pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('classes', '00000000-0000-0000-0000-0000000000f4', 30000, 'Cash') $q$) is null
   and pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('extra', '00000000-0000-0000-0000-0000000000f4', 40000, 'Cash') $q$) is null);
@@ -243,6 +252,7 @@ select pg_temp.check('bursar records an Extra Classes and an Extracurricular pay
 select pg_temp.check('…each gets its own receipt series (XCR / XRC)',
   (select receipt_no like 'XCR-%' from public.payments where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'classes')
   and (select receipt_no like 'XRC-%' from public.payments where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'extra'));
+select pg_temp.check('once paid in full, a further payment is refused', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method) values ('classes', '00000000-0000-0000-0000-0000000000f4', 100, 'Cash') $q$) like 'Nothing is owed for Extra Classes%');
 select pg_temp.check('an Extra Classes payment does not reduce the Extracurricular or school fees balance',
   (select paid = 30000 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'classes')
   and (select paid = 40000 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'extra')
