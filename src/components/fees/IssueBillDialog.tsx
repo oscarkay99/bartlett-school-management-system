@@ -33,7 +33,7 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
   const total = items.reduce((a, b) => a + b.amount, 0);
   const err = !tf ? `No fees set for ${term} ${year}` : !st ? "Select a student" : items.length === 0 ? "Select at least one activity" : items.some((i) => i.amount <= 0) ? `${items.find((i) => i.amount <= 0)!.label} has no price for ${term}` : "";
   const close = () => { setSid(""); setFilter(""); setActs([]); setDone(null); onClose(); };
-  const list = candidates.filter((c) => !filter || (c.name + c.adm).toLowerCase().includes(filter.toLowerCase())).slice(0, 6);
+  const list = candidates.filter((c) => !filter || `${c.name} ${c.adm}`.toLowerCase().includes(filter.trim().toLowerCase())).slice(0, 6);
   return (
     <Modal open={open} onClose={close} title={done ? "Bill issued" : `Enrol & bill student — ${term} ${year}`} wide
       footer={done ? <Button variant="primary" onClick={close}>Done</Button> : <><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={!!err || saving} onClick={async () => {
@@ -54,6 +54,7 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
       ) : (
         <div className="space-y-4">
           <div><Field label="Student *"><input className={inputClass} placeholder="Search name or admission no." value={st ? st.name : filter} onChange={(e) => { setSid(""); setActs([]); setFilter(e.target.value); }} /></Field>
+            {!st && filter && list.length === 0 && <p className="mt-1 text-sm text-muted">No student matches &ldquo;{filter}&rdquo;.</p>}
             {!st && filter && <ul className="mt-1 rounded-lg border border-line">{list.map((c) => { const has = c.billed[termKey(year, term)] ?? []; return <li key={c.id}><button className="flex w-full justify-between px-3 py-2 text-left hover:bg-surface-2" onClick={() => setSid(c.id)}><span>{c.name} <span className="text-xs text-muted">{c.cls} · {c.adm}</span></span>{has.length > 0 && <span className="text-xs text-muted">has {has.join(", ")}</span>}</button></li>; })}{list.length === 0 && <li className="px-3 py-2 text-sm text-muted">No matching students</li>}</ul>}</div>
           {st && account !== "fees" && <fieldset><legend className="mb-1.5 text-sm font-medium">Activities</legend><div className="grid gap-2 sm:grid-cols-3">{offered.map((a) => { const has = billed.includes(a); return (
             <label key={a} className={`flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm ${has ? "opacity-50" : "cursor-pointer hover:bg-surface-2"}`}><span className="flex items-center gap-2"><input type="checkbox" disabled={has} checked={has || acts.includes(a)} onChange={(e) => setActs(e.target.checked ? [...acts, a] : acts.filter((x) => x !== a))} />{a}</span><span className="num text-xs text-muted">{has ? "billed" : money(tf.activities[a] ?? 0)}</span></label>); })}</div>

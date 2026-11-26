@@ -37,7 +37,7 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
     if (ref.trim() && usedRefs.includes(ref.trim().toUpperCase())) return "This reference was already recorded — duplicate payment blocked";
     return "";
   }, [sid, minor, method, ref, usedRefs]);
-  const candidates = students.filter((s) => !filter || (s.name + s.adm).toLowerCase().includes(filter.toLowerCase())).slice(0, 6);
+  const candidates = students.filter((s) => !filter || `${s.name} ${s.adm}`.toLowerCase().includes(filter.trim().toLowerCase())).slice(0, 6);
   return (
     <Modal open onClose={onClose} title={done ? "Feeding payment recorded" : "Record feeding payment"} wide
       footer={done ? <Button variant="primary" onClick={onClose}>Done</Button> : <><Button onClick={onClose}>Cancel</Button>
@@ -61,6 +61,7 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><Field label="Student *"><input className={inputClass} placeholder="Search name or admission no." value={st ? st.name : filter} onChange={(e) => { setSid(""); setFilter(e.target.value); }} /></Field>
+            {!st && filter && candidates.length === 0 && <p className="mt-1 text-sm text-muted">No student matches &ldquo;{filter}&rdquo;.</p>}
             {!st && filter && <ul className="mt-1 rounded-lg border border-line">{candidates.map((s) => <li key={s.id}><button className="flex w-full justify-between px-3 py-2 text-left hover:bg-surface-2" onClick={() => pick(s)}><span>{s.name} <span className="text-xs text-muted">{s.cls} · {s.adm}</span></span><span className="text-xs text-muted">{planLabel(s.freq)}</span></button></li>)}</ul>}</div>
           <p className="sm:col-span-2 -mb-1 text-xs text-muted">Feeding paid on its own. It is not part of school fees and does not change the school fees balance.</p>
           {st && <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 p-3 text-sm"><span><b>{st.name}</b> · {st.cls} · Plan: <b>{planLabel(st.freq)}</b>{st.perPeriod > 0 && ` (${money(st.perPeriod)} per period)`}</span><span>Feeding still owed <b className="num text-danger">{money(owed)}</b></span></div>}

@@ -59,7 +59,8 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   const byMethod = useMemo(() => { const m = new Map<string, number>(); conf.filter((p) => p.date >= periodFrom).forEach((p) => m.set(p.method, (m.get(p.method) ?? 0) + p.amount / 100)); return [...m].map(([name, value]) => ({ name, value })); }, [conf, periodFrom]);
   const trend = useMemo(() => { const w = new Map<string, number>(); conf.forEach((p) => { const d = new Date(p.date + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); const k = d.toISOString().slice(5, 10); w.set(k, (w.get(k) ?? 0) + p.amount / 100); }); return [...w].sort().map(([week, collected]) => ({ week, collected })); }, [conf]);
   const byClass = useMemo(() => classes.map((c) => ({ name: c.name, outstanding: ss.filter((s) => s.classId === c.id && s.balance > 0).reduce((a, s) => a + s.balance, 0) / 100 })), [classes, ss]);
-  const payStudents: PayStudent[] = students.map((s) => ({ id: s.id, name: s.name, adm: s.adm, cls: s.cls, balance: s.balance, feedingOwed: s.feedingOwed, feedingRate: s.feedingRate, payer: s.payer, items: [...new Set(s.items.map((i) => i.label))], invoices: [{ no: s.invoice, balance: s.balance }] }));
+  // Anyone can pay (also before their invoice is issued): the picker lists every active student, not only those billed this term.
+  const payStudents: PayStudent[] = Q.activeStudents().map((x) => payStudentOf(x.id, account));
 
   const filters = (
     <div className="flex flex-wrap items-center gap-2">
@@ -347,9 +348,6 @@ function StudentFinder({ account, canPay, usedRefs }: { account: FeeAccount; can
   const n = q.trim().toLowerCase();
   const found = n.length < 2 ? [] : Q.students.filter((s) => `${Q.fullName(s)} ${s.admissionNo}`.toLowerCase().includes(n)).slice(0, 6);
   const termOf = (id: string) => { const inv = Q.invoicesOf(id, account).filter((i) => i.year === year && i.term === term); return inv; };
-  const payStudent = (id: string): PayStudent => { const s = Q.getStudent(id)!; const f = Q.accountSummary(id, account);
-    return { id, name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId)?.name ?? "", balance: f.balance, payer: Q.payerOf(s),
-      items: [...new Set(Q.invoicesOf(id, account).flatMap((i) => i.items.map((x) => x.label)))], invoices: Q.invoicesOf(id, account).map((i) => ({ no: i.no, balance: f.balance })) }; };
   return (
     <div className="relative">
       <div className="relative"><Search size={16} className="absolute left-3 top-3 text-muted" />
@@ -365,7 +363,14 @@ function StudentFinder({ account, canPay, usedRefs }: { account: FeeAccount; can
               {canPay && <Button size="sm" variant="primary" onClick={() => setPay(s.id)}>Record payment</Button>}
               <Link className="text-info hover:underline" href={studentHref(s.id, account)}>Open record</Link></span></li>; })}
       </ul></Card>}
-      {pay && <RecordPaymentDialog open onClose={() => { setPay(null); setQ(""); }} students={[payStudent(pay)]} studentId={pay} usedRefs={usedRefs} account={account} />}
+      {pay && <RecordPaymentDialog open onClose={() => { setPay(null); setQ(""); }} students={[payStudentOf(pay, account)]} studentId={pay} usedRefs={usedRefs} account={account} />}
     </div>
   );
+}
+
+/** A student as the payment form needs them: their balance in this account and the invoices it is applied to (oldest first). */
+function payStudentOf(id: string, account: FeeAccount): PayStudent {
+  const s = Q.getStudent(id)!; const f = Q.accountSummary(id, account); const inv = Q.invoicesOf(id, account);
+  return { id, name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId)?.name ?? "", balance: f.balance, payer: Q.payerOf(s),
+    items: [...new Set(inv.flatMap((i) => i.items.map((x) => x.label)))], invoices: inv.map((i) => ({ no: i.no, balance: f.balance })) };
 }
