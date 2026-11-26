@@ -23,7 +23,6 @@ import { feedingRate, invoiceStem, termKey } from "@/lib/fees";
 import { termOfDate } from "@/lib/calendar";
 import { studentFeedingRate } from "@/lib/feeding";
 import { useFeeding } from "@/components/feeding/useFeeding";
-import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
 import { buildTermInvoices, generatedTotal, type GeneratedInvoice } from "@/lib/generated-invoices";
 import { GeneratedInvoiceDialog, useGeneratedInvoices } from "./GeneratedInvoices";
 import { ACCOUNTS, activitiesOf, type FeeAccount } from "@/lib/accounts";
@@ -78,15 +77,15 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   const overview = (
     <div className="space-y-4">
       <AlertBanner tone={overdue > 0 ? "danger" : "ok"} icon={AlertTriangle} title={`Outstanding ${A.label}: ${money(outstanding)} across ${owing.length} students`}
-        actions={<><Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding`)}>View Outstanding Students</Button><Button size="sm" variant="primary" onClick={() => router.push(`${A.href}?tab=reminders`)}>Prepare Reminders</Button><Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding&overdue=1`)}>View Overdue</Button><Button size="sm" onClick={() => exportCsv(owing, account)}><Download size={13} />Export Report</Button></>}>
-        {od.length} {feeding ? "students are behind on their feeding plan" : "balances are overdue"} ({money(overdue)}). {eligible.length} guardians are eligible for payment reminders.
+        actions={<><Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding`)}>View Outstanding Students</Button><Button size="sm" variant="primary" onClick={() => router.push(`${A.href}?tab=reminders`)}>Prepare Reminders</Button>{!feeding && <Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding&overdue=1`)}>View Overdue</Button>}<Button size="sm" onClick={() => exportCsv(owing, account)}><Download size={13} />Export Report</Button></>}>
+        {feeding ? "" : `${od.length} balances are overdue (${money(overdue)}). `}{eligible.length} guardians are eligible for payment reminders.
       </AlertBanner>
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <Kpi label={feeding ? "Total feeding billed" : "Total invoiced"} value={moneyShort(billed)} icon={FileText} hint={feeding ? "Feeding owed this term by everyone on feeding (not part of school fees)." : `Sum of ${A.label} invoices net of discounts for the filtered students.`} />
         <Kpi label="Confirmed collections" value={moneyShort(paid)} icon={Banknote} tone="ok" hint="Confirmed payments only; pending gateway payments excluded." />
         <Kpi label="Collection rate" value={`${pct(paid, billed)}%`} icon={Percent} tone="info" hint={`Confirmed collections ÷ total ${feeding ? "billed" : "invoiced"}.`} />
         <Kpi label="Expected upcoming" value={moneyShort(upcoming)} icon={CalendarClock} hint="Outstanding balances not yet past their due date." />
-        <Kpi label={feeding ? "Behind on plan" : "Overdue"} value={moneyShort(overdue)} icon={ShieldAlert} tone="danger" hint={feeding ? "Feeding not yet paid that the family's plan expects by today." : "Outstanding balances past due date."} href={`${A.href}?tab=outstanding&overdue=1`} />
+        {!feeding && <Kpi label="Overdue" value={moneyShort(overdue)} icon={ShieldAlert} tone="danger" hint="Outstanding balances past due date." href={`${A.href}?tab=outstanding&overdue=1`} />}
         <Kpi label="Collected in period" value={moneyShort(sum(periodFrom))} icon={Wallet} tone="ok" hint="Confirmed payments within the selected period." />
         <Kpi label="Paid in full" value={`${ss.filter((s) => s.balance <= 0).length} / ${ss.length}`} icon={Users} hint={`Students billed for ${A.label} with a zero or credit balance.`} />
         <Kpi label="Unpaid / partial" value={`${ss.filter((s) => s.balance > 0 && s.paid === 0).length} / ${ss.filter((s) => s.balance > 0 && s.paid > 0).length}`} icon={Receipt} hint="Students with no payment / some payment but a balance." />

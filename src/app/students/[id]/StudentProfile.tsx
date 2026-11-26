@@ -13,7 +13,7 @@ import { RecordPaymentButton } from "@/components/students/ProfileActions";
 import { MedicalGate } from "@/components/students/MedicalGate";
 import { StudentRecordActions } from "@/components/RecordActions";
 import { GuardiansPanel } from "@/components/students/GuardiansPanel";
-import { FeedingPlanLabel, RecordFeedingPaymentButton } from "@/components/feeding/StudentFeeding";
+import { RecordFeedingPaymentButton } from "@/components/feeding/StudentFeeding";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "@/lib/accounts";
@@ -145,7 +145,7 @@ function FeedingPanel({ studentId, usedRefs }: { studentId: string; usedRefs: st
   return <MoneyPanel label="Feeding" sum={{ billed: fa.billed, discount: 0, paid: fa.paid, balance: fa.balance, status }} ledger={Q.feedingLedger(studentId)} pays={pays}
     action={<RecordFeedingPaymentButton studentId={studentId} usedRefs={usedRefs} />}
     billedCard={<Card><CardHeader title="Invoices" sub="Feeding is billed on its own, never on the school fees invoice." action={<Link className="text-sm font-medium text-info hover:underline" href="/feeding?tab=students">Change plan or amount →</Link>} />
-      {fa.billed === 0 ? <p className="px-4 pb-4 text-muted">No feeding billed this term.</p> : <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b>{Q.SCHOOL.term} {Q.SCHOOL.year}</b><div className="text-xs text-muted">{Q.getClass(st.classId)?.name} · <FeedingPlanLabel studentId={studentId} /></div></div>
+      {fa.billed === 0 ? <p className="px-4 pb-4 text-muted">No feeding billed this term.</p> : <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b>{Q.SCHOOL.term} {Q.SCHOOL.year}</b><div className="text-xs text-muted">{Q.getClass(st.classId)?.name}</div></div>
         <div className="text-right"><div className="text-xs text-muted">Feeding</div><b className="num">{money(fa.billed)}</b></div></div>}</Card>} />;
 }
 
