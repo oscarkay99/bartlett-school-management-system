@@ -4,10 +4,12 @@ import { Download, UserPlus } from "lucide-react";
 import { Card, LinkButton, PageHeader } from "@/components/ui/primitives";
 import { StudentsTable, type StudentRow } from "@/components/students/StudentsTable";
 import * as Q from "@/lib/data/queries";
+import { useRole } from "@/components/shell/AppShell";
 
 export function View() {
   useLiveData(); // re-render with fresh data after each save (live site)
-  const header = (sub: string) => <PageHeader title="Students" sub={sub} actions={<><LinkButton href="/reports"><Download size={15} />Export</LinkButton><LinkButton href="/students/new" variant="primary"><UserPlus size={15} />Register student</LinkButton></>} />;
+  const { allow } = useRole();
+  const header = (sub: string) => <PageHeader title="Students" sub={sub} actions={<><LinkButton href="/reports"><Download size={15} />Export</LinkButton>{allow("students", "create") && <LinkButton href="/students/new" variant="primary"><UserPlus size={15} />Register student</LinkButton>}</>} />;
   const rows: StudentRow[] = Q.students.map((s) => {
     const f = Q.feeSummary(s.id);
     return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId).name, classId: s.classId, status: s.status, fee: f.status, balance: f.balance, medical: !!s.medicalAlert,
@@ -15,7 +17,7 @@ export function View() {
   });
   return (
     <>
-      <PageHeader title="Students" sub="Enrolled learners, lifecycle status and fee standing" actions={<><LinkButton href="/reports"><Download size={15} />Export</LinkButton><LinkButton href="/students/new" variant="primary"><UserPlus size={15} />Register student</LinkButton></>} />
+      <PageHeader title="Students" sub="Enrolled learners, lifecycle status and fee standing" actions={<><LinkButton href="/reports"><Download size={15} />Export</LinkButton>{allow("students", "create") && <LinkButton href="/students/new" variant="primary"><UserPlus size={15} />Register student</LinkButton>}</>} />
       <Card><StudentsTable rows={rows} classes={Q.classes.map((c) => ({ id: c.id, name: c.name }))} /></Card>
     </>
   );

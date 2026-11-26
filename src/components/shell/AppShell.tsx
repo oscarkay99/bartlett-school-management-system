@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/live/auth";
 import { LIVE } from "@/lib/live/config";
 import { buildSearchIndex } from "@/lib/search-index";
 
-import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, canVisit, type MoneyAccess, type Op, type Resource } from "@/lib/permissions";
+import { canMessageParents, ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, canVisit, type MoneyAccess, type Op, type Resource } from "@/lib/permissions";
 export { ROLES };
 
 /** `year`/`term` (invoices) or `date` (receipts) tie a result to a term; those only show for the term selected in the top bar. */
@@ -141,7 +141,7 @@ function Topbar({ school, onMenu, role, setRole }: { school: { name: string }; o
       </button>
       <div className="relative">
         <button className="grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "quick" ? null : "quick")} aria-label="Quick actions" aria-expanded={open === "quick"}><Plus size={19} /></button>
-        {open === "quick" && <div className={pop}>{[["Register student", "/students/new", "students"], ["Record school fees payment", "/fees?pay=1", "fees"], ["Record extracurricular payment", "/extracurricular?pay=1", "extracurricular"], ["Record extra classes payment", "/extra-classes?pay=1", "extra-classes"], ["Prepare fee reminders", "/fees?tab=reminders", "fees"], ["Mark attendance", "/attendance", "attendance"], ["Issue inventory", "/inventory?issue=1", "inventory"]].filter(([l, , k]) => ROLES[role].nav.includes(k) && (!l.startsWith("Record") || allowedOp(role, "payments", "create"))).map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
+        {open === "quick" && <div className={pop}>{[["Register student", "/students/new", "students"], ["Record school fees payment", "/fees?pay=1", "fees"], ["Record extracurricular payment", "/extracurricular?pay=1", "extracurricular"], ["Record extra classes payment", "/extra-classes?pay=1", "extra-classes"], ["Prepare fee reminders", "/fees?tab=reminders", "fees"], ["Mark attendance", "/attendance", "attendance"], ["Issue inventory", "/inventory?issue=1", "inventory"]].filter(([l, , k]) => ROLES[role].nav.includes(k) && (!l.startsWith("Record") || allowedOp(role, "payments", "create")) && (l !== "Register student" || allowedOp(role, "students", "create")) && (l !== "Issue inventory" || allowedOp(role, "inventory", "create")) && (l !== "Prepare fee reminders" || canMessageParents(role))).map(([l, h]) => <Link key={h} href={h} onClick={() => setOpen(null)} className="block rounded-lg px-3 py-2 hover:bg-surface-2">{l}</Link>)}</div>}
       </div>
       <div className="relative">
         <button className="relative grid size-10 place-items-center rounded-lg hover:bg-surface-2" onClick={() => setOpen(open === "notif" ? null : "notif")} aria-label="Notifications"><Bell size={19} /><span className="absolute right-2 top-2 size-2 rounded-full bg-danger" /></button>

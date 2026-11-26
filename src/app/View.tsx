@@ -9,11 +9,20 @@ import { WidgetBoard, type Widget } from "@/components/ui/WidgetBoard";
 import { MoneyGate } from "@/components/shell/AppShell";
 import { AreaTrend, Donut, GroupedBars, HBars, LineTrend, TreemapChart } from "@/components/charts/charts";
 import * as Q from "@/lib/data/queries";
+import { useRole } from "@/components/shell/AppShell";
+import { useAuth } from "@/lib/live/auth";
+import { LIVE } from "@/lib/live/config";
 import { money, moneyShort } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
 export function View() {
   useLiveData(); // re-render with fresh data after each save (live site)
+  const { allow } = useRole(); const { account } = useAuth();
+  // Live: the signed-in person's name and the real week of term. Demo: the demo owner.
+  const hour = new Date().getHours(); const part = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const greeting = LIVE ? `Good ${part}${account ? `, ${account.name.replace(/ \(QA\)$/, "")}` : ""}` : "Good afternoon, Dr. Yeboah";
+  const weeks = (a: string, b: string) => Math.max(1, Math.ceil((Date.parse(b) - Date.parse(a)) / (7 * 86400000)));
+  const week = !LIVE ? " · Week 6 of 15" : Q.SCHOOL.termStart && Q.TODAY >= Q.SCHOOL.termStart && Q.TODAY <= Q.SCHOOL.termEnd ? ` · Week ${weeks(Q.SCHOOL.termStart, Q.TODAY)} of ${weeks(Q.SCHOOL.termStart, Q.SCHOOL.termEnd)}` : "";
   const o = Q.feesOverview();
   const act = Q.activeStudents();
   const teachers = Q.staff.filter((s) => s.position.includes("Teacher")).length;
@@ -54,7 +63,7 @@ export function View() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Good afternoon, Dr. Yeboah" sub={`${Q.SCHOOL.name} · ${Q.SCHOOL.year} · ${Q.SCHOOL.term} · Week 6 of 15`} actions={<><LinkButton href="/students/new" variant="primary">Register student</LinkButton><LinkButton href="/reports">Reports</LinkButton></>} />
+      <PageHeader title={greeting} sub={`${Q.SCHOOL.name} · ${Q.SCHOOL.year} · ${Q.SCHOOL.term}${week}`} actions={<>{allow("students", "create") && <LinkButton href="/students/new" variant="primary">Register student</LinkButton>}<LinkButton href="/reports">Reports</LinkButton></>} />
       <div className="grid gap-3">
         <MoneyGate><AlertBanner tone="danger" icon={AlertTriangle} title={`Outstanding School Fees: ${money(o.outstanding)} across ${o.owingCount} students`}
           actions={<><LinkButton href="/fees?tab=outstanding" size="sm">View students</LinkButton><LinkButton href="/fees?tab=reminders" size="sm" variant="primary">Prepare reminders</LinkButton></>}>

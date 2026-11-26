@@ -8,6 +8,7 @@ import { DataTable, Modal, MoneyInput, QueryTabs, Select, useToast, type Column 
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
+import { canRecordMeals } from "@/lib/permissions";
 import { useFeeding } from "./useFeeding";
 import { feedingRate, termKey } from "@/lib/fees";
 import { expectedByToday, feedingStatus, PLAN_FREQUENCIES, periodWord, perPeriod, planLabel, planStatus, studentFeedingRate, validateException, type FeedingException, type FeedingPlan, type PlanFrequency, type PlanStatus, type TermDates } from "@/lib/feeding";
@@ -28,7 +29,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
   const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const key = termKey(year, term);
   const feeding = useFeeding(); const { allow, role } = useRole();
   const canEdit = allow("invoices", "create") || allow("students", "edit");               // Owner, Admin, Bursar
-  const canMeals = canEdit || role === "storekeeper";                                      // plus the kitchen
+  const canMeals = canRecordMeals(role);                                                   // Owner, Admin, Storekeeper
   const plans = useFeedingPlans(); const { calendar } = useCalendar();
   const td = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term);
   const rows = useMemo(() => students.map((s) => {
@@ -69,7 +70,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
       { id: "overview", label: "Overview", content: overview },
       { id: "students", label: "Students", badge: String(rows.length - onFeeding || ""), content: <StudentsTab rows={rows} canEdit={canEdit} termLabel={`${term} ${year}`} onSave={(sid, ex) => feeding.updateException(sid, key, ex)} classes={fs.classes} termKey={key} /> },
       { id: "plans", label: "Payment plans", badge: behind.length ? String(behind.length) : undefined, content: <PlansTab rows={rows} canEdit={canEdit} td={td} today={today} termLabel={`${term} ${year}`} termKey={key} classes={fs.classes} history={plans.history} onPlan={plans.setPlan} /> },
-      { id: "payments", label: "Payments", content: <PaymentsTab payments={payments} classes={fs.classes} payees={canEdit ? rows : undefined} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} /> },
+      { id: "payments", label: "Payments", content: <PaymentsTab payments={payments} classes={fs.classes} payees={allow("payments", "create") ? rows : undefined} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} /> },
       { id: "meals", label: "Meal register", content: <MealsTab byClass={byClass} meals={feeding.meals} canEdit={canMeals} today={today} onSave={feeding.saveMeals} /> },
       { id: "kitchen", label: "Kitchen stock", badge: low.length ? String(low.length) : undefined, content: <KitchenTab items={kitchen} /> },
     ].map((t) => ({ ...t, badge: t.badge || undefined }))} />

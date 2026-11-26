@@ -11,6 +11,7 @@ import { Donut, HBars, LineTrend } from "@/components/charts/charts";
 import { RecordPaymentDialog, type PayStudent } from "./RecordPaymentDialog";
 import { IssueBillDialog, type BillCandidate } from "./IssueBillDialog";
 import { useRole } from "@/components/shell/AppShell";
+import { canMessageParents } from "@/lib/permissions";
 import { LIVE } from "@/lib/live/config";
 import * as Q from "@/lib/data/queries";
 import { useSave } from "@/lib/live/useSave";
@@ -146,6 +147,7 @@ function OutstandingTable({ rows, overdueOnly, account, showTotals }: { rows: SR
 }
 
 function Reminders({ rows }: { rows: RRow[] }) {
+  const { role: myRole } = useRole(); const canSend = canMessageParents(myRole);
   const run = useSave();
   const [sel, setSel] = useState<Set<string>>(new Set()); const [ch, setCh] = useState(""); const [od, setOd] = useState(""); const [view, setView] = useState<RRow | null>(null); const [confirm, setConfirm] = useState(false); const toast = useToast();
   const data = rows.filter((r) => (!ch || r.channel === ch) && (!od || r.overdue));
@@ -164,7 +166,7 @@ function Reminders({ rows }: { rows: RRow[] }) {
     <div className="space-y-3">
       <Card className="p-4"><div className="flex flex-wrap items-center justify-between gap-3">
         <div><div className="font-semibold">Bulk reminders</div><p className="text-sm text-muted">One consolidated message per guardian. Only guardians who are verified, financially responsible, and have consented are eligible; siblings are never disclosed to unauthorised guardians.</p></div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"><span className="whitespace-nowrap"><b>{picked.length}</b> selected</span><span className="whitespace-nowrap text-muted">Est. cost <b className="num text-fg">{money(cost)}</b></span><Button variant="primary" disabled={picked.length === 0} onClick={() => setConfirm(true)}><Send size={14} />Send reminders</Button></div></div></Card>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"><span className="whitespace-nowrap"><b>{picked.length}</b> selected</span><span className="whitespace-nowrap text-muted">Est. cost <b className="num text-fg">{money(cost)}</b></span>{canSend ? <Button variant="primary" disabled={picked.length === 0} onClick={() => setConfirm(true)}><Send size={14} />Send reminders</Button> : <span className="text-xs text-muted">Read-only: your role can&apos;t send reminders.</span>}</div></div></Card>
       <Card><DataTable rows={data} columns={cols} rowId={(x) => x.gid} selectable selected={sel} onSelect={setSel} searchText={(x) => x.name + x.students.map((s) => s.name).join(" ")}
         filters={<><Select label="Channel" value={ch} onChange={setCh} options={[{ value: "", label: "Any channel" }, { value: "WhatsApp", label: "WhatsApp" }, { value: "SMS", label: "SMS" }, { value: "Email", label: "Email" }]} /><Select label="Overdue" value={od} onChange={setOd} options={[{ value: "", label: "All balances" }, { value: "1", label: "Overdue only" }]} /></>}
         toolbar={<Button size="sm" variant="ghost" onClick={() => setSel(new Set(data.filter((r) => r.eligible).map((r) => r.gid)))}>Select all eligible ({data.filter((r) => r.eligible).length})</Button>} pageSize={10} /></Card>
@@ -216,7 +218,7 @@ function Invoices({ students, candidates, account, canBill, onIssue }: { student
           ? <>Not issued yet: {generated.awaiting > 0 ? <>{generated.awaiting} await the Owner&apos;s approval. Approving issues them with their numbers and adds them to balances.</> : "they are drafts."}</>
           : "Saved in this browser until the backend is connected; payments against them are recorded once it is."}</span>
         <span className="flex gap-2">{generated.live && role === "owner" && generated.awaiting > 0 && <Button size="sm" variant="primary" onClick={generated.approve}>Approve {generated.awaiting} invoices</Button>}
-        {canBill && <DiscardGenerated count={gen.length} term={term} onDiscard={generated.clear} />}</span></div>}
+        {(LIVE ? role === "owner" : canBill) && <DiscardGenerated count={gen.length} term={term} onDiscard={generated.clear} />}</span></div>}
       <DataTable rows={rows} empty={<EmptyState icon={FileText} title={`No ${A.label.toLowerCase()} invoices for ${term} ${year} yet`} body={account === "fees" ? "Generate this term's invoices once its fees are set." : "Issue bills to students as they enrol."} />} columns={[
         { key: "i", header: "Invoice", render: (x) => <b className="num">{x.invoice}</b> }, { key: "n", header: "Student", sort: (x) => x.name, render: (x) => x.name }, { key: "c", header: "Class", render: (x) => x.cls },
         ...(account !== "fees" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: InvRow) => x.activities }] : []),

@@ -6,6 +6,8 @@ import { AlertTriangle, Link2, Mail, Phone, Search, ShieldCheck, TriangleAlert, 
 import { Avatar, Badge, Button, Card, Field, inputClass } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal, useToast } from "@/components/ui/interactive";
 import { cn } from "@/lib/utils";
+import { useRole } from "@/components/shell/AppShell";
+import { canEditGuardianLinks } from "@/lib/permissions";
 import { LIVE } from "@/lib/live/config";
 import { useSave } from "@/lib/live/useSave";
 import { createGuardian, linkGuardian, unlinkGuardian } from "@/lib/live/actions";
@@ -27,8 +29,11 @@ export function GuardiansPanel({ studentId, studentName, initial, directory }: {
     if (LIVE) { const gone = unlink; void run(() => unlinkGuardian(studentId, gone.guardianId), `${gone.name} unlinked from ${studentName}`).then((ok) => { if (ok) setLinksState(rest); }); if (rest[0]) save(rest); setUnlink(null); return; }
     setLinks(rest); toast(`${unlink.name} unlinked from ${studentName}`); setUnlink(null);
   };
+  const { role } = useRole(); const editable = canEditGuardianLinks(role);
   return (
-    <div className="space-y-3">
+    // Read-only for roles that can't change guardian links (e.g. teachers): every control is disabled, links still work.
+    <fieldset disabled={!editable} className="min-w-0 space-y-3">
+      {!editable && <p className="text-xs text-muted">Read-only: only the Owner, Administrator or Bursar can change guardian links.</p>}
       {links.length === 0 ? (
         <div role="alert" className="flex items-center gap-3 rounded-xl border border-danger/30 bg-danger/8 p-4"><AlertTriangle className="text-danger" /><div className="flex-1"><b>No guardian linked</b><p className="text-sm text-muted">Every student must be tied to at least one parent or guardian.</p></div><Button variant="primary" onClick={() => setAdd(true)}>Link a guardian</Button></div>
       ) : (
@@ -60,7 +65,7 @@ export function GuardiansPanel({ studentId, studentName, initial, directory }: {
             let gid = g.id; if (g.id === "new") { const r = await createGuardian(g); if (r.error) { toast(`Not saved: ${r.error}`, "err"); return; } gid = r.id!; }
             if (await run(() => linkGuardian(studentId, gid, { relationship: rel, primary: links.length === 0, ...flags }), `${g.name} linked to ${studentName}`)) { setLinksState((ls) => [...ls, { guardianId: gid, title: g.title, name: g.name, phone: g.phone, email: g.email, children: g.children + 1, relationship: rel, primary: ls.length === 0, ...flags, verified: true }]); setAdd(false); } return; }
           setLinks((ls) => [...ls, { guardianId: g.id === "new" ? crypto.randomUUID() : g.id, title: g.title, name: g.name, phone: g.phone, email: g.email, children: g.children + 1, relationship: rel, primary: ls.length === 0, ...flags, verified: true }]); toast(`${g.name} linked to ${studentName}`); setAdd(false); }} />
-    </div>
+    </fieldset>
   );
 }
 

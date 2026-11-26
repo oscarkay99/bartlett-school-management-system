@@ -34,6 +34,12 @@ export function allowed(role: string, resource: Resource, op: Op): boolean {
   return !!g[resource]?.includes(op);
 }
 export const moneyAccess = (role: string): MoneyAccess => ROLES[role]?.money ?? "none";
+/** Record the daily meal register (database: Owner, Administrator, Storekeeper; teachers for their own class). */
+export const canRecordMeals = (role: string) => ["owner", "admin", "storekeeper"].includes(role);
+/** Send / log fee reminders and other parent messages (database: Owner, Administrator, Bursar). */
+export const canMessageParents = (role: string) => ["owner", "admin", "bursar"].includes(role);
+/** Link / unlink a student's guardians and change those links (database: Owner, Administrator, Bursar). */
+export const canEditGuardianLinks = (role: string) => ["owner", "admin", "bursar"].includes(role);
 
 // Which nav key guards a path. Print pages and unknown paths are not guarded here.
 const ROUTE_KEYS: [string, string][] = [

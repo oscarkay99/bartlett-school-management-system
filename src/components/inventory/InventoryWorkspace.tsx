@@ -26,7 +26,7 @@ const IN = ["Received", "Opening", "Returned"];
 const signed = (m: Mv) => (IN.includes(m.type) ? m.qty : m.type === "Adjustment" ? m.qty : -m.qty);
 
 export function InventoryWorkspace({ items: initialItems, movements, students, openIssue }: { items: Item[]; movements: Mv[]; students: { id: string; name: string; cls: string }[]; openIssue?: boolean }) {
-  const { allow } = useRole(); const [itemsState, setItems] = useState(initialItems); const items = LIVE ? initialItems : itemsState; const run = useSave(); const [form, setForm] = useState<null | { item?: Item }>(null); const [del, setDel] = useState<Item | null>(null);
+  const { allow } = useRole(); const canMove = allow("inventory", "create"); const [itemsState, setItems] = useState(initialItems); const items = LIVE ? initialItems : itemsState; const run = useSave(); const [form, setForm] = useState<null | { item?: Item }>(null); const [del, setDel] = useState<Item | null>(null);
   const [movesState, setMoves] = useState(movements); const moves = LIVE ? movements : movesState; const [cat, setCat] = useState(""); const [dlg, setDlg] = useState<null | "issue" | "receive">(openIssue ? "issue" : null); const [pre, setPre] = useState(""); const toast = useToast();
   const onHand = useMemo(() => { const m: Record<string, number> = {}; moves.forEach((x) => (m[x.itemId] = (m[x.itemId] ?? 0) + signed(x))); return m; }, [moves]);
   const rows = items.map((i) => ({ ...i, qty: onHand[i.id] ?? 0 })).filter((i) => !cat || i.category === cat);
@@ -48,7 +48,7 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
     { key: "r", header: "Reorder at", align: "right", hideOnMobile: true, render: (x) => x.reorder },
     { key: "v", header: "Value (cost)", align: "right", sort: (x) => x.qty * x.cost, render: (x) => money(x.qty * x.cost) },
     { key: "s", header: "Status", render: (x) => x.qty <= 0 ? <Badge tone="danger" dot>Out of stock</Badge> : x.qty <= x.reorder ? <Badge tone="warn" dot>Low</Badge> : x.qty > x.max ? <Badge tone="info" dot>Overstock</Badge> : <Badge tone="ok" dot>OK</Badge> },
-    { key: "a", header: "", render: (x) => <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}><Button size="sm" variant="ghost" onClick={() => { setPre(x.id); setDlg("issue"); }}>Issue</Button>{allow("inventory", "edit") && <Button size="sm" variant="ghost" aria-label={`Edit ${x.name}`} onClick={() => setForm({ item: x })}><Pencil size={14} /></Button>}{allow("inventory", "delete") && <Button size="sm" variant="ghost" aria-label={`Delete ${x.name}`} onClick={() => setDel(x)}><Trash2 size={14} className="text-danger" /></Button>}</div> },
+    { key: "a", header: "", render: (x) => <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>{canMove && <Button size="sm" variant="ghost" onClick={() => { setPre(x.id); setDlg("issue"); }}>Issue</Button>}{allow("inventory", "edit") && <Button size="sm" variant="ghost" aria-label={`Edit ${x.name}`} onClick={() => setForm({ item: x })}><Pencil size={14} /></Button>}{allow("inventory", "delete") && <Button size="sm" variant="ghost" aria-label={`Delete ${x.name}`} onClick={() => setDel(x)}><Trash2 size={14} className="text-danger" /></Button>}</div> },
   ];
   const mcols: Column<Mv>[] = [
     { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) }, { key: "i", header: "Item", render: (x) => items.find((i) => i.id === x.itemId)?.name }, { key: "t", header: "Type", render: (x) => <Badge tone={IN.includes(x.type) ? "ok" : x.type === "Issued" ? "info" : "danger"}>{x.type}</Badge> },
@@ -56,14 +56,14 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
   ];
   return (
     <div className="space-y-4">
-      {(low.length + oos.length > 0) && <AlertBanner tone="warn" icon={AlertTriangle} title={`${low.length + oos.length} items need restocking`} actions={<Button size="sm" variant="primary" onClick={() => setDlg("receive")}>Receive stock</Button>}>{oos.length} out of stock, {low.length} below reorder level{over.length ? `, ${over.length} overstocked` : ""}.</AlertBanner>}
+      {(low.length + oos.length > 0) && <AlertBanner tone="warn" icon={AlertTriangle} title={`${low.length + oos.length} items need restocking`} actions={canMove ? <Button size="sm" variant="primary" onClick={() => setDlg("receive")}>Receive stock</Button> : undefined}>{oos.length} out of stock, {low.length} below reorder level{over.length ? `, ${over.length} overstocked` : ""}.</AlertBanner>}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <Kpi label="Inventory valuation" value={moneyShort(value)} icon={Wallet} hint="On-hand quantity × unit cost (accounting cost). Excludes selling price and asset book value." />
         <Kpi label="Items tracked" value={String(items.length)} icon={Boxes} hint="Active SKUs in all stores." />
         <Kpi label="Low / out of stock" value={`${low.length} / ${oos.length}`} icon={PackageX} tone="warn" hint="Below reorder level / zero on hand." />
         <Kpi label="Damaged & lost cost" value={moneyShort(damaged)} icon={ClockAlert} tone="danger" hint="Damaged and lost movements × unit cost." />
       </div>
-      <div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => { setPre(""); setDlg("issue"); }}><ArrowUpFromLine size={14} />Issue to student / dept</Button><Button onClick={() => setDlg("receive")}><ArrowDownToLine size={14} />Receive stock</Button></div>
+      {canMove && <div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => { setPre(""); setDlg("issue"); }}><ArrowUpFromLine size={14} />Issue to student / dept</Button><Button onClick={() => setDlg("receive")}><ArrowDownToLine size={14} />Receive stock</Button></div>}
       <Tabs tabs={[
         { id: "items", label: "Items", content: <><div className="mb-3 flex justify-end">{allow("inventory", "create") && <Button onClick={() => setForm({})}><Plus size={14} />Add item</Button>}</div><Card><DataTable rows={rows} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.sku} pageSize={12} filters={<Select label="Category" value={cat} onChange={setCat} options={[{ value: "", label: "All categories" }, ...Array.from(new Set(items.map((i) => i.category))).map((c) => ({ value: c, label: c }))]} />} /></Card></> },
         { id: "ledger", label: "Stock ledger", content: <Card><CardHeader title="Stock movement ledger" sub="Quantities are derived from this append-only ledger — never edited directly." /><DataTable rows={moves} columns={mcols} rowId={(x) => x.id} pageSize={12} searchText={(x) => x.ref + (items.find((i) => i.id === x.itemId)?.name ?? "")} /></Card> },
