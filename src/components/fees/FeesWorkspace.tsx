@@ -3,7 +3,7 @@ import { studentHref, printHref } from "@/lib/links";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AlertTriangle, Banknote, CalendarClock, Download, FilePlus2, FileText, Percent, Send, ShieldAlert, Users, Wallet } from "lucide-react";
+import { AlertTriangle, Banknote, CalendarClock, Download, FilePlus2, FileText, Percent, Search, Send, ShieldAlert, Users, Wallet } from "lucide-react";
 import { ReceiptCedi as Receipt } from "@/components/ui/icons";
 import { AlertBanner, Badge, Button, Card, CardHeader, EmptyState, Kpi, StatusBadge } from "@/components/ui/primitives";
 import { ConfirmDialog, DataTable, Drawer, Modal, Select, Tabs, useToast, type Column } from "@/components/ui/interactive";
@@ -113,6 +113,7 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   return (
     <div className="space-y-4">
       {!full && <AlertBanner tone="info" icon={Users} title="Follow-up view">You can see which students owe and send reminders to their parents. Collections and payment records are only visible to the Owner and the Accountant.</AlertBanner>}
+      <StudentFinder account={account} canPay={canPay} usedRefs={usedRefs} />
       <div className="flex flex-wrap items-center justify-between gap-3">{filters}
         <div className="flex flex-wrap gap-2">{canBill && account !== "fees" && <Button onClick={() => setBillOpen(true)}><FilePlus2 size={14} />Enrol & bill student</Button>}
           {canPay && <Button variant="primary" onClick={() => setPayOpen(true)}><Receipt size={14} />Record {A.label.toLowerCase()} payment</Button>}</div></div>
@@ -138,7 +139,7 @@ function OutstandingTable({ rows, overdueOnly, account, showTotals }: { rows: SR
     { key: "o", header: "Outstanding", align: "right", sort: (x) => x.balance, render: (x) => <b className="text-danger">{money(x.balance)}</b> },
     { key: "d", header: "Due", sort: (x) => x.dueOn, render: (x) => fmtDate(x.dueOn) }, { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
   ];
-  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(studentHref(x.id, account))}
+  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.name} ${x.adm}`} onRowClick={(x) => r.push(studentHref(x.id, account))}
     filters={<Select label="Overdue filter" value={od} onChange={setOd} options={[{ value: "", label: "All outstanding" }, { value: "1", label: "Overdue only" }]} />}
     toolbar={<Button size="sm" onClick={() => exportCsv(data, account)}><Download size={13} />CSV</Button>} /></Card>;
 }
@@ -221,7 +222,7 @@ function Invoices({ students, candidates, account, canBill, onIssue }: { student
         { key: "b", header: "Total", align: "right", sort: (x) => x.total, render: (x) => money(x.total) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
         { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
         { key: "pdf", header: "", render: (x) => x.gen ? <button className="text-info hover:underline" onClick={() => setView(x)}>View</button> : <Link className="text-info" href={printHref("invoice", x.invoice)}>PDF</Link> },
-      ]} rowId={(x) => x.id} searchText={(x) => x.name + x.invoice} pageSize={10} />
+      ]} rowId={(x) => x.id} searchText={(x) => `${x.name} ${x.invoice}`} pageSize={10} />
       {o && <GenerateInvoices candidates={candidates} already={new Set(gen.map((g) => g.studentId))} startSeq={gen.length} onGenerate={generated.add} onClose={() => setO(false)} />}
       {view?.gen && <GeneratedInvoiceDialog inv={view.gen} cls={view.cls} onClose={() => setView(null)} />}
     </Card>
@@ -302,7 +303,7 @@ function Activities({ students, account }: { students: SRow[]; account: FeeAccou
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">{per.map((p) => <button key={p.a} onClick={() => setAct(act === p.a ? "" : p.a)} className={`rounded-xl border bg-surface p-4 text-left transition hover:shadow-md ${act === p.a ? "border-info ring-1 ring-info" : "border-line"}`}><div className="text-xs text-muted">{p.a}</div><div className="mt-1 text-2xl font-semibold">{p.kids} <span className="text-sm font-normal text-muted">students</span></div><div className="num mt-1 text-sm">Billed {money(p.billed)}</div></button>)}</div>
-      <Card><DataTable rows={rows} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(studentHref(x.id, account))} pageSize={12}
+      <Card><DataTable rows={rows} rowId={(x) => x.id} searchText={(x) => `${x.name} ${x.adm}`} onRowClick={(x) => r.push(studentHref(x.id, account))} pageSize={12}
         filters={<Select label="Activity" value={act} onChange={setAct} options={[{ value: "", label: "All activities" }, ...ACTIVITIES.map((a) => ({ value: a, label: a }))]} />}
         columns={[
           { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div> },
@@ -337,4 +338,34 @@ function PaymentActions({ p, pending }: { p: PRow; pending?: boolean }) {
       body={`${money(p.amount)} from ${p.student}. The payment stays on record as Reversed and no longer counts towards the balance. Give the reason (e.g. wrong amount, bounced cheque).`}
       onConfirm={(reason) => { setRev(false); void run(() => reversePayment(p.id, reason ?? ""), `${p.receipt} reversed`); }} />
   </>);
+}
+
+/** Find any student (not only those already invoiced this term), see where they stand, and act. */
+function StudentFinder({ account, canPay, usedRefs }: { account: FeeAccount; canPay: boolean; usedRefs: string[] }) {
+  const A = ACCOUNTS[account]; const { year, term } = useCalendar(); const { money: access } = useRole();
+  const [q, setQ] = useState(""); const [pay, setPay] = useState<string | null>(null);
+  const n = q.trim().toLowerCase();
+  const found = n.length < 2 ? [] : Q.students.filter((s) => `${Q.fullName(s)} ${s.admissionNo}`.toLowerCase().includes(n)).slice(0, 6);
+  const termOf = (id: string) => { const inv = Q.invoicesOf(id, account).filter((i) => i.year === year && i.term === term); return inv; };
+  const payStudent = (id: string): PayStudent => { const s = Q.getStudent(id)!; const f = Q.accountSummary(id, account);
+    return { id, name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId)?.name ?? "", balance: f.balance, payer: Q.payerOf(s),
+      items: [...new Set(Q.invoicesOf(id, account).flatMap((i) => i.items.map((x) => x.label)))], invoices: Q.invoicesOf(id, account).map((i) => ({ no: i.no, balance: f.balance })) }; };
+  return (
+    <div className="relative">
+      <div className="relative"><Search size={16} className="absolute left-3 top-3 text-muted" />
+        <input aria-label="Find a student" className="h-10 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-sm" placeholder={`Find a student by name or admission number (all students, ${term} ${year})`} value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      {n.length >= 2 && <Card className="mt-1"><ul className="divide-y divide-line">
+        {found.length === 0 && <li className="px-4 py-3 text-sm text-muted">No student matches &ldquo;{q}&rdquo;.</li>}
+        {found.map((s) => { const inv = termOf(s.id); const f = Q.accountSummary(s.id, account);
+          return <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm">
+            <span><b>{Q.fullName(s)}</b> <span className="text-xs text-muted">{s.admissionNo} · {Q.getClass(s.classId)?.name}{s.status !== "Active" ? ` · ${s.status}` : ""}</span></span>
+            <span className="flex flex-wrap items-center gap-3">
+              {access === "none" ? null : inv.length === 0 ? <Badge tone="neutral">No {term} {A.label.toLowerCase()} invoice yet</Badge>
+                : <span className="num">billed {money(f.billed)} · paid {money(f.paid)} · <b className={f.balance > 0 ? "text-danger" : "text-ok"}>{f.balance > 0 ? `owes ${money(f.balance)}` : "paid in full"}</b></span>}
+              {canPay && <Button size="sm" variant="primary" onClick={() => setPay(s.id)}>Record payment</Button>}
+              <Link className="text-info hover:underline" href={studentHref(s.id, account)}>Open record</Link></span></li>; })}
+      </ul></Card>}
+      {pay && <RecordPaymentDialog open onClose={() => { setPay(null); setQ(""); }} students={[payStudent(pay)]} studentId={pay} usedRefs={usedRefs} account={account} />}
+    </div>
+  );
 }
