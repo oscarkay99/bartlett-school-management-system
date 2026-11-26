@@ -7,7 +7,7 @@ import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 import { ACCOUNTS, ACCOUNT_IDS } from "@/lib/accounts";
 
-// One statement, separately settled sections: School Fees (feeding included), Extracurricular and Extra Classes.
+// One statement, separately settled sections: School Fees, Extracurricular and Extra Classes (feeding is in the Feeding module).
 export function StatementPrint({ id }: { id: string }) {
   useLiveData(); // re-render with fresh data after each save (live site)
   const s = Q.getStudent(id); if (!s) return <NotFound />;
@@ -27,7 +27,7 @@ export function StatementPrint({ id }: { id: string }) {
           <p className="mt-2 text-right">{x.a.label} balance due: <b>{money(Math.max(0, x.f.balance))}</b></p>
         </section>
       ))}
-      <p className="mt-6 text-[11px] text-neutral-600">School fees (feeding included), extracurricular activities and extra classes are billed and receipted separately. A payment only settles the account it was made for.</p>
+      <p className="mt-6 text-[11px] text-neutral-600">School fees, feeding, extracurricular activities and extra classes are billed and receipted separately. A payment only settles the account it was made for.</p>
     </PrintFrame>
   );
 }

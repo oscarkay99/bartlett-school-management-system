@@ -11,7 +11,7 @@ import { useRole } from "@/components/shell/AppShell";
 import { canRecordMeals } from "@/lib/permissions";
 import { useFeeding } from "./useFeeding";
 import { feedingRate, termKey } from "@/lib/fees";
-import { expectedByToday, feedingStatus, PLAN_FREQUENCIES, periodWord, perPeriod, planLabel, planStatus, studentFeedingRate, validateException, type FeedingException, type FeedingPlan, type PlanFrequency, type PlanStatus, type TermDates } from "@/lib/feeding";
+import { planFreq, expectedByToday, feedingStatus, PLAN_FREQUENCIES, periodWord, perPeriod, planLabel, planStatus, studentFeedingRate, validateException, type FeedingException, type FeedingPlan, type PlanFrequency, type PlanStatus, type TermDates } from "@/lib/feeding";
 import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
 import { PlanDialog } from "./PlanDialog";
 import { FeedingPaymentDialog } from "./FeedingPaymentDialog";
@@ -19,7 +19,7 @@ import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
 interface FStudent { id: string; name: string; adm: string; classId: string; cls: string; billed: number; paid: number; dueOn?: string; payer?: { name: string; phone?: string } }
-/** A payment that included feeding. `how`: "With school fees" or Daily / Weekly / Monthly / Term. */
+/** A feeding payment. `how`: Daily / Weekly / Monthly / Term. */
 export interface FeedingPayment { id: string; receipt: string; studentId: string; name: string; classId: string; cls: string; date: string; feeding: number; how: string; method: string; status: string }
 interface KitchenItem { id: string; name: string; unit: string; onHand: number; reorder: number; expiry?: string }
 
@@ -36,9 +36,9 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
     const cls = fs.classes.find((c) => c.id === s.classId);
     const classRate = tf && cls ? feedingRate(tf, cls) : 0; const ex = feeding.exceptionFor(s.id, key); const rate = studentFeedingRate(classRate, ex);
     // Payment plan: how this family pays feeding, and whether they are keeping up with it.
-    const freq: PlanFrequency = plans.planOn(s.id, key, today)?.frequency ?? "With school fees";
+    const freq: PlanFrequency = planFreq(plans.planOn(s.id, key, today)?.frequency);
     const expected = td ? expectedByToday(rate, td, freq, today, s.dueOn) : 0;
-    return { ...s, classRate, ex, status: feedingStatus(ex), rate, freq, expected, perPeriod: td && freq !== "With school fees" ? perPeriod(rate, td, freq) : 0, plan: planStatus(rate, s.paid, expected) };
+    return { ...s, classRate, ex, status: feedingStatus(ex), rate, freq, expected, perPeriod: td ? perPeriod(rate, td, freq) : 0, plan: planStatus(rate, s.paid, expected) };
   }), [students, fs.classes, tf, feeding, key, plans, td, today]);
   const behind = rows.filter((r) => r.plan.label === "Behind");
   const byClass = fs.classes.map((c) => { const r = rows.filter((x) => x.classId === c.id); const on = r.filter((x) => x.rate > 0);
@@ -111,11 +111,11 @@ export function ChangeFeeding({ row, termLabel, termKey: key, onClose, onSave }:
   return (
     <Modal open onClose={onClose} title={`Feeding — ${row.name}`} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!!err} onClick={() => { onSave(ex); toast(`Feeding updated for ${row.name}`); }}>Save</Button></>}>
       <div className="space-y-2">
-        <p className="text-sm text-muted">{row.cls} · {termLabel}. This decides the Feeding line on the student&apos;s school fees invoice.</p>
+        <p className="text-sm text-muted">{row.cls} · {termLabel}. This decides how much feeding the student owes this term (paid separately from school fees).</p>
         {opt("class", `On feeding at the class rate (${money(row.classRate)})`, "The default for every student.")}
         {opt("rate", "On feeding at a different rate", "For example half-day feeding.")}
         {mode === "rate" && <div className="pl-7"><MoneyInput className="w-40" label="Feeding rate for this student" value={rate} onChange={setRate} /></div>}
-        {opt("off", "Not on feeding this term", "No Feeding line on the invoice.")}
+        {opt("off", "Not on feeding this term", "Owes no feeding this term.")}
         {mode !== "class" && <label className="block text-sm"><span className="mb-1 block font-medium">Reason *</span><input aria-label="Reason" className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm" placeholder="e.g. brings lunch from home" value={reason} onChange={(e) => setReason(e.target.value)} /></label>}
         {err && reason && <p role="alert" className="text-sm text-danger">{err}</p>}
       </div>
@@ -163,17 +163,17 @@ function PaymentsTab({ payments, classes, payees, usedRefs, termLabel, today }: 
   const cols: Column<FeedingPayment>[] = [
     { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) },
     { key: "s", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={studentHref(x.studentId, "feeding")}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
-    { key: "h", header: "Paid", render: (x) => <Badge tone={x.how === "With school fees" ? "neutral" : "info"}>{label(x.how)}</Badge> },
+    { key: "h", header: "Paid", render: (x) => <Badge tone="info">{label(x.how)}</Badge> },
     { key: "f", header: "Feeding", align: "right", sort: (x) => x.feeding, render: (x) => <b className="num">{money(x.feeding)}</b> },
     { key: "m", header: "Method", hideOnMobile: true, render: (x) => x.method },
     { key: "r", header: "Receipt", hideOnMobile: true, render: (x) => <Link className="num text-info hover:underline" href={printHref("receipt", x.id)}>{x.receipt}</Link> },
   ];
   return (
-    <Card><CardHeader title="Feeding payments" sub={`${data.length} payments · ${money(total)} confirmed. Feeding paid with the school fees at once shows the feeding part of that payment.`}
+    <Card><CardHeader title="Feeding payments" sub={`${data.length} payments · ${money(total)} confirmed. Feeding is paid separately from school fees.`}
       action={payees && <Button variant="primary" onClick={() => setPay(true)}>Record feeding payment</Button>} />
       {pay && payees && <FeedingPaymentDialog students={payees} usedRefs={usedRefs} termLabel={termLabel} today={today} onClose={() => setPay(false)} />}
       <DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.receipt} pageSize={12}
-        filters={<><Select label="How it was paid" value={how} onChange={setHow} options={[{ value: "", label: "All payments" }, ...["With school fees", "Daily", "Weekly", "Monthly", "Term"].map((h) => ({ value: h, label: label(h) }))]} />
+        filters={<><Select label="How it was paid" value={how} onChange={setHow} options={[{ value: "", label: "All payments" }, ...["Daily", "Weekly", "Monthly", "Term"].map((h) => ({ value: h, label: label(h) }))]} />
           <Select label="Class" value={cls} onChange={setCls} options={[{ value: "", label: "All classes" }, ...classes.map((c) => ({ value: c.id, label: c.name }))]} /></>} /></Card>
   );
 }
@@ -187,9 +187,11 @@ function PlansTab({ rows, canEdit, td, today, termLabel, termKey: key, classes, 
   const cols: Column<Row>[] = [
     { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={studentHref(x.id, "feeding")}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
     { key: "pl", header: "Plan", sort: (x) => x.freq, render: (x) => { const h = history(x.id, key); return <div><div className="font-medium">{planLabel(x.freq)}</div>
-      <div className="num text-[11px] text-muted">{x.perPeriod > 0 ? `${money(x.perPeriod)} per ${periodWord(x.freq)}` : "with the school fees invoice"}{h.length > 1 ? ` · ${h.length} changes` : ""}</div></div>; } },
+      <div className="num text-[11px] text-muted">{x.perPeriod > 0 ? `${money(x.perPeriod)} per ${periodWord(x.freq)}` : ""}{h.length > 1 ? ` · ${h.length} changes` : ""}</div></div>; } },
     { key: "ex", header: "Expected by today", align: "right", hideOnMobile: true, sort: (x) => x.expected, render: (x) => <span className="num">{money(x.expected)}</span> },
     { key: "p", header: "Paid", align: "right", sort: (x) => x.paid, render: (x) => <span className="num text-ok">{money(x.paid)}</span> },
+    // What is left of this term's feeding, whatever the plan (e.g. Daily: paid GH₵ 2, still owes GH₵ 148).
+    { key: "o", header: "Still owes", align: "right", sort: (x) => x.rate - x.paid, render: (x) => <b className={`num ${x.rate - x.paid > 0 ? "text-danger" : "text-ok"}`}>{money(Math.max(0, x.rate - x.paid))}</b> },
     { key: "s", header: "Status", sort: (x) => x.plan.behind, render: (x) => <Badge tone={x.plan.label === "Behind" ? "danger" : "ok"} dot>{x.plan.label === "Behind" ? `Behind ${money(x.plan.behind)}` : x.plan.label}</Badge> },
     ...(canEdit ? [{ key: "e", header: "", render: (x: Row) => <Button size="sm" variant="ghost" disabled={!td} onClick={() => setPlanFor(x)}>Change plan</Button> }] : []),
   ];

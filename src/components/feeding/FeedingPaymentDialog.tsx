@@ -8,7 +8,7 @@ import { receiptLink } from "@/components/ReceiptDoc";
 import { LIVE } from "@/lib/live/config";
 import { useLiveData } from "@/lib/live/data";
 import { recordPayment } from "@/lib/live/actions";
-import { planLabel, type PlanFrequency } from "@/lib/feeding";
+import { planFreq, planLabel, type PlanFrequency } from "@/lib/feeding";
 import { money } from "@/lib/money";
 
 /** A student as the Feeding module sees them this term. */
@@ -25,11 +25,11 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
   const [sid, setSid] = useState(""); const [filter, setFilter] = useState(""); const [amount, setAmount] = useState(""); const [period, setPeriod] = useState<Period>("Weekly");
   const [method, setMethod] = useState("Mobile Money"); const [ref, setRef] = useState(""); const [date, setDate] = useState(today); const [done, setDone] = useState<string | null>(null);
   const st = students.find((s) => s.id === sid);
-  const owed = st ? Math.max(0, (st.freq === "With school fees" ? st.billed : st.rate) - st.paid) : 0;
+  const owed = st ? Math.max(0, st.rate - st.paid) : 0;
   const minor = Math.round(parseFloat(amount || "0") * 100);
   const pick = (s: FeedingPayee) => { setSid(s.id); setFilter("");
-    const p: Period = s.freq === "With school fees" ? "Term" : s.freq; setPeriod(p);
-    const left = Math.max(0, (s.freq === "With school fees" ? s.billed : s.rate) - s.paid);
+    const p: Period = planFreq(s.freq); setPeriod(p);
+    const left = Math.max(0, s.rate - s.paid);
     const suggest = p === "Term" ? left : Math.min(s.perPeriod, left); if (suggest > 0) setAmount(String(suggest / 100)); };
   const err = useMemo(() => {
     if (!sid) return "Select a student"; if (!(minor > 0)) return "Enter an amount greater than zero";

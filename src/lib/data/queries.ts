@@ -4,10 +4,11 @@ import * as D from "./seed";
 import type { Student, Guardian, Invoice, Payment } from "./types";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "../accounts";
 import { termKey } from "../fees";
+import { studentFeedingRate } from "../feeding";
 import { LIVE } from "../live/config";
 export { ACCOUNTS, ACCOUNT_IDS, type FeeAccount };
 
-export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, feeSchedule, feedingPlans, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
+export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, feeSchedule, feedingPlans, feedingExceptions, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
 
 /** Terms that already have invoices in any account. Their fees are locked: changing them needs an approved adjustment. */
 export const lockedFeeTerms = () => [...new Set(invoices.map((i) => termKey(i.year, i.term)))];
@@ -67,18 +68,19 @@ export function termCharges(studentId: string, year = D.SCHOOL.year, term = D.SC
   return { year, term, parts, total: parts.find((p) => p.account === "fees")!.net, extra: parts.find((p) => p.account === "extra")!, classes: parts.find((p) => p.account === "classes")! };
 }
 /**
- * Feeding for one student: billed (the Feeding line on their school fees invoices), paid (the feeding part of their
- * confirmed school fees payments, whether paid with the fees at once or daily/weekly/monthly) and still owed.
+ * Feeding for one student this term: billed (their feeding rate, never on the school fees invoice), paid (their feeding
+ * payments: termly, daily, weekly or monthly) and still owed.
  */
 export function feedingAccount(studentId: string) {
-  // On the school fees invoice ("with school fees") → the Feeding line; on a plan → the class feeding rate for the term.
-  const onInvoice = invoicesOf(studentId, "fees").reduce((a, i) => a + (i.items.find((x) => x.label === "Feeding")?.amount ?? 0), 0);
+  // Feeding is never on the school fees invoice. Every active student on feeding owes this term's rate (the class rate,
+  // or the different rate / "not on feeding" set in the Feeding module), whatever plan they pay it on.
   const st = getStudent(studentId);
-  const onPlan = feedingPlans.some((p) => p.studentId === studentId && p.frequency !== "With school fees");
-  const billed = onInvoice || (onPlan && st ? feeStructure.find((f) => f.classId === st.classId)?.feeding ?? 0 : 0);
+  const ex = feedingExceptions.find((e) => e.studentId === studentId && e.term === termKey(SCHOOL.year, SCHOOL.term));
+  const classRate = st ? feeStructure.find((f) => f.classId === st.classId)?.feeding ?? 0 : 0;
+  const billed = st && st.status === "Active" ? studentFeedingRate(classRate, ex) : 0;
   const pays = payments.filter((p) => p.studentId === studentId && p.account === "fees" && (p.feeding ?? 0) > 0).sort((a, b) => b.date.localeCompare(a.date));
   const paid = pays.filter((p) => p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
-  return { billed, paid, balance: billed - paid, payments: pays, separate: !onInvoice && onPlan };
+  return { billed, paid, balance: billed - paid, payments: pays, separate: true };
 }
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
 export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };

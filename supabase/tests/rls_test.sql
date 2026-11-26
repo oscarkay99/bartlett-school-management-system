@@ -210,8 +210,10 @@ select pg_temp.check('bursar records a weekly feeding payment', pg_temp.err(:BUR
 select pg_temp.check('a feeding-only payment must be all feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 100, 'Daily') $q$) is not null);
 select pg_temp.check('the feeding part cannot exceed the payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('fees', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 200) $q$) is not null);
 select pg_temp.check('Extracurricular payments cannot carry feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('extra', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 100) $q$) is not null);
-select pg_temp.check('feeding balance: billed 600, paid 500 (weekly), owed 100', (select billed = 60000 and paid = 50000 and balance = 10000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
-select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 1 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
+-- Feeding is never on the school fees invoice: f1 owes the half-day rate (300) set above, and paid 500 weekly.
+select pg_temp.check('feeding balance: half-day rate 300 billed, 500 paid weekly, 200 in credit', (select billed = 30000 and paid = 50000 and balance = -20000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
+-- Everyone on feeding with a rate this term is listed (f1 half-day, f4 Primary); f2 opted out, KG has no rate here.
+select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 2 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
 
 -- ---------- Feeding payment plans ----------
 select pg_temp.check('bursar puts a student on a daily plan, then switches to weekly (history kept)',
@@ -227,7 +229,7 @@ select pg_temp.check('auditor reads plans but cannot set them', pg_temp.n(:AUDIT
   and pg_temp.err(:AUDITOR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Monthly', '2026-11-02') $q$) is not null);
 
 -- ---------- Feeding paid small small is not part of school fees ----------
--- Yaw (f4, Primary 3) pays feeding weekly: a plan, no Feeding line on his school fees invoice.
+-- Yaw (f4, Primary 3) pays feeding weekly (feeding is never on a school fees invoice).
 select pg_temp.err(:BURSAR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2', 'Weekly', '2026-09-07') $q$);
 select pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f4', 4000, 'Cash', 4000, 'Weekly') $q$);
 select pg_temp.check('a weekly feeding payment does not count towards school fees', not exists (select 1 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and paid > 0));

@@ -7,7 +7,7 @@ import { Modal, MoneyInput, useToast } from "@/components/ui/interactive";
 import { PeriodSelect, useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
-import { blankTerm, copyTerm, fromGrid, termBillLines, LEVELS, previousTermWithFees, sumItems, toGrid, validateGrid, type ClassRef, type FeeGrid, type Level, type TermFees } from "@/lib/fees";
+import { blankTerm, copyTerm, feedingRate, fromGrid, termBillLines, LEVELS, previousTermWithFees, sumItems, toGrid, validateGrid, type ClassRef, type FeeGrid, type Level, type TermFees } from "@/lib/fees";
 import { money } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,7 @@ export function FeeScheduleEditor() {
 
       {editing ? <GridEditor key={key} tf={editing} onCancel={() => setDraft(null)} onSave={(tf) => { fs.save(tf); setDraft(null); }} />
         : saved ? <>
-            <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term, feeding included. Extra classes are billed separately."
+            <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term. Feeding and extra classes are billed separately."
               action={canEdit && !locked ? <Button size="sm" variant="primary" onClick={() => edit(structuredClone(saved))}><Pencil size={13} />Edit fees</Button> : undefined} />
             <p className="text-sm text-muted">Activities this term: {Object.entries(saved.activities).map(([a, m]) => `${a} ${money(m)}`).join(" · ")}</p></>
         : <Card><EmptyState icon={FilePlus2} title={`No fees set for ${term} ${year}`}
@@ -131,17 +131,17 @@ function Exceptions({ g, setG, classes }: { g: FeeGrid; setG: (g: FeeGrid) => vo
   );
 }
 
-/** What each class pays in a term: school fees (with what's included), feeding included. Shared with Fees → Fee structures. */
+/** What each class pays in a term: school fees (with what's included), and feeding, which is billed separately. Shared with Fees → Fee structures. */
 export function ClassFeeTable({ tf, classes, title, sub, action }: { tf: TermFees; classes: ClassRef[]; title: string; sub?: string; action?: React.ReactNode }) {
   const rows = classes.map((c) => ({ c, day: termBillLines(tf, c), extra: tf.overrides[c.id] ?? [] }));
   const short = (m: number) => (m / 100).toLocaleString("en-GH");
   return (
-    <Card><CardHeader title={title} sub={sub ?? "School fees per student, feeding included. Extra classes are billed separately."} action={action} />
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GH₵)</th><th className="whitespace-nowrap px-3 text-right">School fees</th></tr></thead>
+    <Card><CardHeader title={title} sub={sub ?? "School fees per student. Feeding is billed separately in the Feeding module; extra classes on their own invoices."} action={action} />
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="hidden px-3 text-left md:table-cell">Includes (GH₵)</th><th className="whitespace-nowrap px-3 text-right">School fees</th><th className="whitespace-nowrap px-3 text-right text-muted">Feeding (separate)</th></tr></thead>
         <tbody className="divide-y divide-line">{rows.map((r) => <tr key={r.c.id} className="align-top">
           <td className="whitespace-nowrap px-4 py-2.5 font-medium">{r.c.name}</td>
           <td className="hidden px-3 py-2.5 text-muted md:table-cell">{r.day.map((i) => { const odd = r.extra.some((e) => e.label === i.label); return <span key={i.label} className={cn("mr-3 inline-block", odd && "font-medium text-info")}>{i.label} {short(i.amount)}</span>; })}</td>
-          <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">{money(sumItems(r.day))}</td></tr>)}</tbody></table></div>
+          <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">{money(sumItems(r.day))}</td><td className="num whitespace-nowrap px-3 py-2.5 text-right text-muted">{money(feedingRate(tf, r.c))}</td></tr>)}</tbody></table></div>
       {rows.some((r) => r.extra.length) && <p className="border-t border-line px-4 py-2 text-xs text-muted">Highlighted fees differ for that class only.</p>}</Card>
   );
 }

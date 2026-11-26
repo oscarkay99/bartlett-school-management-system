@@ -26,7 +26,7 @@ export function validateException(ex: FeedingException): string {
   return "";
 }
 
-/** Replace or drop the Feeding line on an invoice according to the student's feeding for that term. */
+/** (Older invoices only) Replace or drop a Feeding line according to the student's feeding for that term. */
 export function applyFeeding<T extends { label: string; amount: Minor }>(items: T[], rate: Minor): T[] {
   return items.flatMap((i) => (i.label !== "Feeding" ? [i] : rate > 0 ? [{ ...i, amount: rate }] : []));
 }
@@ -52,13 +52,17 @@ export function recordMeals(list: MealEntry[], date: string, counts: Record<stri
 }
 
 // ---------- Feeding payment plans ----------
-// How a family pays feeding this term. "With school fees" (the default) = feeding is paid with the school fees invoice.
-// The others pay feeding on its own, a fixed amount per period. A change keeps the history (each entry has a start date).
-export const PLAN_FREQUENCIES = ["With school fees", "Daily", "Weekly", "Monthly", "Term"] as const;
-export type PlanFrequency = (typeof PLAN_FREQUENCIES)[number];
+// How a family pays feeding this term. Feeding is never on the school fees invoice: it is paid on its own, all at once
+// for the term (Termly, the default) or a fixed amount per day / week / month. A change keeps the history.
+export const PLAN_FREQUENCIES = ["Term", "Daily", "Weekly", "Monthly"] as const;
+/** "With school fees" only appears in records made before feeding left the invoice; it is treated as Termly. */
+export type PlanFrequency = (typeof PLAN_FREQUENCIES)[number] | "With school fees";
+export const DEFAULT_PLAN = "Term" as const;
+/** The plan as it works now: no plan, or an old "With school fees" plan, means Termly. */
+export const planFreq = (f?: PlanFrequency): Exclude<PlanFrequency, "With school fees"> => (!f || f === "With school fees" ? "Term" : f);
 export interface FeedingPlan { studentId: string; term: string; frequency: PlanFrequency; from: string; note?: string }
 export interface TermDates { start: string; end: string }
-export const planLabel = (f: PlanFrequency) => (f === "Term" ? "Termly" : f);
+export const planLabel = (f: PlanFrequency) => (planFreq(f) === "Term" ? "Termly" : planFreq(f));
 const perWord: Record<PlanFrequency, string> = { "With school fees": "term", Daily: "school day", Weekly: "week", Monthly: "month", Term: "term" };
 export const periodWord = (f: PlanFrequency) => perWord[f];
 
@@ -82,20 +86,20 @@ export function termPeriods(t: TermDates, f: PlanFrequency): number {
 /** Amount per period, rounded up to a whole cedi (the last period can be smaller; the total never exceeds the rate). */
 export const perPeriod = (rate: number, t: TermDates, f: PlanFrequency) => Math.ceil(rate / termPeriods(t, f) / 100) * 100;
 
-/** Periods that have started by `today`. "With school fees" is due by the invoice due date. */
+/** Periods that have started by `today`. Termly: the whole term's feeding is due once the term starts. */
 export function periodsElapsed(t: TermDates, f: PlanFrequency, today: string, dueOn?: string): number {
   if (today < t.start) return 0;
   const upTo = today > t.end ? t.end : today;
   if (f === "Daily") return schoolDays(t.start, upTo);
   if (f === "Weekly") return Math.min(termPeriods(t, f), Math.floor((day(upTo).getTime() - day(t.start).getTime()) / (7 * 86400000)) + 1);
   if (f === "Monthly") return Math.min(termPeriods(t, f), monthsSpanned(t.start, upTo));
-  if (f === "Term") return 1;
-  return dueOn && today > dueOn ? 1 : 0;   // With school fees
+  void dueOn;
+  return 1;   // Termly (and old "With school fees" plans)
 }
 
 /** Feeding that should have been paid by today under the plan (never more than the term's feeding). */
 export function expectedByToday(rate: number, t: TermDates, f: PlanFrequency, today: string, dueOn?: string): number {
-  if (f === "With school fees" || f === "Term") return periodsElapsed(t, f, today, dueOn) > 0 ? rate : 0;
+  if (planFreq(f) === "Term") return periodsElapsed(t, f, today, dueOn) > 0 ? rate : 0;
   return Math.min(rate, perPeriod(rate, t, f) * periodsElapsed(t, f, today, dueOn));
 }
 
@@ -106,7 +110,7 @@ export function planStatus(rate: number, paid: number, expected: number): PlanSt
   return expected > paid ? { label: "Behind", behind: expected - paid } : { label: "On track", behind: 0 };
 }
 
-/** The plan in force on `onDate` (latest start on or before it); none = "With school fees". */
+/** The plan in force on `onDate` (latest start on or before it); none = Termly (see planFreq). */
 export function currentPlan(plans: FeedingPlan[], studentId: string, term: string, onDate: string): FeedingPlan | undefined {
   return plans.filter((p) => p.studentId === studentId && p.term === term && p.from <= onDate).sort((a, b) => b.from.localeCompare(a.from))[0];
 }
@@ -114,7 +118,7 @@ export const planHistory = (plans: FeedingPlan[], studentId: string, term: strin
   plans.filter((p) => p.studentId === studentId && p.term === term).sort((a, b) => a.from.localeCompare(b.from));
 
 export function validatePlan(p: FeedingPlan, t?: TermDates): string {
-  if (!PLAN_FREQUENCIES.includes(p.frequency)) return "Choose a plan";
+  if (!(PLAN_FREQUENCIES as readonly string[]).includes(p.frequency)) return "Choose a plan";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(p.from)) return "Choose the date the plan starts";
   if (t && (p.from < t.start || p.from > t.end)) return `The start date must be within the term (${t.start} – ${t.end})`;
   return "";

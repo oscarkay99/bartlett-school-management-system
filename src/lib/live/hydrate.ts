@@ -23,7 +23,7 @@ export function hydrate(d: LiveData) {
     terms: yr ? yr.terms.map((t) => t.name) : [], years: [...d.calendar].map((y) => y.name), calendar: d.calendar,
   });
   replace(D.classes, d.classes); replace(D.staff, d.staff); replace(D.guardians, d.guardians); replace(D.students, d.students);
-  replace(D.invoices, d.invoices); replace(D.payments, d.payments); replace(D.feeSchedule, d.feeSchedule); replace(D.feedingPlans, d.feedingPlans);
+  replace(D.invoices, d.invoices); replace(D.payments, d.payments); replace(D.feeSchedule, d.feeSchedule); replace(D.feedingPlans, d.feedingPlans); replace(D.feedingExceptions, d.feedingExceptions);
   replace(D.grades, d.grades); replace(D.inventory, d.inventory); replace(D.movements, d.movements); replace(D.expenses, d.expenses);
   replace(D.messages, d.messages); replace(D.approvals, d.approvals); replace(D.audit, d.audit); replace(D.events, d.events); replace(D.applicants, d.applicants);
   if (d.gradeScale.length) replace(D.gradeScale, d.gradeScale);

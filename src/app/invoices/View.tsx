@@ -3,7 +3,7 @@ import { useLiveData } from "@/lib/live/data";
 import { PageHeader } from "@/components/ui/primitives";
 import { ClassInvoices } from "@/components/invoices/ClassInvoices";
 import { SCHOOL, classes, feeSchedule } from "@/lib/data/queries";
-import { classFees, feedingRate, findTerm } from "@/lib/fees";
+import { classFees, findTerm } from "@/lib/fees";
 import { DEFAULT_NOTES, INVOICE_TABS, mainLines, SMALL_NOTES, type ClassInvoice } from "@/lib/class-invoices";
 import { activitiesOf } from "@/lib/accounts";
 
@@ -15,10 +15,10 @@ function defaults(): Record<string, ClassInvoice> {
     // Extracurricular / Extra Classes: small invoices, printed 10 to an A4 sheet.
     if (!t.classId) return [t.id, { title: t.label, period: `${SCHOOL.term}, ${SCHOOL.year}`, notes: SMALL_NOTES,
       lines: tf && t.account ? activitiesOf(t.account).map((description) => ({ description, amount: tf.activities[description] ?? 0 })) : [] }];
-    // Classes: the full A4 school fees invoice, feeding included.
+    // Classes: the full A4 school fees invoice (feeding is billed separately in the Feeding module).
     const cls = classes.find((c) => c.id === t.classId)!;
     const fees = tf ? classFees(tf, cls).map((i) => ({ description: i.label, amount: i.amount })) : [];
-    return [t.id, { title: `${t.label} School Fees`, period: `${SCHOOL.term}, ${SCHOOL.year} academic year`, notes: DEFAULT_NOTES, lines: mainLines(fees, tf ? feedingRate(tf, cls) : 0) }];
+    return [t.id, { title: `${t.label} School Fees`, period: `${SCHOOL.term}, ${SCHOOL.year} academic year`, notes: DEFAULT_NOTES, lines: mainLines(fees) }];
   }));
 }
 

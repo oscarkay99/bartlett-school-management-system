@@ -33,10 +33,10 @@ export function classFees(tf: TermFees, cls: ClassRef): FeeItem[] {
   return lines.filter((l) => l.amount > 0).map((l) => ({ ...l }));
 }
 export const feedingRate = (tf: TermFees, cls: ClassRef) => tf.levels[cls.level].feeding;
-/** Everything on a student's school fees invoice this term: the class's fee lines, then feeding. */
+/** Everything on a student's school fees invoice this term: the class's fee lines. Feeding is never on it: it is
+ *  billed and paid separately in the Feeding module (at feedingRate). */
 export function termBillLines(tf: TermFees, cls: ClassRef): FeeItem[] {
-  const feeding = feedingRate(tf, cls);
-  return [...classFees(tf, cls), ...(feeding > 0 ? [{ label: "Feeding", amount: feeding }] : [])];
+  return classFees(tf, cls);
 }
 export const sumItems = (items: FeeItem[]) => items.reduce((a, i) => a + i.amount, 0);
 

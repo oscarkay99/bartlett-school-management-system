@@ -10,7 +10,7 @@ import * as Q from "@/lib/data/queries";
 const KEY = "feeding-plans-v1";
 interface PlansState {
   plans: FeedingPlan[];
-  /** The plan in force on a date (none = "With school fees"). */
+  /** The plan in force on a date (none = Termly). */
   planOn: (studentId: string, term: string, onDate: string) => FeedingPlan | undefined;
   history: (studentId: string, term: string) => FeedingPlan[];
   setPlan: (p: FeedingPlan) => void;

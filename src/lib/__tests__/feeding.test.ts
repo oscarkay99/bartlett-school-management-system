@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addPlan, applyFeeding, currentPlan, expectedByToday, feedingStatus, periodsElapsed, perPeriod, planStatus, schoolDays, termPeriods, validatePlan, readExceptions, recordMeals, setException, studentFeedingRate, validateException, type FeedingException } from "../feeding";
+import { addPlan, currentPlan, planFreq, expectedByToday, feedingStatus, periodsElapsed, perPeriod, planStatus, schoolDays, termPeriods, validatePlan, readExceptions, recordMeals, setException, studentFeedingRate, validateException, type FeedingException } from "../feeding";
 import { buildTermInvoices } from "../generated-invoices";
 import { findTerm } from "../fees";
 import * as Q from "../data/queries";
@@ -30,23 +30,21 @@ describe("Feeding module", () => {
     const m = recordMeals(recordMeals([], "2026-10-01", { c1: 10, c2: 12 }), "2026-10-01", { c1: 11 });
     expect(m.filter((x) => x.date === "2026-10-01").map((x) => [x.classId, x.served]).sort()).toEqual([["c1", 11], ["c2", 12]]);
   });
-  it("invoices follow it: opted-out students get no Feeding line; different rates are applied", () => {
-    expect(applyFeeding([{ label: "Tuition", amount: 5 }, { label: "Feeding", amount: 600 }], 0)).toEqual([{ label: "Tuition", amount: 5 }]);
+  it("feeding is never on a school fees invoice; what a student owes for feeding follows the Feeding module", () => {
     const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!; const classes = Q.classes.map((c) => ({ id: c.id, name: c.name, level: c.level }));
     const c3 = classes.find((c) => c.name === "Primary 3")!.id;
-    const cand = (id: string) => ({ id, name: id, adm: id, classId: c3, scholarship: false });
-    const [a, b, c] = buildTermInvoices([cand("a"), cand("b"), cand("c")], classes, t2, "2027-01-11", 0, (sid) => ({ a: undefined, b: 0, c: ghs(300) })[sid]);
-    expect(a.items.find((i) => i.label === "Feeding")!.amount).toBe(ghs(600));
-    expect(b.items.some((i) => i.label === "Feeding")).toBe(false);
-    expect(c.items.find((i) => i.label === "Feeding")!.amount).toBe(ghs(300));
+    const [a] = buildTermInvoices([{ id: "a", name: "a", adm: "a", classId: c3, scholarship: false }], classes, t2, "2027-01-11");
+    expect(a.items.some((i) => i.label === "Feeding")).toBe(false);
+    // Owed for feeding: the class rate, a different rate, or nothing if not on feeding.
+    expect([studentFeedingRate(ghs(600)), studentFeedingRate(ghs(600), { studentId: "x", term: "t", onFeeding: true, rate: ghs(300), reason: "half day" }),
+      studentFeedingRate(ghs(600), { studentId: "x", term: "t", onFeeding: false, reason: "lunch from home" })]).toEqual([ghs(600), ghs(300), 0]);
+    // Every active student owes their class rate this term, whatever plan they pay it on.
+    for (const s of Q.activeStudents()) expect(Q.feedingAccount(s.id).billed, s.admissionNo).toBe(Q.feeStructure.find((f) => f.classId === s.classId)!.feeding);
   });
-  it("feeding payments: never more feeding paid than billed; paying in full pays feeding in full", () => {
+  it("feeding payments: never more feeding paid than billed; paying school fees in full pays no feeding", () => {
     for (const st of Q.students) { const f = Q.feedingAccount(st.id); expect(f.paid, st.admissionNo).toBeLessThanOrEqual(f.billed); }
-    // Families paying feeding WITH the school fees: settling the invoice settles feeding too.
-    const withFees = (id: string) => Q.invoicesOf(id, "fees").some((i) => i.items.some((x) => x.label === "Feeding"));
-    const fullPayers = Q.students.filter((s) => Q.feeSummary(s.id).balance === 0 && withFees(s.id));
-    expect(fullPayers.length).toBeGreaterThan(0);
-    for (const s of fullPayers) { const f = Q.feedingAccount(s.id); expect(f.paid, s.admissionNo).toBe(f.billed); }
+    // A school fees payment never carries feeding: only feeding payments (with a period) do.
+    for (const p of Q.payments.filter((x) => x.account === "fees" && !x.feedingPeriod)) expect(p.feeding ?? 0, p.receiptNo).toBe(0);
   });
   it("some families pay feeding on its own, daily / weekly / monthly, on school days; it never touches school fees", () => {
     const own = Q.payments.filter((p) => p.feedingPeriod);
@@ -70,12 +68,13 @@ describe("Feeding module", () => {
       expect([perPeriod(ghs(600), t1, "Daily"), perPeriod(ghs(600), t1, "Weekly"), perPeriod(ghs(600), t1, "Monthly")]).toEqual([ghs(8), ghs(40), ghs(150)]);
       expect(perPeriod(ghs(450), t1, "Weekly")).toBe(ghs(30));
     });
-    it("expected by 12 Oct: daily 208, weekly 240, monthly 300, termly 600; with school fees only after the due date", () => {
+    it("expected by 12 Oct: daily 208, weekly 240, monthly 300, termly 600; no plan (or an old 'with school fees' plan) = termly", () => {
       expect(periodsElapsed(t1, "Daily", today)).toBe(26);
       expect([expectedByToday(ghs(600), t1, "Daily", today), expectedByToday(ghs(600), t1, "Weekly", today), expectedByToday(ghs(600), t1, "Monthly", today), expectedByToday(ghs(600), t1, "Term", today)])
         .toEqual([ghs(208), ghs(240), ghs(300), ghs(600)]);
-      expect(expectedByToday(ghs(600), t1, "With school fees", today, "2026-10-30")).toBe(0);
-      expect(expectedByToday(ghs(600), t1, "With school fees", "2026-11-02", "2026-10-30")).toBe(ghs(600));
+      expect([planFreq(undefined), planFreq("With school fees"), planFreq("Weekly")]).toEqual(["Term", "Term", "Weekly"]);
+      expect(expectedByToday(ghs(600), t1, planFreq(undefined), today)).toBe(ghs(600));
+      expect(expectedByToday(ghs(600), t1, "With school fees", today)).toBe(ghs(600));
       expect(expectedByToday(ghs(600), t1, "Weekly", "2027-01-05")).toBe(ghs(600)); // never more than the term's feeding
     });
     it("status: behind, on track, paid in full", () => {
@@ -103,13 +102,10 @@ describe("Feeding module", () => {
     });
   });
   describe("feeding paid small small is not part of school fees", () => {
-    const planPayers = Q.activeStudents().filter((s) => Q.feedingPlans.some((p) => p.studentId === s.id && p.frequency !== "With school fees"));
-    it("plan families have no Feeding line on their school fees invoice; everyone else does", () => {
+    const planPayers = Q.activeStudents().filter((s) => Q.feedingPlans.some((p) => p.studentId === s.id && planFreq(p.frequency) !== "Term"));
+    it("no school fees invoice has a Feeding line, for any family", () => {
       expect(planPayers.length).toBeGreaterThanOrEqual(3);
-      for (const s of Q.activeStudents()) {
-        const hasLine = Q.invoicesOf(s.id, "fees").some((i) => i.items.some((x) => x.label === "Feeding"));
-        expect(hasLine, s.admissionNo).toBe(!planPayers.includes(s));
-      }
+      for (const i of Q.invoices.filter((x) => x.account === "fees")) expect(i.items.some((x) => x.label === "Feeding"), i.no).toBe(false);
     });
     it("feeding plan payments never count towards school fees", () => {
       for (const s of planPayers) {

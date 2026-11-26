@@ -64,13 +64,12 @@ describe("Every student is tied to a guardian", () => {
   });
 });
 
-// What the client asked for: parents get the school fees invoice (with feeding on it); Extracurricular is a standalone invoice.
-describe("School fees invoice: books and feeding on one invoice", () => {
-  it("every school-fee invoice carries Books; Feeding only when the family pays feeding with the school fees", () => {
+// What the client asked for: the school fees invoice has no feeding (feeding is paid separately); Extracurricular is standalone.
+describe("School fees invoice: fees only, never feeding", () => {
+  it("every school-fee invoice carries Books and none carries Feeding", () => {
     for (const i of Q.invoices.filter((x) => x.account === "fees")) {
       expect(i.items.some((x) => x.label === "Books"), `${i.no} Books`).toBe(true);
-      const onPlan = Q.feedingPlans.some((p) => p.studentId === i.studentId && p.frequency !== "With school fees");
-      expect(i.items.some((x) => x.label === "Feeding"), `${i.no} Feeding`).toBe(!onPlan);
+      expect(i.items.some((x) => x.label === "Feeding"), `${i.no} Feeding`).toBe(false);
     }
   });
   it("there is no Examination fee on any invoice", () => {

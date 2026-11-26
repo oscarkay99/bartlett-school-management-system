@@ -33,12 +33,12 @@ export const invoiceTotal = (inv: ClassInvoice) => linesTotal(inv.lines);
 
 /**
  * School fees invoice lines for a class: its fee lines in order, with the not-yet-billed levies at 0
- * (kept on the invoice so parents see them as "—"), then feeding.
+ * (kept on the invoice so parents see them as "—"). Feeding is not on the school fees invoice.
  */
-export function mainLines(fees: InvoiceLine[], feeding: Minor): InvoiceLine[] {
+export function mainLines(fees: InvoiceLine[]): InvoiceLine[] {
   const lines = fees.map((l) => (NOT_YET_BILLED.includes(l.description) ? { ...l, amount: 0 } : l));
   for (const d of NOT_YET_BILLED) if (!lines.some((l) => l.description === d)) lines.splice(Math.min(2, lines.length), 0, { description: d, amount: 0 });
-  return [...lines, { description: "Feeding", amount: feeding }];
+  return lines;
 }
 
 const isLine = (l: unknown): l is InvoiceLine => !!l && typeof (l as InvoiceLine).description === "string" && Number.isInteger((l as InvoiceLine).amount) && (l as InvoiceLine).amount >= 0;

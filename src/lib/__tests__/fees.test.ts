@@ -11,10 +11,11 @@ const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!;
 const order = Q.SCHOOL.calendar.flatMap((y) => y.terms.map((t) => ({ year: y.name, term: t.name, start: t.start }))).sort((a, b) => a.start.localeCompare(b.start));
 
 describe("Fee schedule — what a class pays in a term", () => {
-  it("feeding goes on the school fees invoice, after the fee lines; the ICT levy is a 0 placeholder", () => {
+  it("the school fees invoice has the fee lines only (feeding is billed separately); the ICT levy is a 0 placeholder", () => {
     const lines = termBillLines(t1, cls("Primary 3"));
-    expect(lines.map((l) => l.label)).toEqual(["Tuition", "Books", "PTA", "Feeding"]);
-    expect(sumItems(lines)).toBe(ghs(3300));
+    expect(lines.map((l) => l.label)).toEqual(["Tuition", "Books", "PTA"]);
+    expect(sumItems(lines)).toBe(ghs(2700));
+    expect(feedingRate(t1, cls("Primary 3"))).toBe(ghs(600));   // owed separately, in the Feeding module
     expect(t1.levels.Primary.items.find((i) => i.label === "ICT & Development Levy")!.amount).toBe(0);
   });
   it("every seeded term is valid", () => { for (const tf of Q.feeSchedule) expect(validateTermFees(tf, classes), termKey(tf.year, tf.term)).toBe(""); });
@@ -155,11 +156,11 @@ describe("Fee schedule — spreadsheet editor", () => {
 describe("Generate term invoices", () => {
   const t2 = findTerm(Q.feeSchedule, "2026/2027", "Term 2")!;
   const cand = (name: string, classId: string, scholarship = false) => ({ id: name, name, adm: "A", classId, scholarship });
-  it("builds one numbered invoice per student from the fee schedule, feeding included", () => {
+  it("builds one numbered invoice per student from the fee schedule, without feeding", () => {
     const inv = buildTermInvoices([cand("a", cls("Primary 3").id), cand("b", cls("JHS 1").id)], classes, t2, "2027-01-11");
     expect(inv.map((i) => i.no)).toEqual(["INV-2627-T2-0001", "INV-2627-T2-0002"]);
-    expect(generatedTotal(inv[0])).toBe(ghs(2450 + 600));
-    expect(inv[1].items.map((i) => i.label)).toEqual(["Tuition", "PTA", "Feeding"]); // no Examination fee
+    expect(generatedTotal(inv[0])).toBe(ghs(2450));
+    expect(inv[1].items.map((i) => i.label)).toEqual(["Tuition", "PTA"]); // no Examination fee, no Feeding
     expect([inv[0].billedOn, inv[0].dueOn]).toEqual(["2027-01-11", "2027-02-08"]);
   });
   it("continues numbering and gives scholarship students 25% off tuition", () => {

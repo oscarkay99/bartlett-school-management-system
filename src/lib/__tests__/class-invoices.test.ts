@@ -15,10 +15,10 @@ describe("Class invoices", () => {
     expect(PER_PAGE).toBe(10);
     expect(INVOICE_TABS.filter(isSmall).map((t) => t.label)).toEqual(["Extracurricular", "Extra Classes"]);
   });
-  it("school fees invoice: fee lines, the ICT levy at 0 (not billed yet), then feeding", () => {
-    const lines = mainLines([{ description: "Tuition", amount: ghs(1800) }, { description: "Books", amount: ghs(150) }, { description: "ICT & Development Levy", amount: ghs(150) }, { description: "PTA", amount: ghs(50) }], ghs(450));
-    expect(lines.map((l) => [l.description, l.amount / 100])).toEqual([["Tuition", 1800], ["Books", 150], ["ICT & Development Levy", 0], ["PTA", 50], ["Feeding", 450]]);
-    expect(mainLines([{ description: "Tuition", amount: 1 }, { description: "Books", amount: 1 }, { description: "PTA", amount: 1 }], 5).map((l) => l.description)).toEqual(["Tuition", "Books", "ICT & Development Levy", "PTA", "Feeding"]);
+  it("school fees invoice: fee lines and the ICT levy at 0 (not billed yet); never feeding", () => {
+    const lines = mainLines([{ description: "Tuition", amount: ghs(1800) }, { description: "Books", amount: ghs(150) }, { description: "ICT & Development Levy", amount: ghs(150) }, { description: "PTA", amount: ghs(50) }]);
+    expect(lines.map((l) => [l.description, l.amount / 100])).toEqual([["Tuition", 1800], ["Books", 150], ["ICT & Development Levy", 0], ["PTA", 50]]);
+    expect(mainLines([{ description: "Tuition", amount: 1 }, { description: "Books", amount: 1 }, { description: "PTA", amount: 1 }]).map((l) => l.description)).toEqual(["Tuition", "Books", "ICT & Development Levy", "PTA"]);
   });
   it("totals the lines", () => expect(invoiceTotal(inv("x", [1800, 150, 0, 50, 450]))).toBe(ghs(2450)));
   it("saved edits replace the default; junk and unknown tabs are ignored", () => {

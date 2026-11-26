@@ -3,7 +3,7 @@ import type * as T from "./types";
 import { activitiesFor, type Activity } from "../accounts";
 import type { AcademicYear } from "../calendar";
 import { classFees, feedingRate, findTerm, termBillLines, type LevelFees, type TermFees } from "../fees";
-import { perPeriod, type FeedingPlan } from "../feeding";
+import { perPeriod, type FeedingException, type FeedingPlan } from "../feeding";
 import { LIVE } from "../live/config";
 
 // Deterministic PRNG so server & client agree and screenshots are stable.
@@ -154,9 +154,9 @@ export const invoices: T.Invoice[] = [];
 export const payments: T.Payment[] = [];
 const staffNames = ["Efua Quansah (Bursar)", "Daniel Ofori (Accounts)", "Esi Tetteh (Accounts)"];
 let inv = 0, pay = 0, rc = 0;
-// Feeding payment plans, decided before invoicing: families who pay feeding "small small" (daily / weekly / monthly)
-// do NOT have feeding on their school fees invoice; everyone else pays it with the school fees. Own PRNG (r3) so this
-// does not reshuffle the rest of the demo data. Ama Mensah (monthly) is set up in the demo block below.
+// Feeding is never on the school fees invoice: it is paid separately in the Feeding module, termly (the default) or
+// "small small" (daily / weekly / monthly). Own PRNG (r3) so this does not reshuffle the rest of the demo data.
+// Ama Mensah (monthly) is set up in the demo block below.
 let k3 = 4242; const r3 = () => { k3 = (k3 * 48271) % 2147483647; return k3 / 2147483647; };
 const mensahKids = new Set(students.filter((x) => x.guardians.some((g) => g.guardianId === guardians[0].id)).map((x) => x.id));
 const planOf = new Map<string, "Daily" | "Weekly" | "Monthly">();
@@ -166,7 +166,7 @@ for (const st of students) {
 }
 students.forEach((st) => {
   const cls = classes.find((c) => c.id === st.classId)!;
-  const items = feeFor(cls).filter((x) => !(planOf.has(st.id) && x.label === "Feeding"));   // plan payers: feeding billed separately
+  const items = feeFor(cls);   // school fees only (no feeding)
   const discount = st.scholarship ? Math.round(items[0].amount * 0.25) : 0;
   const i: T.Invoice = { id: `inv${++inv}`, no: `INV-2627-T1-${pad(inv, 4)}`, account: "fees", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount, billedOn: "2026-09-01", dueOn: st.id === "s3" || inv % 5 === 0 ? "2026-10-05" : "2026-10-30" };
   invoices.push(i);
@@ -180,7 +180,7 @@ students.forEach((st) => {
     payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: st.id, guardianId: g, amount: amt, method: pick<T.PayMethod>(["Mobile Money", "Mobile Money", "Cash", "Bank Transfer", "Card", "Cheque"]), date: day > TODAY ? TODAY : day, ref: `REF${int(100000, 999999)}`, status: "Confirmed", staff: pick(staffNames) });
   });
 });
-// Demo: Ama Mensah — pays feeding monthly, so it is NOT on her school fees invoice:
+// Demo: Ama Mensah — pays feeding monthly (feeding is never on the school fees invoice):
 // school fees GH₵ 3,100 billed, GH₵ 2,000 paid => 1,100 outstanding; feeding GH₵ 600, GH₵ 300 paid (monthly).
 const ama = students.find((x) => x.first === "Ama" && x.last === "Mensah")!;
 {
@@ -204,8 +204,10 @@ payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fee
 payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: "s17", amount: ghs(1200), method: "Bank Transfer", date: "2026-10-02", ref: "BNK-2210", status: "Reversed", staff: staffNames[1], note: "Cheque bounced — reversal approved by Bursar" });
 
 // ---------- Feeding payments & payment plans ----------
-/** Feeding payment plans: families who pay feeding on its own (daily / weekly / monthly). Everyone else pays it with the school fees. */
+/** Feeding payment plans: families who pay feeding daily / weekly / monthly. Everyone else pays it termly (the default). */
 export const feedingPlans: FeedingPlan[] = [];
+/** Per-student feeding changes (different rate / not on feeding). Demo: none (kept in the browser); live: from the database. */
+export const feedingExceptions: FeedingException[] = [];
 feedingPlans.push({ studentId: ama.id, term: "2026/2027|Term 1", frequency: "Monthly", from: "2026-09-07", note: "Pays feeding monthly in cash" });
 {
   const T1 = { start: "2026-09-07", end: "2026-12-18" };
@@ -224,17 +226,6 @@ feedingPlans.push({ studentId: ama.id, term: "2026/2027|Term 1", frequency: "Mon
       payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fees", studentId: st.id, guardianId: st.guardians[0].guardianId, amount: each,
         method: r3() < 0.6 ? "Cash" : "Mobile Money", date: day, ref: `FD-${pad(pay * 7, 6)}`, status: "Confirmed", staff: staffNames[Math.floor(r3() * staffNames.length)], feeding: each, feedingPeriod: period });
       left -= each;
-    }
-  }
-  // Families who pay feeding WITH the school fees: each school fees payment covers feeding in proportion,
-  // so paying the whole invoice at once pays feeding in full.
-  for (const st of students) {
-    const inv = invoices.find((i) => i.studentId === st.id && i.account === "fees"); if (!inv) continue;
-    const rate = inv.items.find((x) => x.label === "Feeding")?.amount ?? 0; const gross = inv.items.reduce((a, x) => a + x.amount, 0) - inv.discount;
-    let left = rate;
-    for (const p of payments.filter((x) => x.studentId === st.id && x.account === "fees" && x.feeding === undefined).sort((a, b) => a.date.localeCompare(b.date))) {
-      const share = gross > 0 ? Math.min(left, Math.round((p.amount * rate) / gross / 100) * 100) : 0;   // whole cedis
-      p.feeding = Math.max(0, share); if (p.status === "Confirmed") left -= p.feeding;
     }
   }
 }

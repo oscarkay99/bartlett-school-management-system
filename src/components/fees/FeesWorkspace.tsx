@@ -98,7 +98,7 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   // Wait for the saved role so the Administrator never sees the collections view flash on load.
   if (!ready) return null;
   const breakdown = account === "fees"
-    ? { id: "books", label: "Books & feeding", node: <ItemBreakdown students={ss} sections={[{ key: "Books", title: "Books", sub: "Textbooks and learning materials, on the school fees invoice" }, { key: "Feeding", title: "Feeding", sub: "Meals per term, on the school fees invoice" }]} /> }
+    ? { id: "books", label: "Books", node: <ItemBreakdown students={ss} sections={[{ key: "Books", title: "Books", sub: "Textbooks and learning materials, on the school fees invoice" }]} /> }
     : { id: "activities", label: "Activities", node: <Activities students={ss} account={account} /> };
   type Tab = { id: string; label: string; content: React.ReactNode; badge?: string };
   const tabs = ([
@@ -249,11 +249,7 @@ function GenerateInvoices({ candidates, already, startSeq, onGenerate, onClose }
   const key = termKey(year, term);
   const todo = candidates.filter((c) => !c.billed[key]?.length && !already.has(c.id));
   const termStart = calendar.find((y) => y.name === year)?.terms.find((t) => t.name === term)?.start ?? new Date().toISOString().slice(0, 10);
-  // Feeding follows the Feeding module: students not on feeding get no Feeding line; different rates are applied.
-  const feeding = useFeeding();
-  // Families paying feeding small small (on a plan) do not get feeding on the school fees invoice.
-  const plans = useFeedingPlans(); const onPlan = (sid: string) => { const p = plans.planOn(sid, key, termStart); return !!p && p.frequency !== "With school fees"; };
-  const built = tf ? buildTermInvoices(todo, fs.classes, tf, termStart, startSeq, (sid) => { if (onPlan(sid)) return 0; const ex = feeding.exceptionFor(sid, key); const cls = fs.classes.find((c) => c.id === todo.find((t) => t.id === sid)?.classId); return ex && cls ? studentFeedingRate(feedingRate(tf, cls), ex) : undefined; }) : [];
+  const built = tf ? buildTermInvoices(todo, fs.classes, tf, termStart, startSeq) : [];
   const byClass = fs.classes.map((cls) => { const l = built.filter((x) => x.classId === cls.id); return { cls, n: l.length, total: l.reduce((a, x) => a + generatedTotal(x), 0) }; }).filter((r) => r.n > 0);
   const total = byClass.reduce((a, r) => a + r.total, 0);
   return (
@@ -261,7 +257,7 @@ function GenerateInvoices({ candidates, already, startSeq, onGenerate, onClose }
       {!tf ? <div className="space-y-2"><p>{term} {year} has no fees set, so invoices can&apos;t be generated yet.</p><Link className="text-sm font-medium text-info hover:underline" href="/settings?tab=fees">Set {term} fees in Settings →</Link></div>
         : built.length === 0 ? <><p>All <b>{candidates.length}</b> active students in the current filter already have a {term} invoice.</p><p className="mt-2 text-sm text-muted">Each student can only have one invoice per term, so running this again never creates duplicates. New students admitted later are picked up automatically.</p></>
         : <div className="space-y-3">
-            <p><b>{built.length}</b> students have no {term} invoice yet. Each is billed their class&apos;s {term} fees from the fee schedule, plus feeding as set in the Feeding module.</p>
+            <p><b>{built.length}</b> students have no {term} invoice yet. Each is billed their class&apos;s {term} school fees from the fee schedule. Feeding is not on this invoice (it is paid in Feeding).</p>
             <div className="overflow-x-auto rounded-lg border border-line"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-3 py-2 text-left">Class</th><th className="px-3 text-right">Students</th><th className="px-3 text-right">Total</th></tr></thead>
               <tbody className="divide-y divide-line">{byClass.map((r) => <tr key={r.cls.id}><td className="px-3 py-2">{r.cls.name}</td><td className="num px-3 text-right">{r.n}</td><td className="num px-3 text-right">{money(r.total)}</td></tr>)}</tbody>
               <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-3 py-2">Total</td><td className="num px-3 text-right">{built.length}</td><td className="num px-3 text-right">{money(total)}</td></tr></tfoot></table></div>
