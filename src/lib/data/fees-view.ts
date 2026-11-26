@@ -1,15 +1,27 @@
 // Builds the props for the billing pages (School Fees, Extracurricular, Extra Classes) from the data layer.
 // Amounts to bill come from the fee schedule on the client (Settings → Fee schedule), for the selected term.
 import * as Q from "./queries";
-import type { FeeAccount } from "../accounts";
+import { activitiesOf, type FeeAccount } from "../accounts";
 import { termKey } from "../fees";
 import { liveExtra } from "../live/hydrate";
 import type { PRow, RRow, SRow } from "@/components/fees/FeesWorkspace";
 import type { BillCandidate } from "@/components/fees/IssueBillDialog";
 
 export function billingProps(account: FeeAccount) {
-  const students: SRow[] = Q.activeStudents().flatMap((s) => {
-    const f = Q.accountSummary(s.id, account); if (!f.enrolled) return [];
+  const now = termKey(Q.SCHOOL.year, Q.SCHOOL.term); const acts = new Set(activitiesOf(account));
+  const students: SRow[] = Q.activeStudents().flatMap((s): SRow[] => {
+    const f = Q.accountSummary(s.id, account);
+    if (!f.enrolled) {
+      // Extracurricular / Extra Classes: also list students enrolled this term whose bill is not issued yet
+      // (awaiting the Owner's approval, or not billed), so every enrolment shows.
+      if (account === "fees") return [];
+      const draft = (liveExtra.data?.drafts ?? []).find((d) => d.studentId === s.id && d.account === account && termKey(d.year, d.term) === now);
+      const enrolled = (liveExtra.data?.enrolments ?? []).filter((e) => e.studentId === s.id && e.term === now && acts.has(e.activity as never)).map((e) => e.activity);
+      if (!draft && enrolled.length === 0) return [];
+      const items = draft ? draft.items : enrolled.map((label) => ({ label, amount: 0 }));
+      return [{ id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, feedingOwed: 0, feedingRate: 0, payer: Q.payerOf(s), billed: 0, paid: 0, balance: 0, dueOn: "", overdue: false,
+        status: draft ? (draft.status === "submitted" ? "Awaiting Approval" : "Draft") : "Not billed", invoice: "", terms: [], items }];
+    }
     const inv = Q.invoicesOf(s.id, account);
     const fd = account === "fees" ? Q.feedingAccount(s.id) : undefined;
     return [{ id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, feedingOwed: Math.max(0, fd?.balance ?? 0), feedingRate: fd?.billed ?? 0, payer: Q.payerOf(s), billed: f.billed, paid: f.paid, balance: f.balance, dueOn: f.dueOn, overdue: f.overdue, status: f.status, invoice: inv[0].no, terms: inv.map((i) => termKey(i.year, i.term)), items: inv.flatMap((i) => i.items) }];

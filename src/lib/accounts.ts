@@ -22,5 +22,6 @@ export const ACCOUNT_ACTIVITIES = { extra: ["Music (Piano)", "STEM"], classes: [
 export const ACTIVITIES = [...ACCOUNT_ACTIVITIES.extra, ...ACCOUNT_ACTIVITIES.classes] as const;
 export type Activity = (typeof ACTIVITIES)[number];
 export const activitiesOf = (account: FeeAccount): Activity[] => (account === "fees" ? [] : [...ACCOUNT_ACTIVITIES[account]]);
+/** What a student of this level can enrol in. Extracurricular: Kindergarten takes Music (Piano) only. Extra Classes: every level. */
 export const activitiesFor = (level: string, account: FeeAccount = "extra"): Activity[] =>
-  activitiesOf(account).filter((a) => level !== "Kindergarten" || a === "Music (Piano)");
+  activitiesOf(account).filter((a) => account !== "extra" || level !== "Kindergarten" || a === "Music (Piano)");

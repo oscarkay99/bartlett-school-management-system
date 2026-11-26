@@ -269,6 +269,7 @@ let s4 = 20261126;
 const rnd4 = () => { s4 |= 0; s4 = (s4 + 0x6d2b79f5) | 0; let t = Math.imul(s4 ^ (s4 >>> 15), 1 | s4); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 let cInv = 0, cRc = 0;
 students.forEach((st) => {
+  if (getLevel(st) === "Kindergarten") return;   // demo data: KG pupils are not in Extra Classes (they can be enrolled)
   const taken = activitiesFor(getLevel(st), "classes"); if (!taken.length) return;
   const items = taken.map((a) => ({ label: a, amount: activityFees[a] })); const total = items.reduce((a, b) => a + b.amount, 0);
   invoices.push({ id: `xcl${++cInv}`, no: `XCL-2627-T1-${pad(cInv, 4)}`, account: "classes", studentId: st.id, term: "Term 1", year: "2026/2027", items, discount: 0, billedOn: "2026-09-08", dueOn: "2026-10-30" });
