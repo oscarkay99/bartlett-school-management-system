@@ -20,10 +20,10 @@ const periodText = (p: Period) => (p === "Term" ? "for the term" : p.toLowerCase
 
 // Feeding paid on its own (daily / weekly / monthly / for the term). Never touches the school fees balance.
 // The period and amount start from the student's payment plan.
-/** Where a payment starts for a student: their plan's period, and one period's amount (the whole balance if termly). */
+/** Where a payment starts for a student: their plan's period and one period's amount (the term's rate if termly). Any amount can be recorded. */
 function startFor(s: FeedingPayee): { period: Period; amount: string } {
-  const period: Period = planFreq(s.freq); const left = Math.max(0, s.rate - s.paid);
-  const suggest = period === "Term" ? left : Math.min(s.perPeriod, left);
+  const period: Period = planFreq(s.freq);
+  const suggest = period === "Term" ? s.rate : s.perPeriod;
   return { period, amount: suggest > 0 ? String(suggest / 100) : "" };
 }
 
@@ -34,17 +34,14 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
   const [sid, setSid] = useState(first?.id ?? ""); const [filter, setFilter] = useState(""); const [amount, setAmount] = useState(first ? startFor(first).amount : ""); const [period, setPeriod] = useState<Period>(first ? startFor(first).period : "Weekly");
   const [method, setMethod] = useState("Mobile Money"); const [ref, setRef] = useState(""); const [date, setDate] = useState(today); const [done, setDone] = useState<string | null>(null);
   const st = students.find((s) => s.id === sid);
-  const owed = st ? Math.max(0, st.rate - st.paid) : 0;
   const minor = Math.round(parseFloat(amount || "0") * 100);
   const pick = (s: FeedingPayee) => { setSid(s.id); setFilter(""); const st0 = startFor(s); setPeriod(st0.period); setAmount(st0.amount); };
   const err = useMemo(() => {
     if (!sid) return "Select a student"; if (!(minor > 0)) return "Enter an amount greater than zero";
-    // Never more than this term's feeding (the database refuses it too); shown only if exceeded.
-    if (minor > owed) return `That is more than this term's feeding (${money(owed)} left) — the payment can't be more.`;
     if (method !== "Cash" && !ref.trim()) return "An external reference is required for non-cash payments";
     if (ref.trim() && usedRefs.includes(ref.trim().toUpperCase())) return "This reference was already recorded — duplicate payment blocked";
     return "";
-  }, [sid, minor, owed, method, ref, usedRefs]);
+  }, [sid, minor, method, ref, usedRefs]);
   const candidates = students.filter((s) => !filter || `${s.name} ${s.adm}`.toLowerCase().includes(filter.trim().toLowerCase())).slice(0, 6);
   return (
     <Modal open onClose={onClose} title={done ? "Feeding payment recorded" : "Record feeding payment"} wide

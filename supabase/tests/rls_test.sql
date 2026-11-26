@@ -217,16 +217,16 @@ insert into public.students (id, admission_no, first_name, last_name, class_id) 
   ('00000000-0000-0000-0000-0000000000f4', 'A4', 'Yaw', 'P3', '00000000-0000-0000-0000-0000000000d1');
 select pg_temp.check('a new KG student is auto-enrolled in Music only', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f3') = array['Music (Piano)']);
 select pg_temp.check('a new Primary student is auto-enrolled in Music, STEM and Extra Classes', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f4') = array['Extra Classes', 'Music (Piano)', 'STEM']);
--- f1 is on half-day feeding (300 this term): more than that can't be paid.
-select pg_temp.check('a feeding payment above what is owed (500 of 300) is refused', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 50000, 'Weekly') $q$) like 'Only GH₵ 300.00 is owed for feeding this term%');
+-- Feeding payments have no "still owed" limit: Esi (f3) can pay feeding even with nothing billed.
+select pg_temp.check('a feeding payment is recorded even when nothing is owed', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f3', 50000, 'Cash', 50000, 'Daily') $q$) is null);
 select pg_temp.check('bursar records a weekly feeding payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 20000, 'Cash', 20000, 'Weekly') $q$) is null);
 select pg_temp.check('a feeding-only payment must be all feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f1', 50000, 'Cash', 100, 'Daily') $q$) is not null);
 select pg_temp.check('the feeding part cannot exceed the payment', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('fees', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 200) $q$) is not null);
 select pg_temp.check('Extracurricular payments cannot carry feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('extra', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 100) $q$) is not null);
 -- Feeding is never on the school fees invoice: f1 owes the half-day rate (300) set above, and paid 200 weekly.
 select pg_temp.check('feeding balance: half-day rate 300 billed, 200 paid weekly, 100 owed', (select billed = 30000 and paid = 20000 and balance = 10000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
--- Everyone on feeding with a rate this term is listed (f1 half-day, f4 Primary); f2 opted out, KG has no rate here.
-select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 2 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
+-- Everyone on feeding with a rate this term is listed (f1 half-day, f4 Primary), plus anyone who paid feeding (f3); f2 opted out.
+select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 3 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
 
 -- ---------- Feeding payment plans ----------
 select pg_temp.check('bursar puts a student on a daily plan, then switches to weekly (history kept)',
