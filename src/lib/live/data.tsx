@@ -4,7 +4,6 @@ import { LIVE } from "./config";
 import { useAuth } from "./auth";
 import { loadSchool } from "./load";
 import { hydrate } from "./hydrate";
-import { db } from "./client";
 
 interface LiveDataState { ready: boolean; error: string; version: number; reload: () => Promise<void> }
 const Ctx = createContext<LiveDataState>({ ready: true, error: "", version: 0, reload: async () => {} });
@@ -19,9 +18,6 @@ export function LiveDataProvider({ children }: { children: ReactNode }) {
   const reload = useCallback(async () => {
     if (!LIVE) return;
     busy.current ??= (async () => {
-      // School fees bill themselves: once the term has started and its fees are set, every active student without an
-      // invoice gets one (idempotent; a no-op most of the time). Then load what this role may see.
-      try { await db().rpc("bill_current_term"); } catch {}
       try { hydrate(await loadSchool()); setState((s) => ({ ready: true, error: "", version: s.version + 1 })); }
       catch (e) { setState((s) => ({ ...s, ready: s.ready, error: e instanceof Error ? e.message : String(e) })); }
       finally { busy.current = null; }
