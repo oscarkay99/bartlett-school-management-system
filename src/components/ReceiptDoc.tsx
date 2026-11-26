@@ -8,7 +8,7 @@ export interface ReceiptData {
   title: string; receiptNo: string; accountLabel: string; period: string;
   payer?: { name: string; phone?: string }; student: { name: string; adm: string; cls: string };
   date: string; method: string; ref?: string; lines: [string, number][]; amount: number;
-  balanceLabel: string; balanceAfter: number; status: string; staff?: string;
+  balanceLabel?: string; balanceAfter?: number; status: string; staff?: string;
 }
 
 /** The official receipt: same A4 frame and layout as the invoice (crest and school details at the top). */
@@ -23,7 +23,7 @@ export function ReceiptDoc({ r }: { r: ReceiptData }) {
       <div className="mt-6 overflow-x-auto"><table className="w-full min-w-[420px] border-collapse">
         <thead><tr className="bg-neutral-100 text-left"><th className="border border-neutral-300 p-2">Description</th><th className="border border-neutral-300 p-2 text-right">Amount (GH₵)</th></tr></thead>
         <tbody>{r.lines.map(([d, a]) => <tr key={d}><td className="border border-neutral-300 p-2">{d}</td><td className="border border-neutral-300 p-2 text-right">{money(a)}</td></tr>)}</tbody>
-        <tfoot>{[["Amount received", money(r.amount)], [r.balanceLabel, money(Math.max(0, r.balanceAfter))]].map(([k, v], i) =>
+        <tfoot>{[["Amount received", money(r.amount)], ...(r.balanceLabel ? [[r.balanceLabel, money(Math.max(0, r.balanceAfter ?? 0))]] : [])].map(([k, v], i) =>
           <tr key={k} className={i === 0 ? "bg-neutral-100 font-bold" : ""}><td className="border border-neutral-300 p-2 text-right">{k}</td><td className="border border-neutral-300 p-2 text-right">{v}</td></tr>)}</tfoot>
       </table></div>
       <p className="mt-6">Status: <b>{r.status}</b>{r.staff ? ` · Received by ${r.staff}` : ""}</p>

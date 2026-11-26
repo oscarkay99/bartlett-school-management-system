@@ -39,8 +39,8 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
   const pick = (s: FeedingPayee) => { setSid(s.id); setFilter(""); const st0 = startFor(s); setPeriod(st0.period); setAmount(st0.amount); };
   const err = useMemo(() => {
     if (!sid) return "Select a student"; if (!(minor > 0)) return "Enter an amount greater than zero";
-    // Never more than this term's feeding still owed (the database refuses it too).
-    if (minor > owed) return owed === 0 ? "Nothing is owed for feeding this term — no payment can be recorded." : `Only ${money(owed)} is owed for feeding — a payment can't be more than that.`;
+    // Never more than this term's feeding (the database refuses it too); shown only if exceeded.
+    if (minor > owed) return `That is more than this term's feeding (${money(owed)} left) — the payment can't be more.`;
     if (method !== "Cash" && !ref.trim()) return "An external reference is required for non-cash payments";
     if (ref.trim() && usedRefs.includes(ref.trim().toUpperCase())) return "This reference was already recorded — duplicate payment blocked";
     return "";
@@ -60,10 +60,10 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
       {done && st ? (
         <div className="space-y-3 text-center"><CheckCircle2 className="mx-auto text-ok" size={40} />
           <p>Feeding receipt <b className="num">{done}</b> issued for <b>{money(minor)}</b> ({periodText(period)}).</p>
-          <p className="text-muted">{st.name}&apos;s feeding still owed is now <b className={owed - minor > 0 ? "text-warn" : "text-ok"}>{money(Math.max(0, owed - minor))}</b>. School fees balance unchanged.</p>
+          <p className="text-muted">School fees balance unchanged.</p>
           <Link target="_blank" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-sm font-medium hover:bg-surface-2"
             href={receiptLink({ title: "Official Receipt — Feeding", receiptNo: done, accountLabel: "Feeding", period: termLabel, payer: st.payer, student: { name: st.name, adm: st.adm, cls: st.cls },
-              date, method, ref: ref.trim() || undefined, lines: [[`Feeding payment (${periodText(period)})`, minor]], amount: minor, balanceLabel: "Feeding still owed", balanceAfter: owed - minor, status: "Confirmed" })}>
+              date, method, ref: ref.trim() || undefined, lines: [[`Feeding payment (${periodText(period)})`, minor]], amount: minor, status: "Confirmed" })}>
             <Printer size={14} />Print receipt</Link>
           {!LIVE && <p className="text-xs text-muted">Front-end preview — the ledger and dashboards update once the backend posts this transaction.</p>}</div>
       ) : (
@@ -72,14 +72,12 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
             {!st && filter && candidates.length === 0 && <p className="mt-1 text-sm text-muted">No student matches &ldquo;{filter}&rdquo;.</p>}
             {!st && filter && <ul className="mt-1 rounded-lg border border-line">{candidates.map((s) => <li key={s.id}><button className="flex w-full justify-between px-3 py-2 text-left hover:bg-surface-2" onClick={() => pick(s)}><span>{s.name} <span className="text-xs text-muted">{s.cls} · {s.adm}</span></span><span className="text-xs text-muted">{planLabel(s.freq)}</span></button></li>)}</ul>}</div>
           <p className="sm:col-span-2 -mb-1 text-xs text-muted">Feeding paid on its own. It is not part of school fees and does not change the school fees balance.</p>
-          {st && <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 p-3 text-sm"><span><b>{st.name}</b> · {st.cls} · Plan: <b>{planLabel(st.freq)}</b>{st.perPeriod > 0 && ` (${money(st.perPeriod)} per period)`}</span><span>Feeding still owed <b className="num text-danger">{money(owed)}</b></span></div>}
-          <Field label="Amount (GH₵) *" hint={st ? (owed > 0 ? `At most ${money(owed)} (feeding still owed)` : "Nothing is owed") : undefined}><div className="flex gap-2"><input className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" />
-            {st && owed > 0 && <Button type="button" size="sm" onClick={() => setAmount(String(owed / 100))}>Pay all</Button>}</div></Field>
+          {st && <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 p-3 text-sm"><span><b>{st.name}</b> · {st.cls} · Plan: <b>{planLabel(st.freq)}</b>{st.perPeriod > 0 && ` (${money(st.perPeriod)} per period)`}</span></div>}
+          <Field label="Amount (GH₵) *"><div className="flex gap-2"><input className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" /></div></Field>
           <Field label="Paid for"><select className={inputClass} value={period} onChange={(e) => setPeriod(e.target.value as Period)}>{PERIODS.map((p) => <option key={p} value={p}>{p === "Term" ? "The term" : `One ${p === "Daily" ? "day" : p === "Weekly" ? "week" : "month"}`}</option>)}</select></Field>
           <Field label="Payment method *"><select className={inputClass} value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
           <Field label="External reference" hint="Momo transaction ID, bank ref or cheque no."><input className={inputClass} value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
           <Field label="Payment date"><input type="date" className={inputClass} value={date} max={today} onChange={(e) => setDate(e.target.value)} /></Field>
-          {st && minor > 0 && <div className="flex items-end justify-between rounded-lg border border-line p-3 text-sm"><span>Feeding still owed after</span><b className="num">{money(Math.max(0, owed - minor))}</b></div>}
           {err && sid && minor > 0 && <p role="alert" className="sm:col-span-2 text-sm text-danger">{err}</p>}
           {saveErr && <p role="alert" className="sm:col-span-2 rounded-lg border border-danger/30 bg-danger/8 px-3 py-2 text-sm text-danger">Not saved: {saveErr}</p>}
         </div>)}

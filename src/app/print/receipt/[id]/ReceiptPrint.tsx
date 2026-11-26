@@ -18,5 +18,5 @@ export function ReceiptPrint({ id }: { id: string }) {
   return <ReceiptDoc r={{ title: sep ? "Official Receipt — Feeding" : A.receiptTitle, receiptNo: p.receiptNo, accountLabel: A.label, period: `${Q.SCHOOL.term}, ${Q.SCHOOL.year}`,
     payer: g ? { name: `${g.title} ${g.name}`, phone: g.phone } : undefined, student: { name: Q.fullName(s), adm: s.admissionNo, cls: Q.getClass(s.classId).name },
     date: p.date, method: p.method, ref: p.ref, lines, amount: p.amount,
-    balanceLabel: sep ? "Feeding still owed" : `${A.label} balance after this payment`, balanceAfter: sep ? Q.feedingAccount(s.id).balance : f.balance, status: p.status, staff: p.staff }} />;
+    balanceLabel: sep ? undefined : `${A.label} balance after this payment`, balanceAfter: sep ? undefined : f.balance, status: p.status, staff: p.staff }} />;
 }
