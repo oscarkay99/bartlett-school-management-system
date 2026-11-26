@@ -6,16 +6,15 @@ import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { fmtDateLong } from "@/lib/utils";
 import { ACCOUNTS } from "@/lib/accounts";
-import { NOT_YET_BILLED } from "@/lib/class-invoices";
+import { schoolFeeRows } from "@/lib/class-invoices";
 
 export function InvoicePrint({ id }: { id: string }) {
   useLiveData(); // re-render with fresh data after each save (live site)
   const i = Q.invoices.find((x) => x.id === id || x.no === id); if (!i) return <NotFound />;
   const s = Q.getStudent(i.studentId)!; const f = Q.accountSummary(s.id, i.account); const A = ACCOUNTS[i.account]; const g = Q.getGuardian(s.guardians[0].guardianId)!;
-  const gross = i.items.reduce((a, b) => a + b.amount, 0);
-  // Levies the school doesn't charge yet still appear on the school fees invoice, as "—" (after Books).
-  const rows = [...i.items];
-  if (i.account === "fees") for (const label of NOT_YET_BILLED) if (!rows.some((r) => r.label === label)) rows.splice(Math.min(2, rows.length), 0, { label, amount: 0 });
+  // School fees: always Tuition, Books, PTA, ICT & Development Levy (GH₵ 0 shows as "—"), never Feeding.
+  const rows = i.account === "fees" ? schoolFeeRows(i.items) : [...i.items];
+  const gross = rows.reduce((a, b) => a + b.amount, 0);
   return (
     <PrintFrame title={A.invoiceTitle}>
       <div className="mt-4 grid grid-cols-2 gap-6"><div><div className="text-[10px] uppercase text-neutral-500">Billed to</div><b>{g.title} {g.name}</b><div>{g.phone}</div><div className="mt-2 text-[10px] uppercase text-neutral-500">Student</div><b>{Q.fullName(s)}</b><div>{s.admissionNo} · {Q.getClass(s.classId).name}</div></div>

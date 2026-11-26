@@ -208,6 +208,8 @@ payments.push({ id: `p${++pay}`, receiptNo: `RCT-${pad(++rc, 5)}`, account: "fee
 export const feedingPlans: FeedingPlan[] = [];
 /** Per-student feeding changes (different rate / not on feeding). Demo: none (kept in the browser); live: from the database. */
 export const feedingExceptions: FeedingException[] = [];
+/** Attendance marks (live: loaded from the database; the demo uses made-up figures instead). */
+export const attendanceRecords: { studentId: string; date: string; status: string }[] = [];
 feedingPlans.push({ studentId: ama.id, term: "2026/2027|Term 1", frequency: "Monthly", from: "2026-09-07", note: "Pays feeding monthly in cash" });
 {
   const T1 = { start: "2026-09-07", end: "2026-12-18" };

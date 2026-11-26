@@ -200,10 +200,16 @@ export function gradeDistribution() {
 }
 // deterministic per-student attendance
 export function studentAttendance(id: string) {
+  // Live: from the registers taken this term (present + late count as attended). Demo: made-up figures.
+  if (LIVE) {
+    const mine = D.attendanceRecords.filter((a) => a.studentId === id && (!SCHOOL.termStart || a.date >= SCHOOL.termStart));
+    const present = mine.filter((a) => a.status === "Present").length, absent = mine.filter((a) => a.status === "Absent").length, late = mine.filter((a) => a.status === "Late").length;
+    const total = mine.length; return { present, absent, late, total, rate: total ? Math.round(((present + late) / total) * 1000) / 10 : 0 };
+  }
   const n = Number(id.slice(1)); const present = 38 + (n * 7) % 5; const absent = (n * 3) % 4; const late = (n * 5) % 3;
   return { present, absent, late, total: present + absent + late, rate: Math.round((present / (present + absent + late)) * 1000) / 10 };
 }
-export const avgAttendance = () => Math.round((D.attendanceTrend.reduce((a, b) => a + b.rate, 0) / D.attendanceTrend.length) * 10) / 10;
+export const avgAttendance = () => (D.attendanceTrend.length ? Math.round((D.attendanceTrend.reduce((a, b) => a + b.rate, 0) / D.attendanceTrend.length) * 10) / 10 : 0);
 
 // ---- Inventory ----
 export const stockValue = () => inventory.reduce((a, i) => a + i.onHand * i.cost, 0);

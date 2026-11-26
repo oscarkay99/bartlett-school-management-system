@@ -31,14 +31,24 @@ export const NOT_YET_BILLED = ["ICT & Development Levy"];
 export const linesTotal = (lines: InvoiceLine[]) => lines.reduce((a, l) => a + (l.amount || 0), 0);
 export const invoiceTotal = (inv: ClassInvoice) => linesTotal(inv.lines);
 
+/** The lines every school fees invoice shows, in this order (GH₵ 0 prints as "—"). Feeding is never one of them. */
+export const SCHOOL_FEE_LINES = ["Tuition", "Books", "PTA", "ICT & Development Levy"];
+
+/** What a school fees invoice prints: the four standard lines in order (0 if the invoice has none), then any other
+ *  fee line the school added; never Feeding (paid separately in the Feeding module). */
+export function schoolFeeRows<T extends { label: string; amount: number }>(items: T[]): { label: string; amount: number }[] {
+  const amount = (label: string) => items.filter((i) => i.label === label).reduce((a, i) => a + i.amount, 0);
+  return [...SCHOOL_FEE_LINES.map((label) => ({ label, amount: amount(label) })),
+    ...items.filter((i) => !SCHOOL_FEE_LINES.includes(i.label) && i.label !== "Feeding").map((i) => ({ label: i.label, amount: i.amount }))];
+}
+
 /**
- * School fees invoice lines for a class: its fee lines in order, with the not-yet-billed levies at 0
- * (kept on the invoice so parents see them as "—"). Feeding is not on the school fees invoice.
+ * School fees invoice lines for a class (Invoices page): Tuition, Books, PTA, ICT & Development Levy, then any other
+ * fee line; the not-yet-billed levies at 0 (parents see them as "—"). Never feeding.
  */
 export function mainLines(fees: InvoiceLine[]): InvoiceLine[] {
-  const lines = fees.map((l) => (NOT_YET_BILLED.includes(l.description) ? { ...l, amount: 0 } : l));
-  for (const d of NOT_YET_BILLED) if (!lines.some((l) => l.description === d)) lines.splice(Math.min(2, lines.length), 0, { description: d, amount: 0 });
-  return lines;
+  return schoolFeeRows(fees.map((l) => ({ label: l.description, amount: NOT_YET_BILLED.includes(l.description) ? 0 : l.amount })))
+    .map((r) => ({ description: r.label, amount: r.amount }));
 }
 
 const isLine = (l: unknown): l is InvoiceLine => !!l && typeof (l as InvoiceLine).description === "string" && Number.isInteger((l as InvoiceLine).amount) && (l as InvoiceLine).amount >= 0;
