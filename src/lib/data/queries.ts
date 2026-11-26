@@ -90,15 +90,33 @@ export const discountLabel = (studentId: string) => { const s = getStudent(stude
 export const totalOwed = (studentId: string) => Math.max(0, accountSummary(studentId, "fees").balance);
 
 // Chronological, append-only ledger for one account with running balance.
-export function accountLedger(studentId: string, account: FeeAccount) {
-  const inv = invoicesOf(studentId, account); const pays = paymentsOf(studentId, account);
-  const rows = [
-    ...inv.map((i) => ({ date: i.billedOn, ref: i.no, desc: `${ACCOUNTS[account].label} invoice — ${i.term} ${i.year}`, debit: i.items.reduce((a, b) => a + b.amount, 0), credit: 0 })),
-    ...inv.filter((i) => i.discount > 0).map((i) => ({ date: i.billedOn, ref: i.no, desc: discountLabel(studentId), debit: 0, credit: i.discount })),
-    ...pays.filter((p) => p.status === "Confirmed").map((p) => ({ date: p.date, ref: p.receiptNo, desc: `Payment — ${p.method} (${p.ref})`, debit: 0, credit: p.amount })),
-    ...pays.filter((p) => p.status === "Reversed").flatMap((p) => [{ date: p.date, ref: p.receiptNo, desc: `Payment — ${p.method} (${p.ref})`, debit: 0, credit: p.amount }, { date: p.date, ref: `REV-${p.receiptNo}`, desc: `Reversal of ${p.receiptNo}: ${p.note ?? ""}`, debit: p.amount, credit: 0 }]),
-  ].sort((a, b) => a.date.localeCompare(b.date) || a.debit - b.debit);
-  let run = 0; return rows.map((l) => ({ ...l, bal: (run += l.debit - l.credit) }));
+export interface LedgerRow { date: string; ref: string; desc: string; debit: number; credit: number; bal: number }
+type LedgerEntry = Omit<LedgerRow, "bal"> & { rank: number; order: string };
+/** Same-day entries in the order they happen: the charge first, then payments by receipt number, each reversal right
+ *  after the payment it reverses. Running balance: + owed, − in credit. */
+function runLedger(rows: LedgerEntry[]): LedgerRow[] {
+  rows.sort((a, b) => a.date.localeCompare(b.date) || a.rank - b.rank || a.order.localeCompare(b.order));
+  let run = 0; return rows.map(({ rank, order, ...l }) => { void rank; void order; return { ...l, bal: (run += l.debit - l.credit) }; });
+}
+const paymentEntries = (pays: Payment[]): LedgerEntry[] => pays.filter((p) => p.status !== "Pending").flatMap((p) => [
+  { date: p.date, ref: p.receiptNo, desc: `Payment — ${p.method}${p.ref ? ` (${p.ref})` : ""}`, debit: 0, credit: p.amount, rank: 2, order: `${p.receiptNo}|0` },
+  ...(p.status === "Reversed" ? [{ date: p.date, ref: `REV-${p.receiptNo}`, desc: `Reversal of ${p.receiptNo}${p.note ? `: ${p.note}` : ""}`, debit: p.amount, credit: 0, rank: 2, order: `${p.receiptNo}|1` }] : []),
+]);
+export function accountLedger(studentId: string, account: FeeAccount): LedgerRow[] {
+  const inv = invoicesOf(studentId, account);
+  return runLedger([
+    ...inv.map((i) => ({ date: i.billedOn, ref: i.no, desc: `${ACCOUNTS[account].label} invoice — ${i.term} ${i.year}`, debit: i.items.reduce((a, b) => a + b.amount, 0), credit: 0, rank: 0, order: i.no })),
+    ...inv.filter((i) => i.discount > 0).map((i) => ({ date: i.billedOn, ref: i.no, desc: discountLabel(studentId), debit: 0, credit: i.discount, rank: 1, order: i.no })),
+    ...paymentEntries(paymentsOf(studentId, account)),
+  ]);
+}
+/** Feeding ledger for this term: the term's feeding charge, then feeding payments (and reversals). */
+export function feedingLedger(studentId: string): LedgerRow[] {
+  const fa = feedingAccount(studentId);
+  return runLedger([
+    ...(fa.billed > 0 ? [{ date: SCHOOL.termStart || TODAY, ref: `FEEDING ${SCHOOL.term}`, desc: `Feeding — ${SCHOOL.term} ${SCHOOL.year}`, debit: fa.billed, credit: 0, rank: 0, order: "" }] : []),
+    ...paymentEntries(fa.payments.map((p) => ({ ...p, amount: p.feeding ?? p.amount }))),
+  ]);
 }
 
 export const activeStudents = () => students.filter((s) => s.status === "Active");

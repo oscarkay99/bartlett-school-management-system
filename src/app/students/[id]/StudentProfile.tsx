@@ -13,7 +13,7 @@ import { RecordPaymentButton } from "@/components/students/ProfileActions";
 import { MedicalGate } from "@/components/students/MedicalGate";
 import { StudentRecordActions } from "@/components/RecordActions";
 import { GuardiansPanel } from "@/components/students/GuardiansPanel";
-import { StudentFeeding } from "@/components/feeding/StudentFeeding";
+import { FeedingPlanLabel, RecordFeedingPaymentButton } from "@/components/feeding/StudentFeeding";
 import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "@/lib/accounts";
@@ -62,9 +62,7 @@ export function StudentProfile({ id }: { id: string }) {
         <div className="border-t border-line px-4 py-3 text-sm">Average: <b>{Math.round(grades.reduce((a, g) => a + g.total, 0) / Math.max(1, grades.length))}%</b></div></Card>) },
     ...accts.filter((x) => x.id === "fees").map(({ id: acc, a, f: af }) => ({ id: acc, label: a.label, money: true, badge: af.balance > 0 ? "Owing" : undefined, content: <AccountPanel studentId={s.id} account={acc} payStudent={payStudentFor(acc)} usedRefs={usedRefs} /> })),
     // Feeding is billed separately from school fees; this tab shows the student's feeding for the term and what has been paid.
-    { id: "feeding", label: "Feeding", money: true, content: <StudentFeeding student={{ id: s.id, name: Q.fullName(s), classId: s.classId, cls: cls.name }}
-      history={Q.invoicesOf(s.id, "fees").flatMap((i) => { const l = i.items.find((x) => x.label === "Feeding"); return l ? [{ invoice: i.no, term: `${i.term} ${i.year}`, amount: l.amount }] : []; })}
-      today={Q.TODAY} dueOn={Q.invoicesOf(s.id, "fees")[0]?.dueOn} paid={Q.feedingAccount(s.id).paid} payments={Q.feedingAccount(s.id).payments.filter((p) => p.status !== "Reversed").map((p) => ({ id: p.id, receipt: p.receiptNo, date: p.date, feeding: p.feeding ?? 0, how: p.feedingPeriod ?? "With school fees", status: p.status }))} /> },
+    { id: "feeding", label: "Feeding", money: true, badge: Q.feedingAccount(s.id).balance > 0 ? "Owing" : undefined, content: <FeedingPanel studentId={s.id} usedRefs={usedRefs} /> },
     ...accts.filter((x) => x.id !== "fees").map(({ id: acc, a, f: af }) => ({ id: acc, label: a.label, money: true, badge: af.balance > 0 ? "Owing" : undefined, content: <AccountPanel studentId={s.id} account={acc} payStudent={payStudentFor(acc)} usedRefs={usedRefs} /> })),
     { id: "attendance", label: "Attendance", content: <Card><div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">{[["Present", att.present], ["Absent", att.absent], ["Late", att.late], ["Rate", `${att.rate}%`]].map(([k, v]) => <div key={k}><div className="text-xs text-muted">{k}</div><div className="num text-2xl font-semibold">{v}</div></div>)}</div></Card> },
     { id: "inventory", label: "Items Issued", badge: String(issues.length), content: (
@@ -115,22 +113,46 @@ export function StudentProfile({ id }: { id: string }) {
 }
 
 // One billing account for this student: summary, ledger, invoices and receipts. Each account is settled separately.
-function AccountPanel({ studentId, account, payStudent, usedRefs }: { studentId: string; account: FeeAccount; payStudent: React.ComponentProps<typeof RecordPaymentButton>["student"]; usedRefs: string[] }) {
-  const a = ACCOUNTS[account]; const f = Q.accountSummary(studentId, account);
-  const inv = Q.invoicesOf(studentId, account); const pays = Q.paymentsOf(studentId, account).sort((x, y) => y.date.localeCompare(x.date));
-  const ledger = Q.accountLedger(studentId, account);
-  if (!f.enrolled) return (
-    <Card className="p-6 text-center"><p className="font-medium">Not billed for {a.label.toLowerCase()} this term.</p>
-      <p className="mt-1 text-sm text-muted">Enrol the student in an activity from the <Link className="text-info" href={a.href}>{a.label}</Link> page to issue a bill.</p></Card>);
+/** One layout for every money tab (School Fees, Feeding, Extracurricular, Extra Classes): the four figures, status and
+ *  Record payment; the ledger; what was billed; payments & receipts. */
+function MoneyPanel({ label, sum, action, ledger, billedCard, pays }: { label: string; sum: { billed: number; discount: number; paid: number; balance: number; status: string };
+  action: React.ReactNode; ledger: Q.LedgerRow[]; billedCard: React.ReactNode; pays: { id: string; receiptNo: string; status: string; method: string; date: string; ref: string; staff: string; amount: number }[] }) {
   return (
     <div className="space-y-4">
-      <Card><div className="flex flex-wrap items-center justify-between gap-4 p-4"><div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">{[["Billed", money(f.billed)], ["Discounts", money(f.discount)], ["Paid", money(f.paid)], ["Outstanding", money(Math.max(0, f.balance))]].map(([k, v], i) => <div key={k}><div className="text-xs text-muted">{k}</div><div className={`num text-xl font-semibold ${i === 3 && f.balance > 0 ? "text-danger" : ""}`}>{v}</div></div>)}</div>
-        <div className="flex items-center gap-2"><StatusBadge status={f.status} /><RecordPaymentButton size="sm" account={account} student={payStudent} usedRefs={usedRefs} /></div></div></Card>
-      <Card><CardHeader title={`${a.label} ledger`} sub="Append-only. Corrections appear as reversals, never as edits." />
+      <Card><div className="flex flex-wrap items-center justify-between gap-4 p-4"><div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">{[["Billed", money(sum.billed)], ["Discounts", money(sum.discount)], ["Paid", money(sum.paid)], ["Outstanding", money(Math.max(0, sum.balance))]].map(([k, v], i) => <div key={k}><div className="text-xs text-muted">{k}</div><div className={`num text-xl font-semibold ${i === 3 && sum.balance > 0 ? "text-danger" : ""}`}>{v}</div></div>)}</div>
+        <div className="flex items-center gap-2"><StatusBadge status={sum.status} />{action}</div></div></Card>
+      <Card><CardHeader title={`${label} ledger`} sub="Append-only. Corrections appear as reversals, never as edits." />
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Date</th><th className="text-left">Reference</th><th className="text-left">Description</th><th className="px-3 text-right">Debit</th><th className="px-3 text-right">Credit</th><th className="px-4 text-right">Balance</th></tr></thead>
-          <tbody className="divide-y divide-line">{ledger.map((l, i) => <tr key={i}><td className="px-4 py-2.5 whitespace-nowrap">{fmtDate(l.date)}</td><td className="num">{l.ref}</td><td>{l.desc}</td><td className="num px-3 text-right">{l.debit ? money(l.debit) : ""}</td><td className="num px-3 text-right text-ok">{l.credit ? money(l.credit) : ""}</td><td className="num px-4 text-right font-medium">{money(l.bal)}</td></tr>)}</tbody></table></div></Card>
-      <Card><CardHeader title="Invoices" />{inv.map((i) => { const net = i.items.reduce((x, y) => x + y.amount, 0) - i.discount; return <div key={i.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline gap-x-2"><b className="num">{i.no}</b><span className="text-xs text-muted">{i.term} {i.year}</span></div><div className="text-xs text-muted">{[...i.items.map((x) => `${x.label} ${money(x.amount)}`), ...(i.discount ? [`${Q.discountLabel(studentId)} −${money(i.discount)}`] : [])].join(" · ")}</div></div><div className="flex items-center gap-3"><div className="text-right"><div className="text-xs text-muted">Total</div><b className="num">{money(net)}</b></div><LinkButton size="sm" href={printHref("invoice", i.id)}><FileText size={14} />Invoice PDF</LinkButton></div></div>; })}</Card>
-      <Card><CardHeader title="Payments & receipts" />{pays.length === 0 ? <p className="px-4 pb-4 text-muted">No {a.label.toLowerCase()} payments recorded yet.</p> : pays.map((p) => <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b className="num">{p.receiptNo}</b> <StatusBadge status={p.status} /><div className="text-xs text-muted">{p.method} · {fmtDate(p.date)} · {p.ref} · received by {p.staff}</div></div><div className="flex items-center gap-3"><b className="num">{money(p.amount)}</b>{p.status === "Confirmed" && <LinkButton size="sm" href={printHref("receipt", p.id)}>Receipt</LinkButton>}</div></div>)}</Card>
+          <tbody className="divide-y divide-line">{ledger.length === 0 ? <tr><td colSpan={6} className="px-4 py-3 text-muted">Nothing yet.</td></tr> : ledger.map((l, i) => <tr key={i}><td className="px-4 py-2.5 whitespace-nowrap">{fmtDate(l.date)}</td><td className="num">{l.ref}</td><td>{l.desc}</td><td className="num px-3 text-right">{l.debit ? money(l.debit) : ""}</td><td className="num px-3 text-right text-ok">{l.credit ? money(l.credit) : ""}</td><td className="num px-4 text-right font-medium">{money(l.bal)}</td></tr>)}</tbody></table></div></Card>
+      {billedCard}
+      <Card><CardHeader title="Payments & receipts" />{pays.length === 0 ? <p className="px-4 pb-4 text-muted">No {label.toLowerCase()} payments recorded yet.</p> : pays.map((p) => <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b className="num">{p.receiptNo}</b> <StatusBadge status={p.status} /><div className="text-xs text-muted">{p.method} · {fmtDate(p.date)}{p.ref ? ` · ${p.ref}` : ""}{p.staff ? ` · received by ${p.staff}` : ""}</div></div><div className="flex items-center gap-3"><b className="num">{money(p.amount)}</b>{p.status === "Confirmed" && <LinkButton size="sm" href={printHref("receipt", p.id)}>Receipt</LinkButton>}</div></div>)}</Card>
     </div>
   );
 }
+
+function AccountPanel({ studentId, account, payStudent, usedRefs }: { studentId: string; account: FeeAccount; payStudent: React.ComponentProps<typeof RecordPaymentButton>["student"]; usedRefs: string[] }) {
+  const a = ACCOUNTS[account]; const f = Q.accountSummary(studentId, account);
+  const inv = Q.invoicesOf(studentId, account); const pays = Q.paymentsOf(studentId, account).sort((x, y) => y.date.localeCompare(x.date));
+  if (!f.enrolled) return (
+    <Card className="p-6 text-center"><p className="font-medium">Not billed for {a.label.toLowerCase()} this term.</p>
+      <p className="mt-1 text-sm text-muted">Enrol the student in an activity from the <Link className="text-info" href={a.href}>{a.label}</Link> page to issue a bill.</p></Card>);
+  return <MoneyPanel label={a.label} sum={f} ledger={Q.accountLedger(studentId, account)} pays={pays}
+    action={<RecordPaymentButton size="sm" account={account} student={payStudent} usedRefs={usedRefs} />}
+    billedCard={<Card><CardHeader title="Invoices" />{inv.map((i) => { const net = i.items.reduce((x, y) => x + y.amount, 0) - i.discount; return <div key={i.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline gap-x-2"><b className="num">{i.no}</b><span className="text-xs text-muted">{i.term} {i.year}</span></div><div className="text-xs text-muted">{[...i.items.map((x) => `${x.label} ${money(x.amount)}`), ...(i.discount ? [`${Q.discountLabel(studentId)} −${money(i.discount)}`] : [])].join(" · ")}</div></div><div className="flex items-center gap-3"><div className="text-right"><div className="text-xs text-muted">Total</div><b className="num">{money(net)}</b></div><LinkButton size="sm" href={printHref("invoice", i.id)}><FileText size={14} />Invoice PDF</LinkButton></div></div>; })}</Card>} />;
+}
+
+/** Feeding, in the same layout: billed = this term's feeding (never on the school fees invoice). */
+function FeedingPanel({ studentId, usedRefs }: { studentId: string; usedRefs: string[] }) {
+  const fa = Q.feedingAccount(studentId); const st = Q.getStudent(studentId)!;
+  if (fa.billed === 0 && fa.payments.length === 0) return (
+    <Card className="p-6 text-center"><p className="font-medium">Not on feeding this term.</p>
+      <p className="mt-1 text-sm text-muted">Change this in the <Link className="text-info" href="/feeding?tab=students">Feeding</Link> module.</p></Card>);
+  const status = fa.balance <= 0 ? "Paid in Full" : fa.paid > 0 ? "Partially Paid" : "Outstanding";
+  const pays = [...fa.payments].sort((x, y) => y.date.localeCompare(x.date)).map((p) => ({ ...p, amount: p.feeding ?? p.amount }));
+  return <MoneyPanel label="Feeding" sum={{ billed: fa.billed, discount: 0, paid: fa.paid, balance: fa.balance, status }} ledger={Q.feedingLedger(studentId)} pays={pays}
+    action={<RecordFeedingPaymentButton studentId={studentId} usedRefs={usedRefs} />}
+    billedCard={<Card><CardHeader title="Feeding this term" sub="Paid separately from school fees, never on the school fees invoice." action={<Link className="text-sm font-medium text-info hover:underline" href="/feeding?tab=students">Change plan or amount →</Link>} />
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b>{Q.SCHOOL.term} {Q.SCHOOL.year}</b><div className="text-xs text-muted">{Q.getClass(st.classId)?.name} · <FeedingPlanLabel studentId={studentId} /></div></div>
+        <div className="text-right"><div className="text-xs text-muted">Feeding</div><b className="num">{money(fa.billed)}</b></div></div></Card>} />;
+}
+

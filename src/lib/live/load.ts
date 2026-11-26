@@ -97,7 +97,7 @@ export async function loadSchool(): Promise<LiveData> {
   const drafts: DraftInvoice[] = invRows.filter((r) => r.status === "draft" || r.status === "submitted").map((r) => { const t = termById[s(r.term_id)];
     return { id: s(r.id), no: s(r.no) || undefined, account: s(r.account) as FeeAccount, studentId: s(r.student_id), term: t?.term ?? "", year: t?.year ?? "", status: r.status as "draft" | "submitted", items: lines(r), returnNote: s(r.return_note) || undefined }; });
   const payments: T.Payment[] = payRows.map((p) => ({ id: s(p.id), receiptNo: s(p.receipt_no), account: s(p.account) as FeeAccount, studentId: s(p.student_id), guardianId: s(p.guardian_id) || undefined,
-    amount: n(p.amount), method: s(p.method) as T.PayMethod, date: s(p.paid_on), ref: s(p.reference), status: cap(s(p.status)) as T.Payment["status"], staff: who(p.received_by), note: s(p.note) || undefined,
+    amount: n(p.amount), method: s(p.method) as T.PayMethod, date: s(p.paid_on), ref: s(p.reference), status: cap(s(p.status)) as T.Payment["status"], staff: who(p.received_by), note: s(p.reversal_reason) || s(p.note) || undefined,
     feeding: n(p.feeding_amount) || undefined, feedingPeriod: (s(p.feeding_period) || undefined) as T.Payment["feedingPeriod"] }));
 
   // Fee schedule per term: level lines + feeding, class exceptions, activity prices.
