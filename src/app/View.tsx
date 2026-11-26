@@ -2,7 +2,8 @@
 import { studentHref } from "@/lib/links";
 import { useLiveData } from "@/lib/live/data";
 import Link from "next/link";
-import { AlertTriangle, Banknote, Boxes, CalendarCheck, ClipboardCheck, GraduationCap, Landmark, PackageX, Percent, Receipt, UserCheck, Users, UsersRound, Wallet, Clock } from "lucide-react";
+import { AlertTriangle, Banknote, Boxes, CalendarCheck, ClipboardCheck, GraduationCap, Landmark, PackageX, Percent, UserCheck, Users, UsersRound, Wallet, Clock } from "lucide-react";
+import { ReceiptCedi as Receipt } from "@/components/ui/icons";
 import { AlertBanner, Badge, Card, CardHeader, Kpi, LinkButton, PageHeader, Avatar, StatusBadge } from "@/components/ui/primitives";
 import { WidgetBoard, type Widget } from "@/components/ui/WidgetBoard";
 import { MoneyGate } from "@/components/shell/AppShell";

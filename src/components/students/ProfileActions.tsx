@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Receipt } from "lucide-react";
+import {  } from "lucide-react";
+import { ReceiptCedi as Receipt } from "@/components/ui/icons";
 import { Button } from "@/components/ui/primitives";
 import { RecordPaymentDialog, type PayStudent } from "@/components/fees/RecordPaymentDialog";
 import { useRole } from "@/components/shell/AppShell";
