@@ -15,6 +15,9 @@ import { planFreq, expectedByToday, feedingStatus, PLAN_FREQUENCIES, periodWord,
 import { useFeedingPlans } from "@/components/shell/FeedingPlansContext";
 import { clampToTerm } from "./PlanDialog";
 import { FeedingPaymentDialog } from "./FeedingPaymentDialog";
+import { FeesWorkspace, type PRow, type RRow, type SRow } from "@/components/fees/FeesWorkspace";
+import { useSearchParams } from "next/navigation";
+import * as Q from "@/lib/data/queries";
 import { money } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
@@ -49,40 +52,42 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
   const onFeeding = rows.filter((r) => r.rate > 0).length; const expected = rows.reduce((a, r) => a + r.rate, 0);
   const low = kitchen.filter((k) => k.onHand <= k.reorder);
 
-  const overview = (
-    <div className="space-y-4">
-      {!tf && <AlertBanner tone="warn" icon={AlertTriangle} title={`No fees set for ${term} ${year}`} actions={<Link className="text-sm font-medium text-info hover:underline" href="/settings?tab=fees">Set fees in Settings →</Link>}>The feeding rate per class comes from the fee schedule.</AlertBanner>}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-5">
-        <Kpi label="On feeding" value={`${onFeeding} / ${rows.length}`} icon={Users} hint="Active students on feeding this term (everyone unless marked otherwise)." />
-        <Kpi label="Expected feeding income" value={money(expected)} icon={Wallet} tone="ok" hint="Feeding owed this term by everyone on feeding (not part of school fees)." />
-        <Kpi label="Feeding collected" value={money(paidAll)} icon={Wallet} tone="ok" hint="Feeding paid so far this term: termly, daily, weekly or monthly." />
-        <Kpi label="Behind on plan" value={`${behind.length} · ${money(behind.reduce((a, r) => a + r.plan.behind, 0))}`} icon={Users} tone={behind.length ? "danger" : "ok"} hint="Students who have paid less feeding than their payment plan expects by today." />
-        <Kpi label="Feeding still owed" value={money(owedAll)} icon={AlertTriangle} tone={owedAll ? "danger" : "ok"} hint="Feeding billed minus feeding paid." />
-      </div>
-      <Card><CardHeader title={`Feeding by class — ${term} ${year}`} sub="The feeding rate per class is set in Settings → Fee schedule. Change one student on the Students tab." />
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th><th className="px-3 text-right">Students</th><th className="px-3 text-right">On feeding</th><th className="px-3 text-right">Not on feeding</th><th className="px-3 text-right">Rate</th><th className="px-3 text-right">Expected</th><th className="px-3 text-right">Paid</th><th className="px-4 text-right">Owed</th></tr></thead>
-          <tbody className="divide-y divide-line">{byClass.map((c) => <tr key={c.id}><td className="px-4 py-2.5 font-medium">{c.name}</td><td className="num px-3 text-right">{c.students}</td><td className="num px-3 text-right">{c.on}</td><td className="num px-3 text-right">{c.off || "—"}</td><td className="num px-3 text-right">{money(c.rate)}</td><td className="num px-3 text-right font-medium">{money(c.expected)}</td><td className="num px-3 text-right text-ok">{money(c.paid)}</td><td className={`num px-4 text-right ${c.owed ? "text-danger" : ""}`}>{money(c.owed)}</td></tr>)}</tbody>
-          <tfoot><tr className="border-t-2 border-line font-semibold"><td className="px-4 py-2.5">Total</td><td className="num px-3 text-right">{rows.length}</td><td className="num px-3 text-right">{onFeeding}</td><td className="num px-3 text-right">{rows.length - onFeeding}</td><td /><td className="num px-3 text-right">{money(expected)}</td><td className="num px-3 text-right">{money(paidAll)}</td><td className="num px-4 text-right">{money(owedAll)}</td></tr></tfoot></table></div></Card>
-    </div>
-  );
 
   const canPay = allow("payments", "create");
-  const [payFor, setPayFor] = useState<string | null>(null);
+  const sp = useSearchParams();
+  const [payFor, setPayFor] = useState<string | null>(sp.get("pay") === "1" ? "" : null);
+  // The School Fees page, filled with feeding: billed = each student's feeding this term, paid = feeding payments,
+  // "overdue" = behind on their payment plan.
+  const sRows: SRow[] = rows.filter((r) => r.rate > 0 || r.paid > 0).map((r) => { const balance = r.rate - r.paid;
+    return { id: r.id, name: r.name, adm: r.adm, classId: r.classId, cls: r.cls, feedingOwed: Math.max(0, balance), feedingRate: r.rate, billed: r.rate, paid: r.paid, balance,
+      dueOn: td?.start ?? "", overdue: r.plan.label === "Behind", status: balance <= 0 ? "Paid in Full" : r.paid > 0 ? "Partially Paid" : "Outstanding",
+      invoice: "", terms: [key], items: [{ label: "Feeding", amount: r.rate }], payer: r.payer }; });
+  const pRows: PRow[] = payments.map((x) => { const p = Q.payments.find((y) => y.id === x.id);
+    return { id: x.id, receipt: x.receipt, studentId: x.studentId, student: x.name, classId: x.classId, amount: x.feeding, feeding: x.feeding, feedingPeriod: x.how, method: x.method, date: x.date, ref: p?.ref ?? "", status: x.status, staff: p?.staff ?? "" }; });
+  const reminders: RRow[] = (() => {
+    const by = new Map<string, RRow>();
+    for (const r of sRows.filter((x) => x.balance > 0)) {
+      const st = Q.getStudent(r.id); const link = st?.guardians.find((g) => g.primary) ?? st?.guardians[0]; const g = link ? Q.getGuardian(link.guardianId) : undefined; if (!g) continue;
+      const row = by.get(g.id) ?? { gid: g.id, name: `${g.title} ${g.name}`.trim(), channel: g.preferred, eligible: !!g.consent[g.preferred], reason: g.consent[g.preferred] ? undefined : `No consent for ${g.preferred}`,
+        total: 0, overdue: false, classIds: [], students: [], message: "" };
+      row.total += r.balance; row.overdue ||= r.overdue; row.classIds.push(r.classId); row.students.push({ id: r.id, name: r.name, balance: r.balance }); by.set(g.id, row);
+    }
+    return [...by.values()].map((x) => ({ ...x, message: `Dear ${x.name}, this is a reminder from ${Q.SCHOOL.name}: feeding for ${x.students.map((y) => y.name.split(" ")[0]).join(" and ")} this term — ${money(x.total)} still owed. Thank you.` }));
+  })();
   return (
-    <div className="space-y-4">
-      <FeedingFinder rows={rows} canPay={canPay} canEdit={canEdit} onPay={(id) => setPayFor(id)} termLabel={`${term} ${year}`} />
-      <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-muted">{term} · {year}</span>
-        {canPay && <Button variant="primary" onClick={() => setPayFor("")}><Wallet size={14} />Record feeding payment</Button>}</div>
-      <QueryTabs tabs={[
-        { id: "overview", label: "Dashboard", content: overview },
-        { id: "students", label: "Students", badge: behind.length ? String(behind.length) : undefined, content: <StudentsTab rows={rows} canEdit={canEdit} td={td} today={today} termLabel={`${term} ${year}`} termKey={key} classes={fs.classes}
-          onException={(sid, ex) => feeding.updateException(sid, key, ex)} onPlan={plans.setPlan} /> },
-        { id: "payments", label: "Payments & receipts", content: <PaymentsTab payments={payments} classes={fs.classes} /> },
-        { id: "meals", label: "Meal register", content: <MealsTab byClass={byClass} meals={feeding.meals} canEdit={canMeals} today={today} onSave={feeding.saveMeals} /> },
-        { id: "kitchen", label: "Kitchen stock", badge: low.length ? String(low.length) : undefined, content: <KitchenTab items={kitchen} /> },
-      ].map((t) => ({ ...t, badge: t.badge || undefined }))} />
-      {payFor !== null && canPay && <FeedingPaymentDialog students={rows} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} initial={payFor || undefined} onClose={() => setPayFor(null)} />}
-    </div>
+    <FeesWorkspace account="fees" students={sRows} payments={pRows} reminders={reminders} classes={fs.classes} candidates={[]} usedRefs={usedRefs}
+      initialTab={sp.get("tab") ?? undefined} overdueOnly={sp.get("overdue") === "1"}
+      feeding={{
+        finder: <FeedingFinder rows={rows} canPay={canPay} canEdit={canEdit} onPay={(id) => setPayFor(id)} termLabel={`${term} ${year}`} />,
+        onRecordPay: () => setPayFor(""),
+        dialog: payFor !== null && canPay ? <FeedingPaymentDialog students={rows} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} initial={payFor || undefined} onClose={() => setPayFor(null)} /> : null,
+        tabs: [
+          { id: "students", label: "Students & plans", badge: behind.length ? String(behind.length) : undefined, content: <StudentsTab rows={rows} canEdit={canEdit} td={td} today={today} termLabel={`${term} ${year}`} termKey={key} classes={fs.classes}
+            onException={(sid, ex) => feeding.updateException(sid, key, ex)} onPlan={plans.setPlan} /> },
+          { id: "meals", label: "Meal register", content: <MealsTab byClass={byClass} meals={feeding.meals} canEdit={canMeals} today={today} onSave={feeding.saveMeals} /> },
+          { id: "kitchen", label: "Kitchen stock", badge: low.length ? String(low.length) : undefined, content: <KitchenTab items={kitchen} /> },
+        ],
+      }} />
   );
 }
 

@@ -34,11 +34,15 @@ export interface SRow { id: string; name: string; adm: string; classId: string; 
 export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; amount: number; feeding: number; feedingPeriod?: string; method: string; date: string; ref: string; status: string; staff: string }
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
 const TODAY = Q.TODAY;
+/** Feeding mode of this page: the same layout as School Fees, filled with feeding figures by the Feeding module. */
+export interface FeedingMode { tabs: { id: string; label: string; content: React.ReactNode; badge?: string }[]; finder: React.ReactNode; dialog: React.ReactNode; onRecordPay: () => void }
+const FEEDING_VIEW = { ...ACCOUNTS.fees, label: "Feeding", noun: "feeding", href: "/feeding", nav: "feeding", reminderTemplate: "Feeding Reminder" };
 const daysAgo = (n: number) => { const d = new Date(TODAY + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
 const COST = { SMS: 5, WhatsApp: 12, Email: 0 } as const; // pesewas per message (estimate)
 
-export function FeesWorkspace({ account, students, payments, reminders, classes, candidates, initialTab, openPay, overdueOnly, usedRefs }: { account: FeeAccount; students: SRow[]; payments: PRow[]; reminders: RRow[]; classes: { id: string; name: string }[]; candidates: BillCandidate[]; initialTab?: string; openPay?: boolean; overdueOnly?: boolean; usedRefs: string[] }) {
-  const A = ACCOUNTS[account];
+export function FeesWorkspace({ account, students, payments, reminders, classes, candidates, initialTab, openPay, overdueOnly, usedRefs, feeding }: { account: FeeAccount; students: SRow[]; payments: PRow[]; reminders: RRow[]; classes: { id: string; name: string }[]; candidates: BillCandidate[]; initialTab?: string; openPay?: boolean; overdueOnly?: boolean; usedRefs: string[] ; feeding?: FeedingMode}) {
+  // Feeding mode: the same page, with feeding figures (billed = each student's feeding this term).
+  const A = feeding ? FEEDING_VIEW : ACCOUNTS[account];
   const { ready, money: access, allow } = useRole(); const full = access === "full"; const canPay = allow("payments", "create"); const canBill = allow("invoices", "create");
   const [cls, setCls] = useState(""); const [range, setRange] = useState("term"); const [payOpen, setPayOpen] = useState(!!openPay); const [billOpen, setBillOpen] = useState(false);
   const router = useRouter();
@@ -75,14 +79,14 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
     <div className="space-y-4">
       <AlertBanner tone={overdue > 0 ? "danger" : "ok"} icon={AlertTriangle} title={`Outstanding ${A.label}: ${money(outstanding)} across ${owing.length} students`}
         actions={<><Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding`)}>View Outstanding Students</Button><Button size="sm" variant="primary" onClick={() => router.push(`${A.href}?tab=reminders`)}>Prepare Reminders</Button><Button size="sm" onClick={() => router.push(`${A.href}?tab=outstanding&overdue=1`)}>View Overdue</Button><Button size="sm" onClick={() => exportCsv(owing, account)}><Download size={13} />Export Report</Button></>}>
-        {od.length} balances are overdue ({money(overdue)}). {eligible.length} guardians are eligible for payment reminders.
+        {od.length} {feeding ? "students are behind on their feeding plan" : "balances are overdue"} ({money(overdue)}). {eligible.length} guardians are eligible for payment reminders.
       </AlertBanner>
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-        <Kpi label="Total invoiced" value={moneyShort(billed)} icon={FileText} hint={`Sum of ${A.label} invoices net of discounts for the filtered students.`} />
+        <Kpi label={feeding ? "Total feeding billed" : "Total invoiced"} value={moneyShort(billed)} icon={FileText} hint={feeding ? "Feeding owed this term by everyone on feeding (not part of school fees)." : `Sum of ${A.label} invoices net of discounts for the filtered students.`} />
         <Kpi label="Confirmed collections" value={moneyShort(paid)} icon={Banknote} tone="ok" hint="Confirmed payments only; pending gateway payments excluded." />
-        <Kpi label="Collection rate" value={`${pct(paid, billed)}%`} icon={Percent} tone="info" hint="Confirmed collections ÷ total invoiced." />
+        <Kpi label="Collection rate" value={`${pct(paid, billed)}%`} icon={Percent} tone="info" hint={`Confirmed collections ÷ total ${feeding ? "billed" : "invoiced"}.`} />
         <Kpi label="Expected upcoming" value={moneyShort(upcoming)} icon={CalendarClock} hint="Outstanding balances not yet past their due date." />
-        <Kpi label="Overdue" value={moneyShort(overdue)} icon={ShieldAlert} tone="danger" hint="Outstanding balances past due date." href={`${A.href}?tab=outstanding&overdue=1`} />
+        <Kpi label={feeding ? "Behind on plan" : "Overdue"} value={moneyShort(overdue)} icon={ShieldAlert} tone="danger" hint={feeding ? "Feeding not yet paid that the family's plan expects by today." : "Outstanding balances past due date."} href={`${A.href}?tab=outstanding&overdue=1`} />
         <Kpi label="Collected in period" value={moneyShort(sum(periodFrom))} icon={Wallet} tone="ok" hint="Confirmed payments within the selected period." />
         <Kpi label="Paid in full" value={`${ss.filter((s) => s.balance <= 0).length} / ${ss.length}`} icon={Users} hint={`Students billed for ${A.label} with a zero or credit balance.`} />
         <Kpi label="Unpaid / partial" value={`${ss.filter((s) => s.balance > 0 && s.paid === 0).length} / ${ss.filter((s) => s.balance > 0 && s.paid > 0).length}`} icon={Receipt} hint="Students with no payment / some payment but a balance." />
@@ -103,25 +107,27 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
   type Tab = { id: string; label: string; content: React.ReactNode; badge?: string };
   const tabs = ([
     full && { id: "overview", label: "Dashboard", content: overview },
-    { id: "outstanding", label: "Outstanding", badge: String(owing.length), content: <OutstandingTable rows={ss.filter((s) => s.balance > 0)} overdueOnly={overdueOnly} account={account} showTotals={full} /> },
+    { id: "outstanding", label: "Outstanding", badge: String(owing.length), content: <OutstandingTable rows={ss.filter((s) => s.balance > 0)} overdueOnly={overdueOnly} account={account} showTotals={full} tab={feeding ? "feeding" : account} overdueLabel={feeding ? "Behind on plan only" : undefined} /> },
     { id: "reminders", label: "Reminders", badge: String(eligible.length), content: <Reminders rows={termReminders} /> },
     full && { id: "payments", label: "Payments & receipts", content: <PaymentsTable rows={pp} /> },
-    full && { id: "invoices", label: "Invoices", content: <Invoices students={ss} candidates={candidates.filter((c) => !cls || c.classId === cls)} account={account} canBill={canBill} onIssue={() => setBillOpen(true)} /> },
-    full && { id: breakdown.id, label: breakdown.label, content: breakdown.node },
-    full && account === "fees" && { id: "structures", label: "Fee structures", content: <TermFeeStructure /> },
+    full && !feeding && { id: "invoices", label: "Invoices", content: <Invoices students={ss} candidates={candidates.filter((c) => !cls || c.classId === cls)} account={account} canBill={canBill} onIssue={() => setBillOpen(true)} /> },
+    full && !feeding && { id: breakdown.id, label: breakdown.label, content: breakdown.node },
+    full && !feeding && account === "fees" && { id: "structures", label: "Fee structures", content: <TermFeeStructure /> },
     full && { id: "reconcile", label: "Reconciliation", badge: String(pp.filter((p) => p.status !== "Confirmed").length), content: <Reconcile rows={pp} /> },
+    ...(feeding?.tabs ?? []),
   ] as (Tab | false)[]).filter((t): t is Tab => !!t);
   const start = initialTab && tabs.some((t) => t.id === initialTab) ? initialTab : undefined;
   return (
     <div className="space-y-4">
       {!full && <AlertBanner tone="info" icon={Users} title="Follow-up view">You can see which students owe and send reminders to their parents. Collections and payment records are only visible to the Owner and the Accountant.</AlertBanner>}
-      <StudentFinder account={account} canPay={canPay} usedRefs={usedRefs} />
+      {feeding ? feeding.finder : <StudentFinder account={account} canPay={canPay} usedRefs={usedRefs} />}
       <div className="flex flex-wrap items-center justify-between gap-3">{filters}
-        <div className="flex flex-wrap gap-2">{canBill && account !== "fees" && <Button onClick={() => setBillOpen(true)}><FilePlus2 size={14} />Enrol & bill student</Button>}
-          {canPay && <Button variant="primary" onClick={() => setPayOpen(true)}><Receipt size={14} />Record {A.label.toLowerCase()} payment</Button>}</div></div>
+        <div className="flex flex-wrap gap-2">{canBill && !feeding && account !== "fees" && <Button onClick={() => setBillOpen(true)}><FilePlus2 size={14} />Enrol & bill student</Button>}
+          {canPay && <Button variant="primary" onClick={() => (feeding ? feeding.onRecordPay() : setPayOpen(true))}><Receipt size={14} />Record {A.label.toLowerCase()} payment</Button>}</div></div>
       <Tabs key={access} initial={start} tabs={tabs} />
-      {canPay && <RecordPaymentDialog open={payOpen} onClose={() => setPayOpen(false)} students={payStudents} usedRefs={usedRefs} account={account} />}
-      {canBill && <IssueBillDialog open={billOpen} onClose={() => setBillOpen(false)} account={account} candidates={candidates} />}
+      {feeding?.dialog}
+      {canPay && !feeding && <RecordPaymentDialog open={payOpen} onClose={() => setPayOpen(false)} students={payStudents} usedRefs={usedRefs} account={account} />}
+      {canBill && !feeding && <IssueBillDialog open={billOpen} onClose={() => setBillOpen(false)} account={account} candidates={candidates} />}
     </div>
   );
 }
@@ -131,7 +137,7 @@ function exportCsv(rows: SRow[], account: FeeAccount) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `outstanding-${account}.csv`; a.click();
 }
 
-function OutstandingTable({ rows, overdueOnly, account, showTotals }: { rows: SRow[]; overdueOnly?: boolean; account: FeeAccount; showTotals: boolean }) {
+function OutstandingTable({ rows, overdueOnly, account, showTotals, tab = account, overdueLabel = "Overdue only" }: { rows: SRow[]; overdueOnly?: boolean; account: FeeAccount; showTotals: boolean; tab?: string; overdueLabel?: string }) {
   const [od, setOd] = useState(overdueOnly ? "1" : ""); const r = useRouter();
   const data = rows.filter((x) => !od || x.overdue);
   const cols: Column<SRow>[] = [
@@ -141,8 +147,8 @@ function OutstandingTable({ rows, overdueOnly, account, showTotals }: { rows: SR
     { key: "o", header: "Outstanding", align: "right", sort: (x) => x.balance, render: (x) => <b className="text-danger">{money(x.balance)}</b> },
     { key: "d", header: "Due", sort: (x) => x.dueOn, render: (x) => fmtDate(x.dueOn) }, { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
   ];
-  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.name} ${x.adm}`} onRowClick={(x) => r.push(studentHref(x.id, account))}
-    filters={<Select label="Overdue filter" value={od} onChange={setOd} options={[{ value: "", label: "All outstanding" }, { value: "1", label: "Overdue only" }]} />}
+  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.name} ${x.adm}`} onRowClick={(x) => r.push(studentHref(x.id, tab))}
+    filters={<Select label="Overdue filter" value={od} onChange={setOd} options={[{ value: "", label: "All outstanding" }, { value: "1", label: overdueLabel }]} />}
     toolbar={<Button size="sm" onClick={() => exportCsv(data, account)}><Download size={13} />CSV</Button>} /></Card>;
 }
 
