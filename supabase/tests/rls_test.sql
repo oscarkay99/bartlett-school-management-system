@@ -114,7 +114,17 @@ select pg_temp.check('issued invoice lines are locked', pg_temp.err(:OWNER, $q$ 
 select pg_temp.check('issued invoice cannot be deleted', pg_temp.err(:OWNER, $q$ delete from public.invoices where id = '00000000-0000-0000-0000-000000000101' $q$) is not null);
 select pg_temp.check('a second live invoice for the same student/term/account is refused',
   pg_temp.err(:BURSAR, $q$ insert into public.invoices (account, student_id, term_id) values ('fees', '00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2') $q$) is not null);
-select pg_temp.check('fee schedule is locked once the term is billed', pg_temp.err(:OWNER, $q$ update public.term_fee_items set amount = 1 $q$) is not null);
+-- (inside a savepoint that is undone, so the changed fees don't affect the checks that follow)
+savepoint fee_change;
+select (pg_temp.n(:BURSAR, $q$ update public.term_fee_items set amount = 1 returning 1 $q$) <= 0
+  and pg_temp.err(:OWNER, $q$ update public.term_fee_items set amount = amount + 10000 where label = 'Tuition' $q$) is null) as fee_ok \gset
+select (pg_temp.err(:BURSAR, $q$ select public.amend_term_invoices('00000000-0000-0000-0000-0000000000c2') $q$) is not null
+  and pg_temp.err(:OWNER, $q$ select public.amend_term_invoices('00000000-0000-0000-0000-0000000000c2') $q$) is null) as amend_ran \gset
+-- (a separate statement, so it sees what the function changed)
+select (:'amend_ran'::boolean and (select app.invoice_total('00000000-0000-0000-0000-000000000101')) = (select sum(amount) from public.term_fee_items where term_id = '00000000-0000-0000-0000-0000000000c2' and level = 'Primary' and label <> 'Feeding')) as amend_ok \gset
+rollback to savepoint fee_change;
+select pg_temp.check('once the term is billed, only the Owner can change its fees', :'fee_ok'::boolean);
+select pg_temp.check('…and the term''s issued invoices follow the new fees (Owner only)', :'amend_ok'::boolean);
 select pg_temp.check('a draft invoice can be deleted (with its lines)',
   pg_temp.err(:BURSAR, $q$ insert into public.invoices (id, account, student_id, term_id) values ('00000000-0000-0000-0000-000000000102', 'extra', '00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2') $q$) is null
   and pg_temp.err(:BURSAR, $q$ insert into public.invoice_lines (invoice_id, label, amount) values ('00000000-0000-0000-0000-000000000102', 'STEM', 35000) $q$) is null

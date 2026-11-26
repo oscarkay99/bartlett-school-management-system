@@ -60,6 +60,8 @@ export async function saveTermFees(tf: { year: string; term: string; levels: Rec
   for (const [t, rows] of [["term_fee_levels", lv], ["term_fee_items", items], ["class_fee_overrides", ov], ["activity_prices", ap]] as const) {
     if (rows.length) { const { error } = await db().from(t).insert(rows as never); if (error) return err(error); }
   }
+  // A term already billed: bring its issued invoices in line with the new fees (Owner only, recorded in the audit trail).
+  if (data().invoices.some((i) => i.year === tf.year && i.term === tf.term)) { const { error } = await db().rpc("amend_term_invoices", { p_term: tid }); if (error) return err(error); }
   return "";
 }
 /** Creates draft invoices (one per student) and submits them for the Owner's approval. */

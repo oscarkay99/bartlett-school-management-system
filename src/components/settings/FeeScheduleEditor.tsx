@@ -1,4 +1,6 @@
 "use client";
+import { LIVE } from "@/lib/live/config";
+import * as Q from "@/lib/data/queries";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Copy, FilePlus2, Lock, Pencil, Plus, Trash2 } from "lucide-react";
@@ -30,19 +32,24 @@ export function FeeScheduleEditor() {
   const [draft, setDraft] = useState<{ key: string; tf: TermFees } | null>(null);
   const key = `${year}|${term}`; const editing = draft?.key === key ? draft.tf : null; // switching terms drops the draft
   const edit = (tf: TermFees) => setDraft({ key, tf });
+  // Invoices already issued for this term (they are updated to the new fees when the Owner saves).
+  const billedCount = Q.invoices.filter((i) => i.year === year && i.term === term).length;
 
   return (
     <div className="max-w-4xl space-y-4">
       <div className="flex flex-wrap items-center gap-2"><PeriodSelect />
         {locked ? <Badge tone="warn" dot>Locked</Badge> : saved && !editing ? <Badge tone="ok" dot>Set</Badge> : !saved && !editing ? <Badge dot>Not set</Badge> : null}</div>
 
-      {locked && <AlertBanner tone="warn" icon={Lock} title={`${term} ${year} has been billed, so its fees can't be edited`} actions={canEdit ? <RequestChange year={year} term={term} /> : undefined}>
-        Bills already sent to parents never change silently. Ask for a change and, once approved, it is applied as an adjustment.</AlertBanner>}
+      {locked && (LIVE && canEdit
+        ? <AlertBanner tone="warn" icon={Lock} title={`${term} ${year} has been billed: ${billedCount} invoice${billedCount === 1 ? "" : "s"} issued`}>
+            You can still change its fees. When you save, every issued invoice for {term} {year} is updated to the new amounts (recorded in the audit trail). Payments stay as they are; if a student has now paid more than the new amount, it shows as credit.</AlertBanner>
+        : <AlertBanner tone="warn" icon={Lock} title={`${term} ${year} has been billed, so its fees can't be edited`} actions={canEdit ? <RequestChange year={year} term={term} /> : undefined}>
+            Bills already sent to parents never change silently. Ask for a change and, once approved, it is applied as an adjustment.</AlertBanner>)}
 
       {editing ? <GridEditor key={key} tf={editing} onCancel={() => setDraft(null)} onSave={(tf) => { fs.save(tf); setDraft(null); }} />
         : saved ? <>
             <ClassFeeTable tf={saved} classes={fs.classes} title={`Fees for ${term} ${year}`} sub="What one student pays this term. Feeding and extra classes are billed separately."
-              action={canEdit && !locked ? <Button size="sm" variant="primary" onClick={() => edit(structuredClone(saved))}><Pencil size={13} />Edit fees</Button> : undefined} />
+              action={canEdit && (!locked || LIVE) ? <Button size="sm" variant="primary" onClick={() => edit(structuredClone(saved))}><Pencil size={13} />Edit fees</Button> : undefined} />
             <p className="text-sm text-muted">Activities this term: {Object.entries(saved.activities).map(([a, m]) => `${a} ${money(m)}`).join(" · ")}</p></>
         : <Card><EmptyState icon={FilePlus2} title={`No fees set for ${term} ${year}`}
             body={!canEdit ? "Ask the Owner to set this term's fees." : prev ? `Start from ${prev.term} ${prev.year}'s fees and change what's different.` : "Enter what each level pays this term."}

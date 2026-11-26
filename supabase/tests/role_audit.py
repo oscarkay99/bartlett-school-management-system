@@ -156,8 +156,9 @@ t("delete payment", f"delete from public.payments where id = '{P_IN}'", exp("0")
 t("reverse payment (function)", f"select public.reverse_payment('{P_IN}', 'audit reason')", exp("X", o="ok", b="ok"))
 t("request adjustment", f"insert into public.invoice_adjustments (invoice_id, amount, reason) values ('{I_IN}', -1, 'audit adjustment')", exp("X", o="ok", b="ok"))
 t("enrol / unenrol activity", f"delete from public.student_activities where student_id = '{S_IN}'", exp("0", o=">0", b=">0"))
-# This term already has issued invoices, so its fees are locked for everyone (changes go through adjustments).
-t("change a locked term's fees", f"update public.term_fee_items set amount = amount where term_id = {TERM}", exp("0", o="X"))
+# This term already has issued invoices: only the Owner can change its fees (and its invoices then follow, see below).
+t("change a billed term's fees", f"update public.term_fee_items set amount = amount where term_id = {TERM}", exp("0", o=">0"))
+t("bring billed invoices in line with new fees", f"select public.amend_term_invoices({TERM})", exp("X", o="ok"))
 t("save invoice sheet", f"update public.invoice_sheets set notes = notes where term_id = {TERM}", exp("0", o=">0", b=">0"))
 t("record reminder message", f"insert into public.messages (guardian_id, student_ids, channel, template, body, status) values ('{G_IN}', array['{S_IN}']::uuid[], 'SMS', 'x', 'x', 'Recorded')", exp("X", o="ok", a="ok", b="ok"))
 
