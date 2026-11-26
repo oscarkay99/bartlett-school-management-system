@@ -1,7 +1,13 @@
-// Feeding module. Feeding is BILLED on the school fees invoice; this module runs it:
-// who is on feeding each term (everyone by default, with per-student exceptions), the daily meal register,
-// and per-class totals. Mirrors supabase/migrations/…_feeding.sql. Pure helpers, safe on client and server.
+// Feeding module: who is on feeding each term, the daily meal register and per-class totals. Feeding is billed on
+// its own, never on the school fees invoice. Mirrors supabase/migrations/…_feeding*.sql. Pure helpers.
 import type { Minor } from "./money";
+import { LIVE } from "./live/config";
+
+/** Live site: feeding is opt-in, a student is billed only once enrolled (migration 2300). The demo keeps the old
+ *  "everyone on feeding unless excepted" so its sample data still shows. */
+export const FEEDING_OPT_IN = LIVE;
+/** The exception row that enrols a student for feeding at their level's rate from Settings. */
+export const enrolment = (studentId: string, term: string, rate?: Minor): FeedingException => ({ studentId, term, onFeeding: true, rate, reason: rate === undefined ? "Enrolled for feeding" : "Enrolled for feeding (different amount)" });
 
 /** An exception for one student in one term ("2026/2027|Term 1"). No exception = on feeding at the class rate. */
 export interface FeedingException { studentId: string; term: string; onFeeding: boolean; rate?: Minor; reason: string }
@@ -9,14 +15,14 @@ export interface FeedingException { studentId: string; term: string; onFeeding: 
 export interface MealEntry { date: string; classId: string; served: number }
 
 /** What a student pays for feeding this term: the class rate, a different rate, or 0 when not on feeding. */
-export function studentFeedingRate(classRate: Minor, ex?: FeedingException): Minor {
-  if (!ex) return classRate;
+export function studentFeedingRate(classRate: Minor, ex?: FeedingException, optIn = FEEDING_OPT_IN): Minor {
+  if (!ex) return optIn ? 0 : classRate;
   if (!ex.onFeeding) return 0;
   return ex.rate ?? classRate;
 }
 
 export type FeedingStatus = "On feeding" | "Different rate" | "Not on feeding";
-export const feedingStatus = (ex?: FeedingException): FeedingStatus => (!ex ? "On feeding" : !ex.onFeeding ? "Not on feeding" : ex.rate !== undefined ? "Different rate" : "On feeding");
+export const feedingStatus = (ex?: FeedingException, optIn = FEEDING_OPT_IN): FeedingStatus => (!ex ? (optIn ? "Not on feeding" : "On feeding") : !ex.onFeeding ? "Not on feeding" : ex.rate !== undefined ? "Different rate" : "On feeding");
 
 /** Returns an error message, or "" when the exception can be saved. */
 export function validateException(ex: FeedingException): string {

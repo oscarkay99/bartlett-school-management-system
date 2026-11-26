@@ -183,10 +183,12 @@ select pg_temp.check('…movements unchanged by edit/delete attempts; on hand = 
   and (select count(*) from public.stock_movements) = 1);
 
 -- ---------- Feeding ----------
-select pg_temp.check('everyone is on feeding at the level rate by default', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 60000);
+select pg_temp.check('nobody is on feeding until enrolled', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 0);
+select pg_temp.check('bursar enrols a student for feeding: billed the level rate from Settings', pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', true, 'Enrolled for feeding') $q$) is null);
+select pg_temp.check('…and is billed the level rate from Settings (600)', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 60000);
 select pg_temp.check('teacher cannot change who is on feeding', pg_temp.err(:TEACHER, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000c2', false, 'Brings lunch') $q$) is not null);
 select pg_temp.check('bursar sets a half-day rate and an opt-out',
-  pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, rate, reason) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', true, 30000, 'Half-day') $q$) is null
+  pg_temp.err(:BURSAR, $q$ update public.feeding_exceptions set rate = 30000, reason = 'Half-day' where student_id = '00000000-0000-0000-0000-0000000000f1' and term_id = '00000000-0000-0000-0000-0000000000c2' $q$) is null
   and pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000c2', false, 'Brings lunch') $q$) is null);
 select pg_temp.check('…rates now 300 (half-day) and 0 (opted out)', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 30000
   and (select app.feeding_rate('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000c2')) = 0);
@@ -225,8 +227,8 @@ select pg_temp.check('the feeding part cannot exceed the payment', pg_temp.err(:
 select pg_temp.check('Extracurricular payments cannot carry feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('extra', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 100) $q$) is not null);
 -- Feeding is never on the school fees invoice: f1 owes the half-day rate (300) set above, and paid 200 weekly.
 select pg_temp.check('feeding balance: half-day rate 300 billed, 200 paid weekly, 100 owed', (select billed = 30000 and paid = 20000 and balance = 10000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
--- Everyone on feeding with a rate this term is listed (f1 half-day, f4 Primary), plus anyone who paid feeding (f3); f2 opted out.
-select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 3 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
+-- Everyone enrolled for feeding with a rate is listed (f1 half-day), plus anyone who paid feeding (f3); f2 opted out, f4 not enrolled yet.
+select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 2 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
 
 -- ---------- Feeding payment plans ----------
 select pg_temp.check('bursar puts a student on a daily plan, then switches to weekly (history kept)',
@@ -242,7 +244,8 @@ select pg_temp.check('auditor reads plans but cannot set them', pg_temp.n(:AUDIT
   and pg_temp.err(:AUDITOR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Monthly', '2026-11-02') $q$) is not null);
 
 -- ---------- Feeding paid small small is not part of school fees ----------
--- Yaw (f4, Primary 3) pays feeding weekly (feeding is never on a school fees invoice).
+-- Yaw (f4, Primary 3) is enrolled for feeding and pays it weekly (feeding is never on a school fees invoice).
+select pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2', true, 'Enrolled for feeding') $q$);
 select pg_temp.err(:BURSAR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2', 'Weekly', '2026-09-07') $q$);
 select pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f4', 4000, 'Cash', 4000, 'Weekly') $q$);
 select pg_temp.check('a weekly feeding payment does not count towards school fees', not exists (select 1 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and paid > 0));

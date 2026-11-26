@@ -97,8 +97,8 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
             <tr><td colSpan={5} className="px-4 py-2"><Button size="sm" variant="ghost" onClick={() => setG({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] })}><Plus size={13} />Add a fee</Button></td></tr>
           </tbody>
           <tbody className="border-t-2 border-line bg-surface-2/40">
-            <tr><td className="px-4 py-2"><div className="font-medium">Feeding</div><div className="text-xs text-muted">On every school fees invoice</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
-            <tr className="font-semibold"><td className="px-4 py-2.5">School fees total (with feeding)</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv) + (g.feeding[lv] || 0))}</td>)}<td /></tr>
+            <tr className="font-semibold"><td className="px-4 py-2.5">School fees total</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv))}</td>)}<td /></tr>
+            <tr><td className="px-4 py-2"><div className="font-medium">Feeding (per term)</div><div className="text-xs text-muted">Billed separately to students enrolled for feeding. Never on the school fees invoice.</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
           </tbody>
         </table></div></Card>
 

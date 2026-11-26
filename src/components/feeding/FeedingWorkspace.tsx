@@ -11,7 +11,7 @@ import { useRole } from "@/components/shell/AppShell";
 import { canRecordMeals } from "@/lib/permissions";
 import { useFeeding } from "./useFeeding";
 import { feedingRate, termKey } from "@/lib/fees";
-import { feedingStatus, studentFeedingRate, validateException, type FeedingException, type TermDates } from "@/lib/feeding";
+import { enrolment, feedingStatus, FEEDING_OPT_IN, studentFeedingRate, validateException, type FeedingException, type TermDates } from "@/lib/feeding";
 import { FeedingPaymentDialog } from "./FeedingPaymentDialog";
 import { FeesWorkspace, type PRow, type RRow, type SRow } from "@/components/fees/FeesWorkspace";
 import { useSearchParams } from "next/navigation";
@@ -49,7 +49,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
 
   const canPay = allow("payments", "create");
   const sp = useSearchParams();
-  const [payFor, setPayFor] = useState<string | null>(sp.get("pay") === "1" ? "" : null);
+  const [payFor, setPayFor] = useState<string | null>(sp.get("pay") === "1" ? "" : null); const [enrolOpen, setEnrolOpen] = useState(false);
   // The School Fees page, filled with feeding: billed = each student's feeding this term, paid = feeding payments.
   // No payment plans: families pay feeding whenever and however much they like.
   const sRows: SRow[] = rows.filter((r) => r.rate > 0 || r.paid > 0).map((r) => { const balance = r.rate - r.paid;
@@ -74,7 +74,10 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
       feeding={{
         finder: <FeedingFinder rows={rows} canPay={canPay} canEdit={canEdit} onPay={(id) => setPayFor(id)} termLabel={`${term} ${year}`} />,
         onRecordPay: () => setPayFor(""),
-        dialog: payFor !== null && canPay ? <FeedingPaymentDialog students={rows} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} initial={payFor || undefined} onClose={() => setPayFor(null)} /> : null,
+        onEnrol: canEdit && td ? () => setEnrolOpen(true) : undefined,
+        dialog: <>{payFor !== null && canPay && <FeedingPaymentDialog students={rows} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} initial={payFor || undefined} onClose={() => setPayFor(null)} />}
+          {enrolOpen && <EnrolFeedingDialog rows={rows} levelOf={(id) => fs.classes.find((c) => c.id === id)?.level ?? ""} termLabel={`${term} ${year}`} onClose={() => setEnrolOpen(false)}
+            onEnrol={(sid, rate) => { feeding.updateException(sid, key, enrolment(sid, key, rate)); setEnrolOpen(false); }} />}</>,
         tabs: [
           { id: "students", label: "Students", content: <StudentsTab rows={rows} canEdit={canEdit} td={td} termLabel={`${term} ${year}`} termKey={key} classes={fs.classes}
             onException={(sid, ex) => feeding.updateException(sid, key, ex)} /> },
@@ -113,22 +116,51 @@ export function FeedingSettings({ row, termLabel, termKey: key, onClose, onSave 
   /** null = back to the class rate. */
   onSave: (ex: FeedingException | null) => void }) {
   const toast = useToast();
-  const [mode, setMode] = useState<"class" | "rate" | "off">(row.ex ? (row.ex.onFeeding ? "rate" : "off") : "class");
+  const [mode, setMode] = useState<"class" | "rate" | "off">(row.ex ? (!row.ex.onFeeding ? "off" : row.ex.rate !== undefined ? "rate" : "class") : FEEDING_OPT_IN ? "off" : "class");
   const [rate, setRate] = useState(row.ex?.rate ?? row.classRate); const [reason, setReason] = useState(row.ex?.reason ?? "");
-  const ex: FeedingException | null = mode === "class" ? null : { studentId: row.id, term: key, onFeeding: mode === "rate", rate: mode === "rate" ? rate : undefined, reason: reason.trim() };
+  const ex: FeedingException | null = FEEDING_OPT_IN
+    ? (mode === "off" ? null : mode === "class" ? enrolment(row.id, key) : { ...enrolment(row.id, key, rate), reason: reason.trim() })
+    : (mode === "class" ? null : { studentId: row.id, term: key, onFeeding: mode === "rate", rate: mode === "rate" ? rate : undefined, reason: reason.trim() });
   const changed = JSON.stringify(ex) !== JSON.stringify(row.ex ?? null);
   const err = (ex ? validateException(ex) : "") || (!changed ? "Nothing changed" : "");
   const opt = (v: typeof mode, label: string, sub: string) => <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-line p-3 text-sm hover:bg-surface-2"><input type="radio" className="mt-1" checked={mode === v} onChange={() => setMode(v)} /><span><b>{label}</b><span className="block text-xs text-muted">{sub}</span></span></label>;
   return (
     <Modal open onClose={onClose} title={`Feeding — ${row.name}`} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!!err} onClick={() => { onSave(ex); toast(`Feeding updated for ${row.name}`); }}>Save</Button></>}>
       <div className="space-y-2"><div className="text-sm font-semibold">Feeding this term ({termLabel})</div>
-        {opt("class", `Class rate — ${money(row.classRate)}`, "The default for every student.")}
+        {opt("class", `${FEEDING_OPT_IN ? "On feeding at the class rate" : "Class rate"} — ${money(row.classRate)}`, FEEDING_OPT_IN ? "The feeding cost for this level, set in Settings." : "The default for every student.")}
         {opt("rate", "A different amount", "For example half-day feeding.")}
         {mode === "rate" && <div className="pl-7"><MoneyInput className="w-40" label="Feeding for this student" value={rate} onChange={setRate} /></div>}
         {opt("off", "Not on feeding", "e.g. brings lunch from home.")}
-        {mode !== "class" && <label className="block text-sm"><span className="mb-1 block font-medium">Reason *</span><input aria-label="Reason" className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm" placeholder="e.g. brings lunch from home" value={reason} onChange={(e) => setReason(e.target.value)} /></label>}
+        {(FEEDING_OPT_IN ? mode === "rate" : mode !== "class") && <label className="block text-sm"><span className="mb-1 block font-medium">Reason *</span><input aria-label="Reason" className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm" placeholder="e.g. brings lunch from home" value={reason} onChange={(e) => setReason(e.target.value)} /></label>}
       </div>
       {err && err !== "Nothing changed" && <p role="alert" className="mt-3 text-sm text-danger">{err}</p>}
+    </Modal>
+  );
+}
+
+/** Enrol a student for feeding this term: billed their level's feeding cost from Settings (or a different amount). */
+function EnrolFeedingDialog({ rows, levelOf, termLabel, onClose, onEnrol }: { rows: Row[]; levelOf: (classId: string) => string; termLabel: string; onClose: () => void; onEnrol: (studentId: string, rate?: number) => void }) {
+  const toast = useToast(); const [sid, setSid] = useState(""); const [q, setQ] = useState(""); const [other, setOther] = useState(false); const [amount, setAmount] = useState(0);
+  const st = rows.find((r) => r.id === sid); const n = q.trim().toLowerCase();
+  const list = rows.filter((r) => !n || `${r.name} ${r.adm}`.toLowerCase().includes(n)).slice(0, 6);
+  const enrolled = !!st && st.rate > 0;
+  const err = !st ? "Select a student" : enrolled ? `${st.name} is already on feeding this term` : other ? (amount > 0 ? "" : "Enter the amount") : st.classRate > 0 ? "" : `No feeding cost is set for ${levelOf(st.classId)} — set it in Settings, or enter a different amount`;
+  return (
+    <Modal open onClose={onClose} title={`Enrol for feeding — ${termLabel}`} footer={<><Button onClick={onClose}>Cancel</Button>
+      <Button variant="primary" disabled={!!err} onClick={() => { onEnrol(st!.id, other ? amount : undefined); toast(`${st!.name} enrolled for feeding`); }}>Enrol · {money(other ? amount : st?.classRate ?? 0)}</Button></>}>
+      <div className="space-y-4">
+        <div><label className="block text-sm"><span className="mb-1 block font-medium">Student *</span>
+          <input className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm" placeholder="Search name or admission no." value={st ? st.name : q} onChange={(e) => { setSid(""); setQ(e.target.value); }} /></label>
+          {!st && q && <ul className="mt-1 rounded-lg border border-line">{list.length === 0 && <li className="px-3 py-2 text-sm text-muted">No student matches &ldquo;{q}&rdquo;.</li>}
+            {list.map((r) => <li key={r.id}><button className="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-surface-2" onClick={() => setSid(r.id)}><span>{r.name} <span className="text-xs text-muted">{r.cls} · {r.adm}</span></span>{r.rate > 0 && <span className="text-xs text-muted">on feeding</span>}</button></li>)}</ul>}</div>
+        {st && !enrolled && <div className="space-y-2">
+          <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-line p-3 text-sm hover:bg-surface-2"><span className="flex items-center gap-2"><input type="radio" checked={!other} onChange={() => setOther(false)} /><span><b>{levelOf(st.classId)} feeding</b><span className="block text-xs text-muted">The feeding cost for {st.cls}, set in Settings</span></span></span><b className="num">{money(st.classRate)}</b></label>
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-line p-3 text-sm hover:bg-surface-2"><input type="radio" checked={other} onChange={() => setOther(true)} /><b>A different amount</b></label>
+          {other && <div className="pl-7"><MoneyInput className="w-40" label="Feeding for this student" value={amount} onChange={setAmount} /></div>}
+          {st.classRate === 0 && !other && <p className="text-sm text-muted">No feeding cost is set for {levelOf(st.classId)} this term. <Link className="text-info hover:underline" href="/settings?tab=fees">Set it in Settings →</Link></p>}
+        </div>}
+        {err && st && <p role="alert" className="text-sm text-danger">{err}</p>}
+      </div>
     </Modal>
   );
 }

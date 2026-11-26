@@ -34,7 +34,7 @@ export interface PRow { id: string; receipt: string; studentId: string; student:
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
 const TODAY = Q.TODAY;
 /** Feeding mode of this page: the same layout as School Fees, filled with feeding figures by the Feeding module. */
-export interface FeedingMode { tabs: { id: string; label: string; content: React.ReactNode; badge?: string }[]; finder: React.ReactNode; dialog: React.ReactNode; onRecordPay: () => void }
+export interface FeedingMode { tabs: { id: string; label: string; content: React.ReactNode; badge?: string }[]; finder: React.ReactNode; dialog: React.ReactNode; onRecordPay: () => void; onEnrol?: () => void }
 const FEEDING_VIEW = { ...ACCOUNTS.fees, label: "Feeding", noun: "feeding", href: "/feeding", nav: "feeding", reminderTemplate: "Feeding Reminder" };
 const daysAgo = (n: number) => { const d = new Date(TODAY + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
 const COST = { SMS: 5, WhatsApp: 12, Email: 0 } as const; // pesewas per message (estimate)
@@ -122,6 +122,7 @@ export function FeesWorkspace({ account, students, payments, reminders, classes,
       {feeding ? feeding.finder : <StudentFinder account={account} canPay={canPay} usedRefs={usedRefs} />}
       <div className="flex flex-wrap items-center justify-between gap-3">{filters}
         <div className="flex flex-wrap gap-2">{canBill && !feeding && account !== "fees" && <Button onClick={() => setBillOpen(true)}><FilePlus2 size={14} />Enrol & bill student</Button>}
+          {feeding?.onEnrol && <Button onClick={feeding.onEnrol}><FilePlus2 size={14} />Enrol student</Button>}
           {canPay && <Button variant="primary" onClick={() => (feeding ? feeding.onRecordPay() : setPayOpen(true))}><Receipt size={14} />Record {A.label.toLowerCase()} payment</Button>}</div></div>
       <Tabs key={access} initial={start} tabs={tabs} />
       {feeding?.dialog}
