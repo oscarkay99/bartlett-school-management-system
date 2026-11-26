@@ -20,17 +20,23 @@ const periodText = (p: Period) => (p === "Term" ? "for the term" : p.toLowerCase
 
 // Feeding paid on its own (daily / weekly / monthly / for the term). Never touches the school fees balance.
 // The period and amount start from the student's payment plan.
-export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onClose }: { students: FeedingPayee[]; usedRefs: string[]; termLabel: string; today: string; onClose: () => void }) {
+/** Where a payment starts for a student: their plan's period, and one period's amount (the whole balance if termly). */
+function startFor(s: FeedingPayee): { period: Period; amount: string } {
+  const period: Period = planFreq(s.freq); const left = Math.max(0, s.rate - s.paid);
+  const suggest = period === "Term" ? left : Math.min(s.perPeriod, left);
+  return { period, amount: suggest > 0 ? String(suggest / 100) : "" };
+}
+
+/** `initial`: open with this student already chosen (e.g. from Find a student). */
+export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onClose, initial }: { students: FeedingPayee[]; usedRefs: string[]; termLabel: string; today: string; onClose: () => void; initial?: string }) {
+  const first = students.find((x) => x.id === initial);
   const toast = useToast(); const { reload } = useLiveData(); const [saving, setSaving] = useState(false); const [saveErr, setSaveErr] = useState("");
-  const [sid, setSid] = useState(""); const [filter, setFilter] = useState(""); const [amount, setAmount] = useState(""); const [period, setPeriod] = useState<Period>("Weekly");
+  const [sid, setSid] = useState(first?.id ?? ""); const [filter, setFilter] = useState(""); const [amount, setAmount] = useState(first ? startFor(first).amount : ""); const [period, setPeriod] = useState<Period>(first ? startFor(first).period : "Weekly");
   const [method, setMethod] = useState("Mobile Money"); const [ref, setRef] = useState(""); const [date, setDate] = useState(today); const [done, setDone] = useState<string | null>(null);
   const st = students.find((s) => s.id === sid);
   const owed = st ? Math.max(0, st.rate - st.paid) : 0;
   const minor = Math.round(parseFloat(amount || "0") * 100);
-  const pick = (s: FeedingPayee) => { setSid(s.id); setFilter("");
-    const p: Period = planFreq(s.freq); setPeriod(p);
-    const left = Math.max(0, s.rate - s.paid);
-    const suggest = p === "Term" ? left : Math.min(s.perPeriod, left); if (suggest > 0) setAmount(String(suggest / 100)); };
+  const pick = (s: FeedingPayee) => { setSid(s.id); setFilter(""); const st0 = startFor(s); setPeriod(st0.period); setAmount(st0.amount); };
   const err = useMemo(() => {
     if (!sid) return "Select a student"; if (!(minor > 0)) return "Enter an amount greater than zero";
     // Never more than this term's feeding still owed (the database refuses it too).
