@@ -1,4 +1,5 @@
 "use client";
+import { LIVE } from "@/lib/live/config";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Copy, FilePlus2, Lock, Pencil, Plus, Trash2 } from "lucide-react";
@@ -102,6 +103,7 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         {tried && err && <p role="alert" className="mr-auto text-sm text-danger">{err}</p>}
+        {LIVE && !(tried && err) && <p className="mr-auto text-xs text-muted">Once the term has started, saving bills every active student straight away. After that, changing a fee needs an adjustment.</p>}
         <Button onClick={onCancel}>Cancel</Button>
         <Button variant="primary" onClick={save}>Save fees</Button>
       </div>
