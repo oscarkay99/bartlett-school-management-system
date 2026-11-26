@@ -7,6 +7,10 @@ import { TreemapChart, HBars } from "@/components/charts/charts";
 import { money, moneyShort } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 import { RecordDialog, type FieldDef } from "@/components/ui/RecordDialog";
+import { LIVE } from "@/lib/live/config";
+import { useSave } from "@/lib/live/useSave";
+import { deleteItem, moveStock, saveItem } from "@/lib/live/actions";
+import * as Q from "@/lib/data/queries";
 import { ConfirmDialog } from "@/components/ui/interactive";
 import { useRole } from "@/components/shell/AppShell";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -22,8 +26,8 @@ const IN = ["Received", "Opening", "Returned"];
 const signed = (m: Mv) => (IN.includes(m.type) ? m.qty : m.type === "Adjustment" ? m.qty : -m.qty);
 
 export function InventoryWorkspace({ items: initialItems, movements, students, openIssue }: { items: Item[]; movements: Mv[]; students: { id: string; name: string; cls: string }[]; openIssue?: boolean }) {
-  const { allow } = useRole(); const [items, setItems] = useState(initialItems); const [form, setForm] = useState<null | { item?: Item }>(null); const [del, setDel] = useState<Item | null>(null);
-  const [moves, setMoves] = useState(movements); const [cat, setCat] = useState(""); const [dlg, setDlg] = useState<null | "issue" | "receive">(openIssue ? "issue" : null); const [pre, setPre] = useState(""); const toast = useToast();
+  const { allow } = useRole(); const [itemsState, setItems] = useState(initialItems); const items = LIVE ? initialItems : itemsState; const run = useSave(); const [form, setForm] = useState<null | { item?: Item }>(null); const [del, setDel] = useState<Item | null>(null);
+  const [movesState, setMoves] = useState(movements); const moves = LIVE ? movements : movesState; const [cat, setCat] = useState(""); const [dlg, setDlg] = useState<null | "issue" | "receive">(openIssue ? "issue" : null); const [pre, setPre] = useState(""); const toast = useToast();
   const onHand = useMemo(() => { const m: Record<string, number> = {}; moves.forEach((x) => (m[x.itemId] = (m[x.itemId] ?? 0) + signed(x))); return m; }, [moves]);
   const rows = items.map((i) => ({ ...i, qty: onHand[i.id] ?? 0 })).filter((i) => !cat || i.category === cat);
   const all = items.map((i) => ({ ...i, qty: onHand[i.id] ?? 0 }));
@@ -34,6 +38,8 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
   const issuedQty = moves.filter((m) => m.type === "Issued").reduce<Record<string, number>>((a, m) => ({ ...a, [m.itemId]: (a[m.itemId] ?? 0) + m.qty }), {});
   const damaged = moves.filter((m) => m.type === "Damaged" || m.type === "Lost").reduce((a, m) => a + m.qty * (items.find((i) => i.id === m.itemId)?.cost ?? 0), 0);
   const post = (m: Omit<Mv, "id" | "date" | "staff">) => { setMoves((x) => [{ ...m, id: `new${x.length}`, date: "2026-10-12", staff: "Kojo Danso" }, ...x]); };
+  // Live: a movement is appended to the stock ledger in the database (it can never be edited or deleted).
+  const postLive = async (m: Omit<Mv, "id" | "date" | "staff">, msg: string) => { if (await run(() => moveStock({ itemId: m.itemId, date: Q.TODAY, type: m.type, qty: m.qty, ref: m.ref, to: m.to }), msg)) setDlg(null); };
 
   const cols: Column<(typeof rows)[0]>[] = [
     { key: "n", header: "Item", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.sku} · {x.location}</div></div> },
@@ -64,15 +70,16 @@ export function InventoryWorkspace({ items: initialItems, movements, students, o
         { id: "feeding", label: "Feeding", content: <Section title="Feeding supplies" sub="Kitchen & Feeding stock: quantity × unit cost" rows={all.filter((i) => i.category === "Kitchen & Feeding")} issued={issuedQty} /> },
         { id: "books", label: "Books", content: <Section title="Books" sub="Textbooks and exercise books: quantity × unit cost" rows={all.filter((i) => i.category === "Textbooks" || i.category === "Exercise Books")} issued={issuedQty} /> },
         { id: "insights", label: "Insights", content: <div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader title="Value by category" /><div className="px-2 pb-3"><TreemapChart data={byCat} /></div></Card><Card><CardHeader title="Most frequently issued" sub="Units issued this term" /><div className="px-2 pb-3"><HBars data={issued} x="name" y="qty" label="Units" money={false} color="var(--info)" /></div></Card></div> },
-        { id: "procure", label: "Procurement", content: <Procurement /> },
-        { id: "assets", label: "Assets", content: <Assets /> },
+        // Demo only: there is no procurement or asset register in the database yet.
+        ...(LIVE ? [] : [{ id: "procure", label: "Procurement", content: <Procurement /> }, { id: "assets", label: "Assets", content: <Assets /> }]),
       ]} />
       {form && <RecordDialog open key={form.item?.id ?? "new"} onClose={() => setForm(null)} title={form.item ? `Edit ${form.item.name}` : "Add inventory item"} fields={ITEM_FIELDS} initial={form.item ? { name: form.item.name, category: form.item.category, sku: form.item.sku, unit: form.item.unit, location: form.item.location, supplier: form.item.supplier, cost: String(form.item.cost / 100), reorder: String(form.item.reorder), max: String(form.item.max), kind: form.item.kind } : { name: "", category: "Stationery", sku: "", unit: "pcs", location: "Main Store", supplier: "", cost: "", reorder: "10", max: "100", kind: "Consumable" }}
         submitLabel={form.item ? "Save changes" : "Add item"} blocked={(v) => (Number(v.max) < Number(v.reorder) ? "Maximum stock must be at least the reorder level." : undefined)}
         onSubmit={(v) => { const it: Item = { id: form.item?.id ?? `new-${crypto.randomUUID().slice(0, 6)}`, sku: v.sku || `SKU-${String(items.length + 1).padStart(4, "0")}`, name: v.name.trim(), category: v.category, unit: v.unit, location: v.location, supplier: v.supplier, cost: Math.round(Number(v.cost) * 100), reorder: Number(v.reorder), max: Number(v.max), kind: v.kind, expiry: form.item?.expiry };
+          if (LIVE) { void run(() => saveItem({ ...it, id: form.item?.id }), form.item ? `${it.name} updated` : `${it.name} added — record opening stock via “Receive stock”`).then((ok) => { if (ok) setForm(null); }); return; }
           setItems((x) => (form.item ? x.map((y) => (y.id === it.id ? it : y)) : [it, ...x])); toast(form.item ? `${it.name} updated` : `${it.name} added — record opening stock via “Receive stock”`); setForm(null); }} />}
-      <ConfirmDialog open={!!del} onClose={() => setDel(null)} needReason danger confirmLabel="Delete item" title={`Delete ${del?.name ?? ""}`} body={`${(onHand[del?.id ?? ""] ?? 0)} unit(s) are recorded on hand. The item is removed from the catalogue; its stock movement history is kept in the ledger for audit.`} onConfirm={() => { setItems((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.name} deleted`); setDel(null); }} />
-      <MoveDialog mode={dlg} onClose={() => setDlg(null)} items={all} students={students} pre={pre} onPost={(m, msg) => { post(m); toast(msg); setDlg(null); }} />
+      <ConfirmDialog open={!!del} onClose={() => setDel(null)} needReason danger confirmLabel="Delete item" title={`Delete ${del?.name ?? ""}`} body={`${(onHand[del?.id ?? ""] ?? 0)} unit(s) are recorded on hand. The item is removed from the catalogue; its stock movement history is kept in the ledger for audit.`} onConfirm={async () => { if (LIVE) { const d = del!; if (await run(() => deleteItem(d.id), `${d.name} deleted`)) setDel(null); return; } setItems((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.name} deleted`); setDel(null); }} />
+      <MoveDialog mode={dlg} onClose={() => setDlg(null)} items={all} students={students} pre={pre} onPost={(m, msg) => { if (LIVE) { void postLive(m, msg); return; } post(m); toast(msg); setDlg(null); }} />
     </div>
   );
 }

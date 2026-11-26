@@ -1,4 +1,10 @@
 "use client";
+import { LIVE } from "@/lib/live/config";
+import { liveExtra } from "@/lib/live/hydrate";
+import { useSave } from "@/lib/live/useSave";
+import { saveInvoiceSheet } from "@/lib/live/actions";
+import { SCHOOL } from "@/lib/data/queries";
+import { termKey } from "@/lib/fees";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, Pencil, Plus, Printer, RotateCcw, Trash2 } from "lucide-react";
@@ -22,12 +28,19 @@ const W = "105mm", H = "59.4mm";
 // Edits are kept in this browser until the backend stores them.
 export function ClassInvoices({ defaults, school }: { defaults: Record<string, ClassInvoice>; school: School }) {
   const [invoices, setInvoices] = useState(defaults);
-  const [tab, setTab] = useState(INVOICE_TABS[0].id); const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState(INVOICE_TABS[0].id); const [open, setOpen] = useState(false); const run = useSave();
   /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => { try { setInvoices(mergeInvoices(defaults, JSON.parse(localStorage.getItem(KEY) ?? "null"))); } catch {} }, [defaults]);
+  useEffect(() => {
+    if (LIVE) { // saved sheets for the current term, from the database (keyed by class id / "extra" / "classes")
+      const saved = liveExtra.data?.sheets[termKey(SCHOOL.year, SCHOOL.term)] ?? {};
+      setInvoices(mergeInvoices(defaults, Object.fromEntries(INVOICE_TABS.map((t) => [t.id, saved[t.classId ?? t.id]]).filter(([, v]) => v)))); return;
+    }
+    try { setInvoices(mergeInvoices(defaults, JSON.parse(localStorage.getItem(KEY) ?? "null"))); } catch {}
+  }, [defaults]);
   /* eslint-enable react-hooks/set-state-in-effect */
   const persist = (next: Record<string, ClassInvoice>) => {
     setInvoices(next);
+    if (LIVE) { const t = INVOICE_TABS.find((x) => x.id === tab)!; void run(() => saveInvoiceSheet(termKey(SCHOOL.year, SCHOOL.term), t.classId ?? t.id, next[tab])); return; }
     try { localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(Object.entries(next).filter(([id, inv]) => JSON.stringify(inv) !== JSON.stringify(defaults[id]))))); } catch {}
   };
   const t = INVOICE_TABS.find((x) => x.id === tab)!; const inv = invoices[tab];

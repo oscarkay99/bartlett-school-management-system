@@ -1,4 +1,5 @@
 "use client";
+import { LIVE } from "@/lib/live/config";
 import { useState } from "react";
 import { Clock, Send } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Field, StatusBadge, inputClass } from "@/components/ui/primitives";
@@ -28,7 +29,7 @@ export function CommsWorkspace({ rows }: { rows: MRow[] }) {
           <Field label="Subject"><input className={inputClass} value={subject} onChange={(e) => setSubject(e.target.value)} /></Field>
           <Field label="Message"><textarea className={`${inputClass} h-32 py-2`} value={body} onChange={(e) => setBody(e.target.value)} /></Field>
           <div className="flex flex-wrap gap-3 text-sm">{["In-app", "Email", "SMS", "WhatsApp"].map((c) => <label key={c} className="flex items-center gap-1.5"><input type="checkbox" checked={ch.includes(c)} onChange={(e) => setCh(e.target.checked ? [...ch, c] : ch.filter((x) => x !== c))} />{c}</label>)}</div>
-          <div className="flex gap-2"><Button onClick={() => toast("Draft saved")}>Save draft</Button><Button onClick={() => toast("Scheduled for 8:00 tomorrow")}><Clock size={14} />Schedule</Button><Button variant="primary" disabled={!subject || body.length < 10 || ch.length === 0} onClick={() => { toast(`Sent to review: ${aud} via ${ch.join(", ")}`); setSubject(""); setBody(""); }}><Send size={14} />Submit for review</Button></div></div></Card>) },
+          <div className="flex gap-2"><Button onClick={() => toast("Draft saved")}>Save draft</Button><Button onClick={() => toast("Scheduled for 8:00 tomorrow")}><Clock size={14} />Schedule</Button>{LIVE && <span className="self-center text-xs text-warn">No SMS / WhatsApp / email provider is connected yet, so messages can&apos;t be sent from here.</span>}<Button variant="primary" disabled={LIVE || !subject || body.length < 10 || ch.length === 0} onClick={() => { toast(`Sent to review: ${aud} via ${ch.join(", ")}`); setSubject(""); setBody(""); }}><Send size={14} />Submit for review</Button></div></div></Card>) },
       { id: "templates", label: "Templates", content: (
         <div className="grid gap-4 lg:grid-cols-[260px_1fr]"><Card>{TEMPLATES.map((t) => <button key={t.id} onClick={() => setTpl(t)} className={`flex w-full items-center justify-between border-b border-line px-4 py-3 text-left last:border-0 ${tpl.id === t.id ? "bg-info/8" : ""}`}><span>{t.name}</span>{!t.approved && <Badge tone="warn">Needs approval</Badge>}</button>)}</Card>
           <div className="grid gap-4 md:grid-cols-2"><Card><CardHeader title="Template" /><pre className="whitespace-pre-wrap px-4 pb-4 font-mono text-xs">{tpl.body}</pre><div className="flex flex-wrap gap-1 border-t border-line p-3">{Object.keys(VARS).map((v) => <Badge key={v} tone="info">{`{{${v}}}`}</Badge>)}</div></Card>

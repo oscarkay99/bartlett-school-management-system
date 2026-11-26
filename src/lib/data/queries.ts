@@ -4,6 +4,7 @@ import * as D from "./seed";
 import type { Student, Guardian, Invoice, Payment } from "./types";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "../accounts";
 import { termKey } from "../fees";
+import { LIVE } from "../live/config";
 export { ACCOUNTS, ACCOUNT_IDS, type FeeAccount };
 
 export const { SCHOOL, TODAY, classes, students, guardians, invoices, payments, staff, inventory, movements, expenses, budget, messages, approvals, audit, events, applicants, feeStructure, feeSchedule, feedingPlans, activityFees, gradeScale, gradeOf, attendanceTrend, subjectsByLevel, studentIssues } = D;
@@ -35,6 +36,8 @@ export const paymentsOf = (studentId: string, account: FeeAccount): Payment[] =>
 export const accountPayments = (account: FeeAccount) => payments.filter((p) => p.account === account && !isFeedingPlanPayment(p));
 
 const feeCache = new Map<string, FeeSummary>();
+/** Call after the data changes (live data loaded / reloaded). */
+export function resetCaches() { feeCache.clear(); if (LIVE) enrollmentTrend.splice(0, enrollmentTrend.length, { year: SCHOOL.year, students: activeStudents().length }); }
 /** School-fees balance (tuition, books, levies…). Use accountSummary for Extracurricular. */
 export const feeSummary = (studentId: string) => accountSummary(studentId, "fees");
 export function accountSummary(studentId: string, account: FeeAccount): FeeSummary {
@@ -215,12 +218,15 @@ export function expenseBreakdown() {
   return [...m].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 export function incomeVsExpense() {
-  return [
-    { month: "Sep", income: payments.filter((p) => p.status === "Confirmed" && p.date < "2026-10-01").reduce((a, p) => a + p.amount, 0) / 100, expense: expenses.filter((e) => e.date < "2026-10-01" && e.status !== "Rejected").reduce((a, e) => a + e.amount, 0) / 100 },
-    { month: "Oct", income: payments.filter((p) => p.status === "Confirmed" && p.date >= "2026-10-01").reduce((a, p) => a + p.amount, 0) / 100, expense: expenses.filter((e) => e.date >= "2026-10-01" && e.status !== "Rejected").reduce((a, e) => a + e.amount, 0) / 100 },
-  ];
+  // Month by month, from the first month with any activity (at most the last 6).
+  const months = [...new Set([...payments.map((p) => p.date.slice(0, 7)), ...expenses.map((e) => e.date.slice(0, 7))].filter(Boolean))].sort().slice(-6);
+  const label = (m: string) => new Date(m + "-01T00:00:00Z").toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+  return months.map((m) => ({ month: label(m),
+    income: payments.filter((p) => p.status === "Confirmed" && p.date.startsWith(m)).reduce((a, p) => a + p.amount, 0) / 100,
+    expense: expenses.filter((e) => e.date.startsWith(m) && e.status !== "Rejected" && e.status !== "Pending Approval").reduce((a, e) => a + e.amount, 0) / 100 }));
 }
-export const enrollmentTrend = [
+// Demo: invented history. Live: the current year only (earlier years were not kept in this system).
+export const enrollmentTrend = LIVE ? [{ year: "This year", students: 0 }] : [
   { year: "2022/23", students: 15 }, { year: "2023/24", students: 16 }, { year: "2024/25", students: 18 }, { year: "2025/26", students: 19 }, { year: "2026/27", students: activeStudents().length },
 ];
 export const unreconciled = () => payments.filter((p) => p.status === "Pending");
@@ -228,7 +234,8 @@ export const unreconciled = () => payments.filter((p) => p.status === "Pending")
 export const accountTotals = () => ACCOUNT_IDS.map((id) => { const o = feesOverview(undefined, id); return { id, label: ACCOUNTS[id].label, href: ACCOUNTS[id].href, billed: o.billed, paid: o.paid, outstanding: o.outstanding, rate: o.rate, students: o.rows.length, owing: o.owingCount }; });
 
 // ---- General ledger (derived; double-entry) ----
-export const OPENING_CASH: Minor = 1_845_000;
+/** Cash at the start of the books. Demo figure; on the live system the books start at zero. */
+export const OPENING_CASH: Minor = LIVE ? 0 : 1_845_000;
 export interface GLLine { date: string; ref: string; memo: string; account: string; dr: Minor; cr: Minor }
 // Feeding is a line on the school fees invoice, but its income is still posted to its own account.
 const incomeAccount = (account: FeeAccount, label: string) => (account === "extra" ? "4500 Extracurricular Fees" : account === "classes" ? "4600 Extra Classes Fees" : label === "Feeding" ? "4200 Feeding Fees" : label === "Tuition" ? "4100 Tuition Fees" : "4400 Levies & Other Fees");
@@ -252,7 +259,7 @@ export function trialBalance() {
   return [...m].map(([account, v]) => ({ account, dr: Math.max(0, v.dr - v.cr), cr: Math.max(0, v.cr - v.dr) })).sort((a, b) => a.account.localeCompare(b.account));
 }
 export function subledgerRecon() {
-  const gl = trialBalance().find((t) => t.account.startsWith("1200"))!; const glBal = gl.dr - gl.cr;
+  const gl = trialBalance().find((t) => t.account.startsWith("1200")) ?? { dr: 0, cr: 0 }; const glBal = gl.dr - gl.cr;   // no fees billed yet: receivables are 0
   const sub = students.reduce((a, s) => a + ACCOUNT_IDS.reduce((x, acc) => x + accountSummary(s.id, acc).balance, 0), 0);
   return { gl: glBal, sub, diff: glBal - sub };
 }

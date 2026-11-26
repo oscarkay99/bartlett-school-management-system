@@ -5,6 +5,9 @@ import { CheckCircle2, Printer } from "lucide-react";
 import { Button, Field, inputClass } from "@/components/ui/primitives";
 import { Modal, useToast } from "@/components/ui/interactive";
 import { receiptLink } from "@/components/ReceiptDoc";
+import { LIVE } from "@/lib/live/config";
+import { useLiveData } from "@/lib/live/data";
+import { recordPayment } from "@/lib/live/actions";
 import { planLabel, type PlanFrequency } from "@/lib/feeding";
 import { money } from "@/lib/money";
 
@@ -18,7 +21,7 @@ const periodText = (p: Period) => (p === "Term" ? "for the term" : p.toLowerCase
 // Feeding paid on its own (daily / weekly / monthly / for the term). Never touches the school fees balance.
 // The period and amount start from the student's payment plan.
 export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onClose }: { students: FeedingPayee[]; usedRefs: string[]; termLabel: string; today: string; onClose: () => void }) {
-  const toast = useToast();
+  const toast = useToast(); const { reload } = useLiveData(); const [saving, setSaving] = useState(false); const [saveErr, setSaveErr] = useState("");
   const [sid, setSid] = useState(""); const [filter, setFilter] = useState(""); const [amount, setAmount] = useState(""); const [period, setPeriod] = useState<Period>("Weekly");
   const [method, setMethod] = useState("Mobile Money"); const [ref, setRef] = useState(""); const [date, setDate] = useState(today); const [done, setDone] = useState<string | null>(null);
   const st = students.find((s) => s.id === sid);
@@ -38,7 +41,14 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
   return (
     <Modal open onClose={onClose} title={done ? "Feeding payment recorded" : "Record feeding payment"} wide
       footer={done ? <Button variant="primary" onClick={onClose}>Done</Button> : <><Button onClick={onClose}>Cancel</Button>
-        <Button variant="success" disabled={!!err} onClick={() => { setDone(`RCT-${String(900 + Math.floor(Math.random() * 99)).padStart(5, "0")}`); toast("Feeding payment recorded"); }}>Confirm payment</Button></>}>
+        <Button variant="success" disabled={!!err || saving} onClick={async () => {
+          if (!LIVE) { setDone(`RCT-${String(900 + Math.floor(Math.random() * 99)).padStart(5, "0")}`); toast("Feeding payment recorded"); return; }
+          // Live: a school-fees-account payment that is all feeding, for a period; it never touches the school fees balance.
+          setSaving(true); setSaveErr("");
+          const r = await recordPayment({ account: "fees", studentId: sid, amount: minor, method, date, ref, feedingAmount: minor, feedingPeriod: period, guardianId: undefined });
+          setSaving(false); if (r.error) { setSaveErr(r.error); return; }
+          setDone(r.receipt!); toast(`Feeding payment recorded — ${r.receipt}`); void reload();
+        }}>{saving ? "Saving…" : "Confirm payment"}</Button></>}>
       {done && st ? (
         <div className="space-y-3 text-center"><CheckCircle2 className="mx-auto text-ok" size={40} />
           <p>Feeding receipt <b className="num">{done}</b> issued for <b>{money(minor)}</b> ({periodText(period)}).</p>
@@ -47,7 +57,7 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
             href={receiptLink({ title: "Official Receipt — Feeding", receiptNo: done, accountLabel: "Feeding", period: termLabel, payer: st.payer, student: { name: st.name, adm: st.adm, cls: st.cls },
               date, method, ref: ref.trim() || undefined, lines: [[`Feeding payment (${periodText(period)})`, minor]], amount: minor, balanceLabel: "Feeding still owed", balanceAfter: owed - minor, status: "Confirmed" })}>
             <Printer size={14} />Print receipt</Link>
-          <p className="text-xs text-muted">Front-end preview — the ledger and dashboards update once the backend posts this transaction.</p></div>
+          {!LIVE && <p className="text-xs text-muted">Front-end preview — the ledger and dashboards update once the backend posts this transaction.</p>}</div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2"><Field label="Student *"><input className={inputClass} placeholder="Search name or admission no." value={st ? st.name : filter} onChange={(e) => { setSid(""); setFilter(e.target.value); }} /></Field>
@@ -61,6 +71,7 @@ export function FeedingPaymentDialog({ students, usedRefs, termLabel, today, onC
           <Field label="Payment date"><input type="date" className={inputClass} value={date} max={today} onChange={(e) => setDate(e.target.value)} /></Field>
           {st && minor > 0 && <div className="flex items-end justify-between rounded-lg border border-line p-3 text-sm"><span>Feeding still owed after</span><b className="num">{money(Math.max(0, owed - minor))}</b></div>}
           {err && sid && minor > 0 && <p role="alert" className="sm:col-span-2 text-sm text-danger">{err}</p>}
+          {saveErr && <p role="alert" className="sm:col-span-2 rounded-lg border border-danger/30 bg-danger/8 px-3 py-2 text-sm text-danger">Not saved: {saveErr}</p>}
         </div>)}
     </Modal>
   );

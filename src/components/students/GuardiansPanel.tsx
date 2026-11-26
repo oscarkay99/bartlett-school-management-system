@@ -1,22 +1,30 @@
 "use client";
+import { parentHref } from "@/lib/links";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Link2, Mail, Phone, Search, ShieldCheck, TriangleAlert, Unlink, UserPlus } from "lucide-react";
 import { Avatar, Badge, Button, Card, Field, inputClass } from "@/components/ui/primitives";
 import { ConfirmDialog, Modal, useToast } from "@/components/ui/interactive";
 import { cn } from "@/lib/utils";
+import { LIVE } from "@/lib/live/config";
+import { useSave } from "@/lib/live/useSave";
+import { createGuardian, linkGuardian, unlinkGuardian } from "@/lib/live/actions";
 
 export interface GLink { guardianId: string; title: string; name: string; phone: string; email?: string; children: number; relationship: string; primary: boolean; legal: boolean; emergency: boolean; pickup: boolean; financial: boolean; share?: number; reminders: boolean; academic: boolean; verified: boolean; restriction?: string }
 export interface GDir { id: string; title: string; name: string; phone: string; email?: string; children: number }
 const RELS = ["Father", "Mother", "Guardian", "Grandparent", "Uncle", "Aunt", "Sibling", "Sponsor"];
 const FLAGS = [["legal", "Legal guardian"], ["emergency", "Emergency contact"], ["pickup", "Authorised pickup"], ["financial", "Financially responsible"], ["reminders", "Fee reminders"], ["academic", "Academic updates"]] as const;
 
-export function GuardiansPanel({ studentName, initial, directory }: { studentName: string; initial: GLink[]; directory: GDir[] }) {
-  const [links, setLinks] = useState(initial); const [add, setAdd] = useState(false); const [unlink, setUnlink] = useState<GLink | null>(null); const toast = useToast();
+export function GuardiansPanel({ studentId, studentName, initial, directory }: { studentId: string; studentName: string; initial: GLink[]; directory: GDir[] }) {
+  const [links, setLinksState] = useState(initial); const run = useSave();
+  // Live: every change is written to the database (all links, so exactly one stays primary); demo: kept on screen.
+  const save = (next: GLink[]) => { if (LIVE) void run(async () => { for (const l of next) { const e = await linkGuardian(studentId, l.guardianId, l); if (e) return e; } return ""; }); };
+  const setLinks = (f: GLink[] | ((ls: GLink[]) => GLink[])) => setLinksState((ls) => { const next = typeof f === "function" ? f(ls) : f; if (next !== ls) save(next); return next; }); const [add, setAdd] = useState(false); const [unlink, setUnlink] = useState<GLink | null>(null); const toast = useToast();
   const patch = (id: string, p: Partial<GLink>) => setLinks((ls) => ls.map((l) => (l.guardianId === id ? { ...l, ...p } : p.primary ? { ...l, primary: false } : l)));
   const doUnlink = () => {
     if (!unlink) return; const rest = links.filter((l) => l.guardianId !== unlink.guardianId);
     if (unlink.primary && rest[0]) rest[0] = { ...rest[0], primary: true }; // never leave a student without a primary
+    if (LIVE) { const gone = unlink; void run(() => unlinkGuardian(studentId, gone.guardianId), `${gone.name} unlinked from ${studentName}`).then((ok) => { if (ok) setLinksState(rest); }); if (rest[0]) save(rest); setUnlink(null); return; }
     setLinks(rest); toast(`${unlink.name} unlinked from ${studentName}`); setUnlink(null);
   };
   return (
@@ -30,7 +38,7 @@ export function GuardiansPanel({ studentName, initial, directory }: { studentNam
           <div className="grid gap-3 md:grid-cols-2">
             {links.map((l) => (
               <Card key={l.guardianId}><div className="p-4">
-                <div className="flex items-start justify-between gap-2"><div className="flex items-center gap-3"><Avatar name={l.name} /><div><Link href={`/parents/${l.guardianId}`} className="font-semibold hover:text-info">{l.title} {l.name}</Link><div className="text-xs text-muted">Linked to {l.children} child{l.children === 1 ? "" : "ren"}</div></div></div>
+                <div className="flex items-start justify-between gap-2"><div className="flex items-center gap-3"><Avatar name={l.name} /><div><Link href={parentHref(l.guardianId)} className="font-semibold hover:text-info">{l.title} {l.name}</Link><div className="text-xs text-muted">Linked to {l.children} child{l.children === 1 ? "" : "ren"}</div></div></div>
                   {l.verified ? <Badge tone="ok"><ShieldCheck size={12} />Verified</Badge> : <Badge tone="warn">Unverified</Badge>}</div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[130px_1fr] sm:items-center"><select aria-label={`Relationship of ${l.name}`} className={inputClass} value={l.relationship} onChange={(e) => patch(l.guardianId, { relationship: e.target.value })}>{[...new Set([l.relationship, ...RELS])].map((r) => <option key={r}>{r}</option>)}</select>
                   <label className="flex items-center gap-1.5 text-sm"><input type="radio" name="primary-guardian" checked={l.primary} onChange={() => { patch(l.guardianId, { primary: true }); toast(`${l.name} is now the primary contact`); }} />Primary contact</label></div>
@@ -47,7 +55,11 @@ export function GuardiansPanel({ studentName, initial, directory }: { studentNam
       )}
       <ConfirmDialog open={!!unlink} onClose={() => setUnlink(null)} needReason danger confirmLabel="Unlink guardian" title={`Unlink ${unlink?.name ?? ""}`} body={`${unlink?.name} will lose access to ${studentName}'s records and fee information. Billing history is kept. This is recorded in the audit trail.`} onConfirm={doUnlink} />
       <LinkDialog open={add} onClose={() => setAdd(false)} directory={directory} linkedIds={links.map((l) => l.guardianId)} studentName={studentName}
-        onAdd={(g, rel, flags) => { setLinks((ls) => [...ls, { guardianId: g.id === "new" ? crypto.randomUUID() : g.id, title: g.title, name: g.name, phone: g.phone, email: g.email, children: g.children + 1, relationship: rel, primary: ls.length === 0, ...flags, verified: true }]); toast(`${g.name} linked to ${studentName}`); setAdd(false); }} />
+        onAdd={async (g, rel, flags) => {
+          if (LIVE) { // new parent: create the record first, then link it
+            let gid = g.id; if (g.id === "new") { const r = await createGuardian(g); if (r.error) { toast(`Not saved: ${r.error}`, "err"); return; } gid = r.id!; }
+            if (await run(() => linkGuardian(studentId, gid, { relationship: rel, primary: links.length === 0, ...flags }), `${g.name} linked to ${studentName}`)) { setLinksState((ls) => [...ls, { guardianId: gid, title: g.title, name: g.name, phone: g.phone, email: g.email, children: g.children + 1, relationship: rel, primary: ls.length === 0, ...flags, verified: true }]); setAdd(false); } return; }
+          setLinks((ls) => [...ls, { guardianId: g.id === "new" ? crypto.randomUUID() : g.id, title: g.title, name: g.name, phone: g.phone, email: g.email, children: g.children + 1, relationship: rel, primary: ls.length === 0, ...flags, verified: true }]); toast(`${g.name} linked to ${studentName}`); setAdd(false); }} />
     </div>
   );
 }

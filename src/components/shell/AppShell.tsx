@@ -12,9 +12,8 @@ import { createPortal } from "react-dom";
 import { termOfDate } from "@/lib/calendar";
 import { useAuth } from "@/lib/live/auth";
 import { LIVE } from "@/lib/live/config";
+import { buildSearchIndex } from "@/lib/search-index";
 
-/** Modules already reading and writing the live database. The rest still show demo data on the live site. */
-const LIVE_READY = ["/students"];
 import { ROLES, DEFAULT_ROLE, normalizeRole, allowed as allowedOp, canVisit, type MoneyAccess, type Op, type Resource } from "@/lib/permissions";
 export { ROLES };
 
@@ -74,7 +73,6 @@ export function AppShell({ children, school }: { children: ReactNode; school: { 
   useEffect(() => { if (signedOut) router.replace("/login"); }, [signedOut, router]);
   if (standalone) return <>{children}</>;
   if (LIVE && !ready) return <div className="grid min-h-screen place-items-center text-sm text-muted">{signedOut ? "Redirecting to sign-in…" : "Loading…"}</div>;
-  const demoHere = LIVE && !LIVE_READY.some((p) => path.startsWith(p));
 
   const sidebar = (
     <div className="flex h-full flex-col bg-navy text-navy-fg">
@@ -112,7 +110,6 @@ export function AppShell({ children, school }: { children: ReactNode; school: { 
       <div className={cn("transition-[padding]", collapsed ? "lg:pl-[68px]" : "lg:pl-[250px]")}>
         <Topbar school={school} onMenu={() => setMobile(true)} role={role} setRole={(r) => { setRole(r); try { localStorage.setItem("role", r); } catch {} }} />
         <main id="main" className="mx-auto max-w-[1500px] p-4 sm:p-6">
-          {demoHere && !blocked && <div className="no-print mb-4 rounded-lg border border-warn/40 bg-warn/10 px-4 py-2 text-sm"><b>Not connected yet:</b> this module still shows demo data. Students is connected to the school database; the other modules follow.</div>}
           {blocked ? <NoAccess label={ROLES[role].label} /> : children}</main>
       </div>
     </RoleCtx.Provider>
@@ -178,8 +175,9 @@ function NoAccess({ label }: { label: string }) {
 
 let searchCache: SearchItem[] | null = null;
 function CommandSearch({ onClose }: { onClose: () => void }) {
-  const [index, setIndex] = useState<SearchItem[]>(searchCache ?? []); const [loading, setLoading] = useState(!searchCache); const [failed, setFailed] = useState(false);
+  const [index, setIndex] = useState<SearchItem[]>(LIVE ? [] : searchCache ?? []); const [loading, setLoading] = useState(LIVE || !searchCache); const [failed, setFailed] = useState(false);
   useEffect(() => {
+    if (LIVE) { setIndex(buildSearchIndex()); setLoading(false); return; }   // eslint-disable-line react-hooks/set-state-in-effect -- live: from the school's loaded data
     if (searchCache) return; let live = true;
     fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/search-index.json`).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then((d: SearchItem[]) => { searchCache = d; if (live) { setIndex(d); setLoading(false); } }).catch(() => { if (live) { setFailed(true); setLoading(false); } });

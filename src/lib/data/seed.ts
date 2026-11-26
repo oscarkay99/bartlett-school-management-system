@@ -4,6 +4,7 @@ import { activitiesFor, type Activity } from "../accounts";
 import type { AcademicYear } from "../calendar";
 import { classFees, feedingRate, findTerm, termBillLines, type LevelFees, type TermFees } from "../fees";
 import { perPeriod, type FeedingPlan } from "../feeding";
+import { LIVE } from "../live/config";
 
 // Deterministic PRNG so server & client agree and screenshots are stable.
 let s = 20261012;
@@ -14,7 +15,8 @@ const pad = (n: number, w: number) => String(n).padStart(w, "0");
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const addDays = (isoD: string, n: number) => { const d = new Date(isoD + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return iso(d); };
 
-export const TODAY = "2026-10-12";
+/** The demo is frozen on 12 Oct 2026; the live system uses the real date. */
+export const TODAY = LIVE ? new Date().toISOString().slice(0, 10) : "2026-10-12";
 export const SCHOOL = {
   name: "Bartlett Montessori School", short: "BMS", city: "Kumasi, Ashanti Region", phone: "+233 32 202 4410",
   email: "accounts@bartlett.edu.gh", currency: "GHS", timezone: "Africa/Accra", year: "2026/2027", term: "Term 1",

@@ -1,6 +1,9 @@
+"use client";
 import { Suspense } from "react";
-import { LiveStudentView } from "@/components/students/LiveStudentView";
+import { useSearchParams } from "next/navigation";
+import { LiveGate } from "@/lib/live/data";
+import { StudentProfile } from "../[id]/StudentProfile";
 
-export const metadata = { title: "Student — EduFlow" };
-// A student's record from the school database (live site). Reads ?id= from the URL, so it needs Suspense for the static export.
-export default function StudentView() { return <Suspense fallback={null}><LiveStudentView /></Suspense>; }
+// Live site: a record from the database, by ?id= (records are not known when the site is built).
+function ById() { return <StudentProfile id={useSearchParams().get("id") ?? ""} />; }
+export default function Page() { return <Suspense fallback={null}><LiveGate><ById /></LiveGate></Suspense>; }

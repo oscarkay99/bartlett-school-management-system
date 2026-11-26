@@ -1,4 +1,8 @@
 "use client";
+import { LIVE } from "@/lib/live/config";
+import { useSave } from "@/lib/live/useSave";
+import { deleteGuardian, saveGuardian } from "@/lib/live/actions";
+import { parentHref } from "@/lib/links";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Pencil, Trash2, UserPlus } from "lucide-react";
@@ -26,8 +30,10 @@ const toValues = (r?: PRow): Values => r ? { title: r.title, name: r.name, phone
 
 export function ParentsTable({ rows: initial }: { rows: PRow[] }) {
   const r = useRouter(); const toast = useToast(); const { allow } = useRole();
-  const [rows, setRows] = useState(initial); const [form, setForm] = useState<null | { mode: "add" } | { mode: "edit"; row: PRow }>(null); const [del, setDel] = useState<PRow | null>(null); const [dupOk, setDupOk] = useState(false);
-  const save = (v: Values, id?: string) => {
+  const [rowsState, setRows] = useState(initial); const rows = LIVE ? initial : rowsState; const [form, setForm] = useState<null | { mode: "add" } | { mode: "edit"; row: PRow }>(null); const [del, setDel] = useState<PRow | null>(null); const [dupOk, setDupOk] = useState(false);
+  const run = useSave();
+  const save = async (v: Values, id?: string) => {
+    if (LIVE) { if (await run(() => saveGuardian({ ...(v as Record<string, string>), id, name: v.name, phone: v.phone }), id ? `${v.name.trim()} updated` : `${v.name.trim()} added. Link a child from their profile.`)) { setForm(null); setDupOk(false); } return; }
     const row: PRow = { id: id ?? `new-${crypto.randomUUID().slice(0, 6)}`, title: v.title, name: v.name.trim(), phone: v.phone, whatsapp: v.whatsapp || undefined, email: v.email || undefined, address: v.address, occupation: v.occupation, preferred: v.preferred, language: v.language, consent: { SMS: !!v.cSMS, WhatsApp: !!v.cWhatsApp, Email: !!v.cEmail }, kids: [], soleFor: [], owed: 0 };
     setRows((x) => id ? x.map((y) => (y.id === id ? { ...y, ...row, kids: y.kids, soleFor: y.soleFor, owed: y.owed } : y)) : [row, ...x]);
     toast(id ? `${row.name} updated` : `${row.name} added. Link a child from their profile.`); setForm(null); setDupOk(false);
@@ -45,15 +51,15 @@ export function ParentsTable({ rows: initial }: { rows: PRow[] }) {
   return (
     <>
       <div className="mb-4 flex justify-end">{allow("parents", "create") && <Button variant="primary" onClick={() => { setDupOk(false); setForm({ mode: "add" }); }}><UserPlus size={15} />Add parent</Button>}</div>
-      <Card><DataTable rows={rows} columns={cols} rowId={(x) => x.id} pageSize={12} searchText={(x) => `${x.name} ${x.phone} ${x.email ?? ""} ${x.kids.join(" ")}`} onRowClick={(x) => r.push(`/parents/${x.id}`)} /></Card>
+      <Card><DataTable rows={rows} columns={cols} rowId={(x) => x.id} pageSize={12} searchText={(x) => `${x.name} ${x.phone} ${x.email ?? ""} ${x.kids.join(" ")}`} onRowClick={(x) => r.push(parentHref(x.id))} /></Card>
       {form && <RecordDialog key={form.mode === "edit" ? form.row.id : "add"} open onClose={() => setForm(null)} title={form.mode === "add" ? "Add parent / guardian" : `Edit ${form.row.name}`} fields={PARENT_FIELDS} initial={toValues(form.mode === "edit" ? form.row : undefined)} submitLabel={form.mode === "add" ? "Add parent" : "Save changes"}
-        extra={(v) => { const d = dups(v, form.mode === "edit" ? form.row.id : undefined); return d.length ? <div role="alert" className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm"><b className="text-warn">Possible duplicate.</b> People are never merged automatically.{d.map((x) => <div key={x.id} className="mt-1 flex justify-between"><span>{x.name} · {x.phone}</span><Button size="sm" onClick={() => r.push(`/parents/${x.id}`)}>Open</Button></div>)}<label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={dupOk} onChange={(e) => setDupOk(e.target.checked)} />This is a different person — create anyway</label></div> : null; }}
+        extra={(v) => { const d = dups(v, form.mode === "edit" ? form.row.id : undefined); return d.length ? <div role="alert" className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm"><b className="text-warn">Possible duplicate.</b> People are never merged automatically.{d.map((x) => <div key={x.id} className="mt-1 flex justify-between"><span>{x.name} · {x.phone}</span><Button size="sm" onClick={() => r.push(parentHref(x.id))}>Open</Button></div>)}<label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={dupOk} onChange={(e) => setDupOk(e.target.checked)} />This is a different person — create anyway</label></div> : null; }}
         blocked={(v) => (dups(v, form.mode === "edit" ? form.row.id : undefined).length && !dupOk ? "Confirm this is a different person, or open the existing record." : undefined)}
         onSubmit={(v) => save(v, form.mode === "edit" ? form.row.id : undefined)} />}
       <Modal open={!!del && del.soleFor.length > 0} onClose={() => setDel(null)} title="Can't delete this parent" footer={<Button onClick={() => setDel(null)}>OK</Button>}>
         <p>{del?.name} is the <b>only guardian</b> of {del?.soleFor.join(", ")}. Every student must stay tied to at least one parent, so link another guardian to {del?.soleFor.length === 1 ? "that student" : "those students"} first.</p>
       </Modal>
-      <ConfirmDialog open={!!del && del.soleFor.length === 0} onClose={() => setDel(null)} needReason danger confirmLabel="Delete parent" title={`Delete ${del?.name ?? ""}`} body="The parent record and their links to children are removed. Fee and payment history of the students is kept. This is recorded in the audit trail." onConfirm={() => { setRows((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.name} deleted`); setDel(null); }} />
+      <ConfirmDialog open={!!del && del.soleFor.length === 0} onClose={() => setDel(null)} needReason danger confirmLabel="Delete parent" title={`Delete ${del?.name ?? ""}`} body="The parent record and their links to children are removed. Fee and payment history of the students is kept. This is recorded in the audit trail." onConfirm={async () => { if (LIVE) { const d = del!; if (await run(() => deleteGuardian(d.id), `${d.name} deleted`)) setDel(null); return; } setRows((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.name} deleted`); setDel(null); }} />
     </>
   );
 }

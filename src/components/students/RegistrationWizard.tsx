@@ -1,4 +1,6 @@
 "use client";
+import { studentHref } from "@/lib/links";
+import { TODAY } from "@/lib/data/queries";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, FileUp, Search, ShieldAlert, UserPlus, X } from "lucide-react";
@@ -42,7 +44,7 @@ export function RegistrationWizard({ guardians, classes, nextAdm, onRegister }: 
 
   const validate = (s: number) => {
     const e: Record<string, string> = {};
-    if (s === 0) { if (!f.first.trim()) e.first = "First name is required"; if (!f.last.trim()) e.last = "Last name is required"; if (!f.dob) e.dob = "Date of birth is required"; else if (new Date(f.dob) > new Date("2026-10-12")) e.dob = "Date of birth cannot be in the future"; if (!f.gender) e.gender = "Select gender"; }
+    if (s === 0) { if (!f.first.trim()) e.first = "First name is required"; if (!f.last.trim()) e.last = "Last name is required"; if (!f.dob) e.dob = "Date of birth is required"; else if (f.dob > TODAY) e.dob = "Date of birth cannot be in the future"; if (!f.gender) e.gender = "Select gender"; }
     if (s === 1) { if (!f.classId) e.classId = "Select the class to assign"; }
     if (s === 2) {
       if (links.length === 0 && !exception) e.links = "Link at least one guardian, or request an authorised exception.";
@@ -57,7 +59,7 @@ export function RegistrationWizard({ guardians, classes, nextAdm, onRegister }: 
     <Card className="mx-auto max-w-xl p-8 text-center"><CheckCircle2 className="mx-auto text-ok" size={44} />
       <h2 className="mt-3 text-xl font-semibold">{f.first} {f.last} registered</h2><p className="mt-1 text-muted">Admission number <b className="num text-fg">{saved?.adm ?? nextAdm}</b> · {classes.find((c) => c.id === f.classId)?.name}</p>
       <p className="mt-1 text-muted">{links.length} guardian link{links.length === 1 ? "" : "s"} saved in the same transaction. The term invoice can now be generated.</p>
-      <div className="mt-5 flex justify-center gap-2"><LinkButton href="/students">All students</LinkButton>{saved ? <LinkButton href={`/students/view?id=${saved.id}`} variant="primary">Open student record</LinkButton> : <LinkButton href="/fees" variant="primary">Generate term invoice</LinkButton>}</div>
+      <div className="mt-5 flex justify-center gap-2"><LinkButton href="/students">All students</LinkButton>{saved ? <LinkButton href={studentHref(saved.id)} variant="primary">Open student record</LinkButton> : <LinkButton href="/fees" variant="primary">Generate term invoice</LinkButton>}</div>
       <p className="mt-4 text-xs text-muted">{saved ? "Saved to the school database." : "Front-end preview: nothing is persisted until the backend is connected."}</p></Card>
   );
 

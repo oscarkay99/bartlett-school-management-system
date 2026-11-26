@@ -10,6 +10,7 @@ import { SCHOOL, classes, feeSchedule, feedingPlans, lockedFeeTerms } from "@/li
 import { FeedingPlansProvider } from "@/components/shell/FeedingPlansContext";
 import { ACTIVITIES } from "@/lib/accounts";
 import { AuthProvider } from "@/lib/live/auth";
+import { LiveDataProvider } from "@/lib/live/data";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -20,7 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <ToastProvider><AuthProvider>
+          <ToastProvider><AuthProvider><LiveDataProvider>
             <CalendarProvider seed={SCHOOL.calendar} current={{ year: SCHOOL.year, term: SCHOOL.term }}>
               <FeeScheduleProvider seed={feeSchedule} locked={lockedFeeTerms()} classes={classes.map((c) => ({ id: c.id, name: c.name, level: c.level }))} activities={[...ACTIVITIES]}>
                 <FeedingPlansProvider seed={feedingPlans}>
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 </FeedingPlansProvider>
               </FeeScheduleProvider>
             </CalendarProvider>
-          </AuthProvider></ToastProvider>
+          </LiveDataProvider></AuthProvider></ToastProvider>
         </ThemeProvider>
       </body>
     </html>

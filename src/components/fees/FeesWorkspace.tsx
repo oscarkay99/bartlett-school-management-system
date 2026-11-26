@@ -1,14 +1,19 @@
 "use client";
+import { studentHref, printHref } from "@/lib/links";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Banknote, CalendarClock, Download, FilePlus2, FileText, Percent, Receipt, Send, ShieldAlert, Users, Wallet } from "lucide-react";
 import { AlertBanner, Badge, Button, Card, CardHeader, EmptyState, Kpi, StatusBadge } from "@/components/ui/primitives";
-import { DataTable, Drawer, Modal, Select, Tabs, useToast, type Column } from "@/components/ui/interactive";
+import { ConfirmDialog, DataTable, Drawer, Modal, Select, Tabs, useToast, type Column } from "@/components/ui/interactive";
 import { Donut, HBars, LineTrend } from "@/components/charts/charts";
 import { RecordPaymentDialog, type PayStudent } from "./RecordPaymentDialog";
 import { IssueBillDialog, type BillCandidate } from "./IssueBillDialog";
 import { useRole } from "@/components/shell/AppShell";
+import { LIVE } from "@/lib/live/config";
+import * as Q from "@/lib/data/queries";
+import { useSave } from "@/lib/live/useSave";
+import { confirmPayment, reversePayment, sendMessage } from "@/lib/live/actions";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { TermFeeStructure } from "@/components/settings/FeeScheduleEditor";
@@ -26,7 +31,7 @@ import { fmtDate } from "@/lib/utils";
 export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; feedingOwed: number; feedingRate: number; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; terms: string[]; items: { label: string; amount: number }[]; payer?: { name: string; phone?: string } }
 export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; amount: number; feeding: number; feedingPeriod?: string; method: string; date: string; ref: string; status: string; staff: string }
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
-const TODAY = "2026-10-12";
+const TODAY = Q.TODAY;
 const daysAgo = (n: number) => { const d = new Date(TODAY + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
 const COST = { SMS: 5, WhatsApp: 12, Email: 0 } as const; // pesewas per message (estimate)
 
@@ -132,12 +137,13 @@ function OutstandingTable({ rows, overdueOnly, account, showTotals }: { rows: SR
     { key: "o", header: "Outstanding", align: "right", sort: (x) => x.balance, render: (x) => <b className="text-danger">{money(x.balance)}</b> },
     { key: "d", header: "Due", sort: (x) => x.dueOn, render: (x) => fmtDate(x.dueOn) }, { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
   ];
-  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(`/students/${x.id}?tab=${account}`)}
+  return <Card><DataTable rows={data} columns={cols} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(studentHref(x.id, account))}
     filters={<Select label="Overdue filter" value={od} onChange={setOd} options={[{ value: "", label: "All outstanding" }, { value: "1", label: "Overdue only" }]} />}
     toolbar={<Button size="sm" onClick={() => exportCsv(data, account)}><Download size={13} />CSV</Button>} /></Card>;
 }
 
 function Reminders({ rows }: { rows: RRow[] }) {
+  const run = useSave();
   const [sel, setSel] = useState<Set<string>>(new Set()); const [ch, setCh] = useState(""); const [od, setOd] = useState(""); const [view, setView] = useState<RRow | null>(null); const [confirm, setConfirm] = useState(false); const toast = useToast();
   const data = rows.filter((r) => (!ch || r.channel === ch) && (!od || r.overdue));
   const picked = data.filter((r) => sel.has(r.gid) && r.eligible);
@@ -161,9 +167,14 @@ function Reminders({ rows }: { rows: RRow[] }) {
         toolbar={<Button size="sm" variant="ghost" onClick={() => setSel(new Set(data.filter((r) => r.eligible).map((r) => r.gid)))}>Select all eligible ({data.filter((r) => r.eligible).length})</Button>} pageSize={10} /></Card>
       <Drawer open={!!view} onClose={() => setView(null)} title="Reminder preview" footer={<Button onClick={() => setView(null)}>Close</Button>}>
         {view && <><div className="mb-3 flex flex-wrap gap-2"><Badge tone="info">{view.channel}</Badge>{view.eligible ? <Badge tone="ok">Eligible</Badge> : <Badge tone="warn">{view.reason}</Badge>}</div><pre className="whitespace-pre-wrap rounded-lg border border-line bg-surface-2 p-4 font-sans leading-relaxed">{view.message}</pre>
-          <ul className="mt-3 divide-y divide-line text-sm">{view.students.map((s) => <li key={s.id} className="flex justify-between py-1.5"><Link className="hover:text-info" href={`/students/${s.id}`}>{s.name}</Link><span className="num">{money(s.balance)}</span></li>)}</ul></>}
+          <ul className="mt-3 divide-y divide-line text-sm">{view.students.map((s) => <li key={s.id} className="flex justify-between py-1.5"><Link className="hover:text-info" href={studentHref(s.id)}>{s.name}</Link><span className="num">{money(s.balance)}</span></li>)}</ul></>}
       </Drawer>
-      <Modal open={confirm} onClose={() => setConfirm(false)} title="Send reminders?" footer={<><Button onClick={() => setConfirm(false)}>Cancel</Button><Button variant="primary" onClick={() => { toast(`${picked.length} reminders queued. Balances will be re-checked before each send.`); setConfirm(false); setSel(new Set()); }}>Queue {picked.length} reminders</Button></>}>
+      <Modal open={confirm} onClose={() => setConfirm(false)} title="Send reminders?" footer={<><Button onClick={() => setConfirm(false)}>Cancel</Button><Button variant="primary" onClick={async () => {
+          if (LIVE) { // No SMS/WhatsApp provider is connected: record them in the message log, and say so.
+            const ok = await run(async () => { for (const r of picked) { const e = await sendMessage({ guardianId: r.gid, studentIds: r.students.map((x) => x.id), channel: r.channel, template: "Fee Reminder", body: r.message, amount: r.total }); if (e) return e; } return ""; },
+              `${picked.length} reminders recorded in the message log. No SMS/WhatsApp provider is connected yet, so nothing was sent automatically.`);
+            if (ok) { setConfirm(false); setSel(new Set()); } return; }
+          toast(`${picked.length} reminders queued. Balances will be re-checked before each send.`); setConfirm(false); setSel(new Set()); }}>Queue {picked.length} reminders</Button></>}>
         <p>{picked.length} guardians · estimated provider cost <b>{money(cost)}</b>.</p><p className="mt-2 text-sm text-muted">Messages are queued, balances re-verified at send time, quiet hours respected, and anyone who has fully paid in the meantime is skipped automatically.</p>
       </Modal>
     </div>
@@ -173,12 +184,12 @@ function Reminders({ rows }: { rows: RRow[] }) {
 function PaymentsTable({ rows }: { rows: PRow[] }) {
   const [m, setM] = useState("");
   const cols: Column<PRow>[] = [
-    { key: "r", header: "Receipt", sort: (x) => x.receipt, render: (x) => <b className="num">{x.receipt}</b> }, { key: "s", header: "Student", sort: (x) => x.student, render: (x) => <Link href={`/students/${x.studentId}`} className="hover:text-info">{x.student}</Link> },
+    { key: "r", header: "Receipt", sort: (x) => x.receipt, render: (x) => <b className="num">{x.receipt}</b> }, { key: "s", header: "Student", sort: (x) => x.student, render: (x) => <Link href={studentHref(x.studentId)} className="hover:text-info">{x.student}</Link> },
     { key: "a", header: "Amount", align: "right", sort: (x) => x.amount, render: (x) => money(x.amount) },
     { key: "f", header: "Feeding", align: "right", hideOnMobile: true, render: (x) => (x.feeding ? <span className="num">{money(x.feeding)}{x.feedingPeriod && <span className="block text-[11px] text-muted">{x.feedingPeriod === "Term" ? "for the term" : x.feedingPeriod.toLowerCase()}</span>}</span> : <span className="text-muted">—</span>) },
     { key: "m", header: "Method", hideOnMobile: true, render: (x) => x.method },
     { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) }, { key: "ref", header: "Reference", hideOnMobile: true, render: (x) => <span className="num text-xs">{x.ref}</span> },
-    { key: "st", header: "Status", render: (x) => <StatusBadge status={x.status} /> }, { key: "p", header: "", render: (x) => x.status === "Confirmed" ? <Link className="text-info" href={`/print/receipt/${x.id}`}>Receipt</Link> : null },
+    { key: "st", header: "Status", render: (x) => <StatusBadge status={x.status} /> }, { key: "p", header: "", render: (x) => x.status === "Confirmed" ? <span className="flex items-center gap-3"><Link className="text-info" href={printHref("receipt", x.id)}>Receipt</Link>{LIVE && <PaymentActions p={x} />}</span> : null },
   ];
   return <Card><DataTable rows={rows.filter((r) => !m || r.method === m)} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.receipt} ${x.student} ${x.ref}`} filters={<Select label="Method" value={m} onChange={setM} options={[{ value: "", label: "All methods" }, ...["Cash", "Mobile Money", "Bank Transfer", "Card", "Cheque"].map((v) => ({ value: v, label: v }))]} />} pageSize={12} /></Card>;
 }
@@ -187,7 +198,7 @@ function PaymentsTable({ rows }: { rows: PRow[] }) {
 type InvRow = { id: string; invoice: string; name: string; cls: string; activities: string; total: number; paid: number; dueOn: string; status: string; gen?: GeneratedInvoice };
 
 function Invoices({ students, candidates, account, canBill, onIssue }: { students: SRow[]; candidates: BillCandidate[]; account: FeeAccount; canBill: boolean; onIssue: () => void }) {
-  const [o, setO] = useState(false); const [view, setView] = useState<InvRow | null>(null); const A = ACCOUNTS[account];
+  const [o, setO] = useState(false); const [view, setView] = useState<InvRow | null>(null); const A = ACCOUNTS[account]; const { role } = useRole();
   const { year, term } = useCalendar(); const key = termKey(year, term); const fs = useFeeSchedule();
   const generated = useGeneratedInvoices(year, term); const gen = account === "fees" ? generated.list : [];
   const ids = new Set(candidates.map((c) => c.id));
@@ -198,14 +209,17 @@ function Invoices({ students, candidates, account, canBill, onIssue }: { student
   return (
     <Card><CardHeader title={`${A.label} invoices — ${term} ${year}`} sub={`Numbered ${invoiceStem(A.invoicePrefix, year, term)}-… and receipted separately (${A.receiptPrefix}-…)`} action={canBill ? (account === "fees" ? <Button variant="primary" size="sm" onClick={() => setO(true)}>Generate {term} invoices</Button> : <Button variant="primary" size="sm" onClick={onIssue}><FilePlus2 size={13} />Issue new bill</Button>) : undefined} />
       {gen.length > 0 && <div className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-info/30 bg-info/8 px-3 py-2 text-sm">
-        <span><b>{gen.length}</b> {term} invoices generated · {money(gen.reduce((a, g) => a + generatedTotal(g), 0))}. Saved in this browser until the backend is connected; payments against them are recorded once it is.</span>
-        {canBill && <DiscardGenerated count={gen.length} term={term} onDiscard={generated.clear} />}</div>}
+        <span><b>{gen.length}</b> {term} invoices generated · {money(gen.reduce((a, g) => a + generatedTotal(g), 0))}. {generated.live
+          ? <>Not issued yet: {generated.awaiting > 0 ? <>{generated.awaiting} await the Owner&apos;s approval. Approving issues them with their numbers and adds them to balances.</> : "they are drafts."}</>
+          : "Saved in this browser until the backend is connected; payments against them are recorded once it is."}</span>
+        <span className="flex gap-2">{generated.live && role === "owner" && generated.awaiting > 0 && <Button size="sm" variant="primary" onClick={generated.approve}>Approve {generated.awaiting} invoices</Button>}
+        {canBill && <DiscardGenerated count={gen.length} term={term} onDiscard={generated.clear} />}</span></div>}
       <DataTable rows={rows} empty={<EmptyState icon={FileText} title={`No ${A.label.toLowerCase()} invoices for ${term} ${year} yet`} body={account === "fees" ? "Generate this term's invoices once its fees are set." : "Issue bills to students as they enrol."} />} columns={[
         { key: "i", header: "Invoice", render: (x) => <b className="num">{x.invoice}</b> }, { key: "n", header: "Student", sort: (x) => x.name, render: (x) => x.name }, { key: "c", header: "Class", render: (x) => x.cls },
         ...(account !== "fees" ? [{ key: "a", header: "Activities", hideOnMobile: true, render: (x: InvRow) => x.activities }] : []),
         { key: "b", header: "Total", align: "right", sort: (x) => x.total, render: (x) => money(x.total) }, { key: "p", header: "Paid", align: "right", render: (x) => money(x.paid) }, { key: "d", header: "Due", hideOnMobile: true, render: (x) => fmtDate(x.dueOn) },
         { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
-        { key: "pdf", header: "", render: (x) => x.gen ? <button className="text-info hover:underline" onClick={() => setView(x)}>View</button> : <Link className="text-info" href={`/print/invoice/${x.invoice}`}>PDF</Link> },
+        { key: "pdf", header: "", render: (x) => x.gen ? <button className="text-info hover:underline" onClick={() => setView(x)}>View</button> : <Link className="text-info" href={printHref("invoice", x.invoice)}>PDF</Link> },
       ]} rowId={(x) => x.id} searchText={(x) => x.name + x.invoice} pageSize={10} />
       {o && <GenerateInvoices candidates={candidates} already={new Set(gen.map((g) => g.studentId))} startSeq={gen.length} onGenerate={generated.add} onClose={() => setO(false)} />}
       {view?.gen && <GeneratedInvoiceDialog inv={view.gen} cls={view.cls} onClose={() => setView(null)} />}
@@ -287,7 +301,7 @@ function Activities({ students, account }: { students: SRow[]; account: FeeAccou
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">{per.map((p) => <button key={p.a} onClick={() => setAct(act === p.a ? "" : p.a)} className={`rounded-xl border bg-surface p-4 text-left transition hover:shadow-md ${act === p.a ? "border-info ring-1 ring-info" : "border-line"}`}><div className="text-xs text-muted">{p.a}</div><div className="mt-1 text-2xl font-semibold">{p.kids} <span className="text-sm font-normal text-muted">students</span></div><div className="num mt-1 text-sm">Billed {money(p.billed)}</div></button>)}</div>
-      <Card><DataTable rows={rows} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(`/students/${x.id}?tab=${account}`)} pageSize={12}
+      <Card><DataTable rows={rows} rowId={(x) => x.id} searchText={(x) => x.name + x.adm} onRowClick={(x) => r.push(studentHref(x.id, account))} pageSize={12}
         filters={<Select label="Activity" value={act} onChange={setAct} options={[{ value: "", label: "All activities" }, ...ACTIVITIES.map((a) => ({ value: a, label: a }))]} />}
         columns={[
           { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><div className="font-medium">{x.name}</div><div className="text-xs text-muted">{x.adm}</div></div> },
@@ -306,7 +320,20 @@ function Reconcile({ rows }: { rows: PRow[] }) {
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-3">{[["Pending verification", exc.filter((e) => e.status === "Pending").length, "warn"], ["Reversed", exc.filter((e) => e.status === "Reversed").length, "danger"], ["Duplicate references", dupRefs.length, dupRefs.length ? "danger" : "ok"]].map(([k, v, t]) => <Card key={k as string} className="p-4"><div className="text-xs text-muted">{k}</div><div className="mt-1 flex items-center gap-2 text-2xl font-semibold">{v as number}<Badge tone={t as "warn"}>{(v as number) === 0 ? "Clear" : "Needs review"}</Badge></div></Card>)}</div>
       <Card><CardHeader title="Exceptions" sub="Pending gateway payments are not counted as revenue until verified via the signed provider callback." />
-        {exc.length === 0 ? <p className="px-4 pb-4 text-muted">No exceptions in the current filter.</p> : exc.map((e) => <div key={e.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3"><div><div className="flex items-center gap-2"><b className="num">{e.ref}</b><StatusBadge status={e.status} /></div><div className="text-xs text-muted">{e.student} · {e.method} · {fmtDate(e.date)}</div></div><div className="flex items-center gap-2"><b className="num">{money(e.amount)}</b>{e.status === "Pending" && <><Button size="sm" onClick={() => toast("Match requires gateway verification (backend)", "err")}>Match</Button><Button size="sm" variant="ghost" onClick={() => toast("Marked for follow-up")}>Flag</Button></>}</div></div>)}</Card>
+        {exc.length === 0 ? <p className="px-4 pb-4 text-muted">No exceptions in the current filter.</p> : exc.map((e) => <div key={e.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3"><div><div className="flex items-center gap-2"><b className="num">{e.ref}</b><StatusBadge status={e.status} /></div><div className="text-xs text-muted">{e.student} · {e.method} · {fmtDate(e.date)}</div></div><div className="flex items-center gap-2"><b className="num">{money(e.amount)}</b>{e.status === "Pending" && (LIVE ? <PaymentActions p={e} pending /> : <><Button size="sm" onClick={() => toast("Match requires gateway verification (backend)", "err")}>Match</Button><Button size="sm" variant="ghost" onClick={() => toast("Marked for follow-up")}>Flag</Button></>)}</div></div>)}</Card>
     </div>
   );
+}
+
+/** Live: confirm a pending payment, or reverse one (Bursar / Owner; a reason is required and the original stays on record). */
+function PaymentActions({ p, pending }: { p: PRow; pending?: boolean }) {
+  const { allow } = useRole(); const run = useSave(); const [rev, setRev] = useState(false);
+  if (!allow("payments", "create")) return null;
+  return (<>
+    {pending && <Button size="sm" onClick={() => run(() => confirmPayment(p.id), `${p.receipt} confirmed`)}>Confirm</Button>}
+    <button className="text-xs text-danger hover:underline" onClick={() => setRev(true)}>Reverse</button>
+    <ConfirmDialog open={rev} onClose={() => setRev(false)} danger needReason title={`Reverse ${p.receipt}?`} confirmLabel="Reverse payment"
+      body={`${money(p.amount)} from ${p.student}. The payment stays on record as Reversed and no longer counts towards the balance. Give the reason (e.g. wrong amount, bounced cheque).`}
+      onConfirm={(reason) => { setRev(false); void run(() => reversePayment(p.id, reason ?? ""), `${p.receipt} reversed`); }} />
+  </>);
 }

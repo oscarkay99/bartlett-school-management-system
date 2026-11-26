@@ -1,4 +1,5 @@
 "use client";
+import { studentHref } from "@/lib/links";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Lock, Send, Undo2 } from "lucide-react";
@@ -7,6 +8,12 @@ import { ConfirmDialog, Select, Tabs, useToast } from "@/components/ui/interacti
 import { HBars, VBars } from "@/components/charts/charts";
 import { useRole } from "@/components/shell/AppShell";
 import { cn } from "@/lib/utils";
+import { LIVE } from "@/lib/live/config";
+import { useLiveData } from "@/lib/live/data";
+import { useSave } from "@/lib/live/useSave";
+import { liveExtra } from "@/lib/live/hydrate";
+import { decideGrades, publishGrades, saveGrades } from "@/lib/live/actions";
+import * as Q from "@/lib/data/queries";
 
 export interface Scale { grade: string; min: number; label: string }
 export interface ClassData { id: string; name: string; subjects: string[]; students: { id: string; name: string; scores: Record<string, { ca: number; exam: number }> }[] }
@@ -14,11 +21,19 @@ type Status = "Draft" | "Submitted" | "Approved" | "Published" | "Returned";
 const gradeOf = (scale: Scale[], t: number) => scale.find((g) => t >= g.min) ?? scale[scale.length - 1];
 
 export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist, intervention }: { classes: ClassData[]; scale: Scale[]; subjectAvg: { subject: string; avg: number }[]; classAvg: { name: string; avg: number }[]; dist: { grade: string; count: number }[]; intervention: { id: string; name: string; cls: string; avg: number }[] }) {
-  const [classId, setClassId] = useState(classes[3].id); const [subject, setSubject] = useState(classes[3].subjects[0]);
-  const { role, allow } = useRole(); const toast = useToast();
-  const cd = classes.find((c) => c.id === classId)!;
+  // Live: classes this person can see with students in them (a teacher: their own).
+  const shown = LIVE ? classes.filter((c) => c.students.length > 0) : classes; const first = shown[3] ?? shown[0];
+  const [classId, setClassId] = useState(first?.id ?? ""); const [subject, setSubject] = useState(first?.subjects?.[0] ?? "");
+  const { role, allow } = useRole(); const toast = useToast(); const run = useSave(); const { version } = useLiveData();
+  const cd = shown.find((c) => c.id === classId) ?? first ?? { id: "", name: "", subjects: [], students: [] };
   const [scores, setScores] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<Record<string, Status>>({ "c9|Mathematics": "Submitted", "c10|English Language": "Submitted", "c8|English Language": "Approved", "c5|Mathematics": "Draft" });
+  const [statusDemo, setStatusDemo] = useState<Record<string, Status>>({ "c9|Mathematics": "Submitted", "c10|English Language": "Submitted", "c8|English Language": "Approved", "c5|Mathematics": "Draft" });
+  // Live: batch status per class + subject for the current term, from the database.
+  const batches = useMemo(() => (liveExtra.data?.gradeBatches ?? []).filter((b) => b.term === `${Q.SCHOOL.year}|${Q.SCHOOL.term}`), [version]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const status: Record<string, Status> = LIVE ? Object.fromEntries(batches.map((b) => [`${b.classId}|${b.subject}`, b.status as Status])) : statusDemo;
+  const batchId = (k: string) => batches.find((b) => `${b.classId}|${b.subject}` === k)?.id ?? "";
+  const setStatus = (next: Record<string, Status>) => { if (!LIVE) setStatusDemo(next); };
+  const rowsOf = () => cd.students.map((x) => ({ studentId: x.id, ca: parseFloat(val(x.id, "ca")) || 0, exam: parseFloat(val(x.id, "exam")) || 0 }));
   const [w, setW] = useState({ ca: 40, exam: 60 }); const [reopen, setReopen] = useState(false);
   const key = `${classId}|${subject}`; const st: Status = status[key] ?? "Draft"; const locked = st === "Submitted" || st === "Approved" || st === "Published";
   const val = (id: string, f: "ca" | "exam") => scores[`${key}|${id}|${f}`] ?? String(cd.students.find((s) => s.id === id)!.scores[subject]?.[f] ?? "");
@@ -38,15 +53,15 @@ export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist,
         { id: "grades", label: "Gradebook", content: (
           <Card>
             <div className="flex flex-wrap items-end gap-3 border-b border-line p-4">
-              <Select label="Class" value={classId} onChange={(v) => { setClassId(v); setSubject(classes.find((c) => c.id === v)!.subjects[0]); }} options={classes.map((c) => ({ value: c.id, label: c.name }))} />
+              <Select label="Class" value={classId} onChange={(v) => { setClassId(v); setSubject(shown.find((c) => c.id === v)?.subjects?.[0] ?? ""); }} options={shown.map((c) => ({ value: c.id, label: c.name }))} />
               <Select label="Subject" value={subject} onChange={setSubject} options={cd.subjects.map((s) => ({ value: s, label: s }))} />
               <StatusBadge status={st === "Published" ? "Approved" : st} />
               <div className="ml-auto flex gap-2">
-                {!locked && <Button onClick={() => { setStatus({ ...status, [key]: "Draft" }); toast("Draft saved"); }} disabled={!can}>Save draft</Button>}
-                {!locked && <Button variant="primary" disabled={!can || errs.length > 0 || !wOk} onClick={() => { setStatus({ ...status, [key]: "Submitted" }); toast(`${label(key)} submitted for review`); }}><Send size={14} />Submit for review</Button>}
-                {st === "Submitted" && isApprover && <><Button variant="success" onClick={() => { setStatus({ ...status, [key]: "Approved" }); toast("Batch approved"); }}><CheckCircle2 size={14} />Approve</Button><Button onClick={() => { setStatus({ ...status, [key]: "Returned" }); toast("Returned to teacher for corrections"); }}><Undo2 size={14} />Return</Button></>}
-                {st === "Approved" && isApprover && <Button variant="primary" onClick={() => { setStatus({ ...status, [key]: "Published" }); toast("Results published and locked"); }}>Publish & lock</Button>}
-                {st === "Published" && <Button onClick={() => setReopen(true)}><Lock size={14} />Reopen (audited)</Button>}
+                {!locked && <Button onClick={() => { if (LIVE) { void run(() => saveGrades(classId, subject, Q.SCHOOL.year, Q.SCHOOL.term, rowsOf(), false), "Draft saved"); return; } setStatus({ ...status, [key]: "Draft" }); toast("Draft saved"); }} disabled={!can}>Save draft</Button>}
+                {!locked && <Button variant="primary" disabled={!can || errs.length > 0 || !wOk} onClick={() => { if (LIVE) { void run(() => saveGrades(classId, subject, Q.SCHOOL.year, Q.SCHOOL.term, rowsOf(), true), `${label(key)} submitted for review`); return; } setStatus({ ...status, [key]: "Submitted" }); toast(`${label(key)} submitted for review`); }}><Send size={14} />Submit for review</Button>}
+                {st === "Submitted" && isApprover && <><Button variant="success" onClick={() => { if (LIVE) { void run(() => decideGrades(batchId(key), true), "Batch approved"); return; } setStatus({ ...status, [key]: "Approved" }); toast("Batch approved"); }}><CheckCircle2 size={14} />Approve</Button><Button onClick={() => { if (LIVE) { void run(() => decideGrades(batchId(key), false, "Please correct and resubmit"), "Returned to teacher for corrections"); return; } setStatus({ ...status, [key]: "Returned" }); toast("Returned to teacher for corrections"); }}><Undo2 size={14} />Return</Button></>}
+                {st === "Approved" && isApprover && <Button variant="primary" onClick={() => { if (LIVE) { void run(() => publishGrades(batchId(key)), "Results published and locked"); return; } setStatus({ ...status, [key]: "Published" }); toast("Results published and locked"); }}>Publish & lock</Button>}
+                {st === "Published" && !LIVE && <Button onClick={() => setReopen(true)}><Lock size={14} />Reopen (audited)</Button>}
               </div>
             </div>
             {!wOk && <p role="alert" className="border-b border-line bg-danger/8 px-4 py-2 text-sm text-danger">Assessment weights total {w.ca + w.exam}% — they must equal 100% before results can be submitted (Assessment setup tab).</p>}
@@ -63,7 +78,7 @@ export function AcademicsWorkspace({ classes, scale, subjectAvg, classAvg, dist,
             <Card><CardHeader title="Average by class" sub="Mean total score (CA + exam)" /><div className="px-2 pb-3"><HBars data={classAvg} x="name" y="avg" label="Average" money={false} color="var(--info)" height={320} /></div></Card>
             <Card><CardHeader title="Average by subject" /><div className="px-2 pb-3"><VBars data={subjectAvg} x="subject" y="avg" label="Average" color="var(--brand)" domain={[0, 100]} /></div></Card>
             <Card><CardHeader title="Grade distribution" /><div className="px-2 pb-3"><VBars data={dist} x="grade" y="count" label="Results" color="var(--warn)" height={220} /></div></Card>
-            <Card><CardHeader title="Students who may benefit from support" sub="Average below 50%. A prompt for a human conversation, not an automated judgement." /><ul className="divide-y divide-line">{intervention.slice(0, 7).map((s) => <li key={s.id} className="flex justify-between px-4 py-2.5"><Link className="hover:text-info" href={`/students/${s.id}?tab=academics`}>{s.name} <span className="text-xs text-muted">{s.cls}</span></Link><b>{s.avg}%</b></li>)}{intervention.length === 0 && <li className="p-4 text-muted">No students below threshold.</li>}</ul></Card>
+            <Card><CardHeader title="Students who may benefit from support" sub="Average below 50%. A prompt for a human conversation, not an automated judgement." /><ul className="divide-y divide-line">{intervention.slice(0, 7).map((s) => <li key={s.id} className="flex justify-between px-4 py-2.5"><Link className="hover:text-info" href={studentHref(s.id, "academics")}>{s.name} <span className="text-xs text-muted">{s.cls}</span></Link><b>{s.avg}%</b></li>)}{intervention.length === 0 && <li className="p-4 text-muted">No students below threshold.</li>}</ul></Card>
           </div>) },
         { id: "approvals", label: "Approvals", badge: String(pending.length), content: <Card><CardHeader title="Grade batches" />{Object.entries(status).map(([k, s]) => <div key={k} className="flex items-center justify-between border-t border-line px-4 py-3"><span>{label(k)}</span><StatusBadge status={s === "Published" ? "Approved" : s} /></div>)}</Card> },
         { id: "setup", label: "Assessment setup", content: (

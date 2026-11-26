@@ -1,4 +1,8 @@
 "use client";
+import { LIVE } from "@/lib/live/config";
+import * as Q from "@/lib/data/queries";
+import { useSave } from "@/lib/live/useSave";
+import { decideExpense, requestExpense, updateExpense } from "@/lib/live/actions";
 import { useState } from "react";
 import { CheckCircle2, Landmark, TrendingDown, TrendingUp, Wallet, XCircle } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Kpi, Progress, StatusBadge } from "@/components/ui/primitives";
@@ -23,7 +27,7 @@ const THRESH = [{ upTo: 500000, who: "Finance Officer" }, { upTo: 2500000, who: 
 const needs = (amt: number) => THRESH.find((t) => amt <= t.upTo)!.who;
 
 export function FinanceWorkspace({ expenses, tb, budget, recon, cash, incExp, breakdown, income, expenseTotal }: { expenses: Exp[]; tb: TB[]; budget: Bud[]; recon: { gl: number; sub: number; diff: number }; cash: number; incExp: Record<string, number | string>[]; breakdown: { name: string; value: number }[]; income: number; expenseTotal: number }) {
-  const [list, setList] = useState(expenses); const [form, setForm] = useState<null | { e?: Exp }>(null); const [del, setDel] = useState<Exp | null>(null); const [target, setTarget] = useState<{ e: Exp; act: "approve" | "reject" } | null>(null); const toast = useToast(); const { allow } = useRole(); const canEdit = allow("expenses", "edit"), canDelete = allow("expenses", "delete");
+  const [listState, setList] = useState(expenses); const list = LIVE ? expenses : listState; const run = useSave(); const [form, setForm] = useState<null | { e?: Exp }>(null); const [del, setDel] = useState<Exp | null>(null); const [target, setTarget] = useState<{ e: Exp; act: "approve" | "reject" } | null>(null); const toast = useToast(); const { allow } = useRole(); const canEdit = allow("expenses", "edit"), canDelete = allow("expenses", "delete");
   const canApprove = allow("expenses", "approve");
   const cols: Column<Exp>[] = [
     { key: "n", header: "Ref", render: (x) => <b className="num">{x.no}</b> }, { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) }, { key: "c", header: "Category / vendor", render: (x) => <div><div className="font-medium">{x.category}</div><div className="text-xs text-muted">{x.vendor}</div></div> },
@@ -54,13 +58,16 @@ export function FinanceWorkspace({ expenses, tb, budget, recon, cash, incExp, br
               <div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-lg bg-surface-2 p-3"><div className="text-xs text-muted">GL 1200 Fee Receivables</div><div className="num text-lg font-semibold">{money(recon.gl)}</div></div><div className="rounded-lg bg-surface-2 p-3"><div className="text-xs text-muted">Σ Student fee balances</div><div className="num text-lg font-semibold">{money(recon.sub)}</div></div></div></Card></div>) },
       ]} />
       {form && <RecordDialog open key={form.e?.id ?? "new"} onClose={() => setForm(null)} title={form.e ? `Edit ${form.e.no}` : "Add expense"} fields={EXP_FIELDS} submitLabel={form.e ? "Save changes" : "Submit expense"}
-        initial={form.e ? { category: form.e.category, vendor: form.e.vendor, amount: String(form.e.amount / 100), date: form.e.date, department: form.e.department, method: "Bank Transfer" } : { category: "Utilities", vendor: "", amount: "", date: "2026-10-12", department: "Operations", method: "Bank Transfer" }}
+        initial={form.e ? { category: form.e.category, vendor: form.e.vendor, amount: String(form.e.amount / 100), date: form.e.date, department: form.e.department, method: "Bank Transfer" } : { category: "Utilities", vendor: "", amount: "", date: Q.TODAY, department: "Operations", method: "Bank Transfer" }}
         extra={(v) => (Number(v.amount) > 0 ? <p className="rounded-lg bg-info/10 p-2.5 text-sm text-info">Approval required from: <b>{needs(Math.round(Number(v.amount) * 100))}</b></p> : null)}
         onSubmit={(v) => { const amount = Math.round(Number(v.amount) * 100); const row: Exp = { id: form.e?.id ?? `new-${crypto.randomUUID().slice(0, 6)}`, no: form.e?.no ?? `EXP-${String(list.length + 1).padStart(4, "0")}`, date: v.date, category: v.category, vendor: v.vendor.trim(), amount, department: v.department, status: form.e?.status ?? "Pending Approval", approver: needs(amount) };
+          if (LIVE) { // live: new expenses go in as Pending Approval and get their EXP- number in the database
+            const e = form.e; void run(() => e ? updateExpense(e.id, { date: v.date, category: v.category, vendor: v.vendor.trim(), department: v.department, method: v.method }) : requestExpense({ date: v.date, category: v.category, vendor: v.vendor.trim(), description: `${v.vendor.trim()} — ${v.category}`, amount, method: v.method, department: v.department }),
+              e ? `${e.no} updated` : `Expense submitted for ${row.approver} approval`).then((ok) => { if (ok) setForm(null); }); return; }
           setList((x) => (form.e ? x.map((y) => (y.id === row.id ? row : y)) : [row, ...x])); toast(form.e ? `${row.no} updated` : `${row.no} submitted for ${row.approver} approval`); setForm(null); }} />}
-      <ConfirmDialog open={!!del} onClose={() => setDel(null)} needReason danger confirmLabel="Delete expense" title={`Delete ${del?.no ?? ""}`} body="Deleting an approved expense reverses its ledger entries with a correcting journal; the original is kept for audit." onConfirm={() => { setList((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.no} deleted`); setDel(null); }} />
+      <ConfirmDialog open={!!del} onClose={() => setDel(null)} needReason danger confirmLabel="Delete expense" title={`Delete ${del?.no ?? ""}`} body="Deleting an approved expense reverses its ledger entries with a correcting journal; the original is kept for audit." onConfirm={() => { if (LIVE) { toast("Expenses can't be deleted: reject a pending one instead. Approved expenses stay on record.", "err"); setDel(null); return; } setList((x) => x.filter((y) => y.id !== del!.id)); toast(`${del!.no} deleted`); setDel(null); }} />
       <ConfirmDialog open={!!target} onClose={() => setTarget(null)} needReason={target?.act === "reject"} danger={target?.act === "reject"} title={target?.act === "approve" ? "Approve expense" : "Reject expense"} confirmLabel={target?.act === "approve" ? "Approve" : "Reject"} body={target ? `${target.e.no} · ${target.e.vendor} · ${money(target.e.amount)}. Required approver: ${needs(target.e.amount)}. This action is recorded in the audit trail.` : ""}
-        onConfirm={() => { if (!target) return; setList((l) => l.map((x) => (x.id === target.e.id ? { ...x, status: target.act === "approve" ? "Approved" : "Rejected" } : x))); toast(`${target.e.no} ${target.act === "approve" ? "approved" : "rejected"}`); setTarget(null); }} />
+        onConfirm={(reason) => { if (!target) return; if (LIVE) { const t = target; void run(() => decideExpense(t.e.id, t.act === "approve", reason ?? ""), `${t.e.no} ${t.act === "approve" ? "approved" : "rejected"}`); setTarget(null); return; } setList((l) => l.map((x) => (x.id === target.e.id ? { ...x, status: target.act === "approve" ? "Approved" : "Rejected" } : x))); toast(`${target.e.no} ${target.act === "approve" ? "approved" : "rejected"}`); setTarget(null); }} />
     </div>
   );
 }

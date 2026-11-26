@@ -1,4 +1,5 @@
 "use client";
+import { printHref } from "@/lib/links";
 import Link from "next/link";
 import { Badge, Card, CardHeader } from "@/components/ui/primitives";
 import { useCalendar } from "@/components/shell/CalendarContext";
@@ -47,7 +48,7 @@ export function StudentFeeding({ student, history, paid, payments, dueOn, today 
         {payments.length === 0 ? <p className="border-t border-line px-4 py-3 text-sm text-muted">No feeding paid yet.</p>
           : <ul className="max-h-72 divide-y divide-line overflow-y-auto border-t border-line text-sm">{payments.map((p) => <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2">
               <span>{fmtDate(p.date)} <Badge tone={p.how === "With school fees" ? "neutral" : "info"}>{p.how === "Term" ? "For the term" : p.how}</Badge>{p.status !== "Confirmed" && <span className="ml-1 text-xs text-warn">{p.status}</span>}</span>
-              <span className="flex items-center gap-3"><b className="num">{money(p.feeding)}</b><Link className="num text-xs text-info hover:underline" href={`/print/receipt/${p.id}`}>{p.receipt}</Link></span></li>)}</ul>}</Card>
+              <span className="flex items-center gap-3"><b className="num">{money(p.feeding)}</b><Link className="num text-xs text-info hover:underline" href={printHref("receipt", p.id)}>{p.receipt}</Link></span></li>)}</ul>}</Card>
       <Card className="lg:col-span-2"><CardHeader title="Payment plan" sub="How the family pays feeding this term. Plans are changed in the Feeding module."
           action={<Link className="text-sm font-medium text-info hover:underline" href="/feeding?tab=plans">Change in Feeding → Payment plans</Link>} />
         <div className="grid gap-3 px-4 pb-3 text-sm sm:grid-cols-4">

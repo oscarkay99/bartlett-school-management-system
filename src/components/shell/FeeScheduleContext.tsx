@@ -1,6 +1,11 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { findTerm, mergeSchedule, termKey, type ClassRef, type TermFees } from "@/lib/fees";
+import { LIVE } from "@/lib/live/config";
+import { useLiveData } from "@/lib/live/data";
+import { useSave } from "@/lib/live/useSave";
+import { saveTermFees } from "@/lib/live/actions";
+import * as Q from "@/lib/data/queries";
 
 const KEY = "fee-schedule-v1";
 interface FeeScheduleState {
@@ -14,7 +19,24 @@ const Ctx = createContext<FeeScheduleState | null>(null);
 export const useFeeSchedule = () => { const c = useContext(Ctx); if (!c) throw new Error("useFeeSchedule outside FeeScheduleProvider"); return c; };
 
 // Front-end stand-in: fees set in Settings are kept in this browser (localStorage) until the backend stores them.
-export function FeeScheduleProvider({ seed, locked, classes, activities, children }: { seed: TermFees[]; locked: string[]; classes: ClassRef[]; activities: string[]; children: ReactNode }) {
+export function FeeScheduleProvider(props: { seed: TermFees[]; locked: string[]; classes: ClassRef[]; activities: string[]; children: ReactNode }) {
+  return LIVE ? <LiveFeeSchedule>{props.children}</LiveFeeSchedule> : <DemoFeeSchedule {...props} />;
+}
+
+/** Live site: the schedule is in the database (loaded with the school's data); saving writes it back. */
+function LiveFeeSchedule({ children }: { children: ReactNode }) {
+  const { version } = useLiveData(); const run = useSave();
+  const value = useMemo(() => {
+    const schedule = [...Q.feeSchedule]; const locked = Q.lockedFeeTerms();
+    return { schedule, classes: Q.classes.map((c) => ({ id: c.id, name: c.name, level: c.level })), activities: Object.keys(schedule[0]?.activities ?? {}),
+      save: (tf: TermFees) => { void run(() => saveTermFees(tf), `Fees for ${tf.term} ${tf.year} saved`); },
+      get: (year: string, term: string) => findTerm(schedule, year, term), isLocked: (year: string, term: string) => locked.includes(termKey(year, term)) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, run]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+function DemoFeeSchedule({ seed, locked, classes, activities, children }: { seed: TermFees[]; locked: string[]; classes: ClassRef[]; activities: string[]; children: ReactNode }) {
   const [schedule, setSchedule] = useState(seed);
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => { try { setSchedule(mergeSchedule(seed, JSON.parse(localStorage.getItem(KEY) ?? "null"), locked, classes)); } catch {} }, [seed, locked, classes]);

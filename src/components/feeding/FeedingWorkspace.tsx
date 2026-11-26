@@ -1,4 +1,5 @@
 "use client";
+import { studentHref, printHref } from "@/lib/links";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Users, Utensils, Wallet } from "lucide-react";
@@ -160,11 +161,11 @@ function PaymentsTab({ payments, classes, payees, usedRefs, termLabel, today }: 
   const label = (h: string) => (h === "Term" ? "For the term" : h);
   const cols: Column<FeedingPayment>[] = [
     { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) },
-    { key: "s", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={`/students/${x.studentId}?tab=feeding`}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
+    { key: "s", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={studentHref(x.studentId, "feeding")}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
     { key: "h", header: "Paid", render: (x) => <Badge tone={x.how === "With school fees" ? "neutral" : "info"}>{label(x.how)}</Badge> },
     { key: "f", header: "Feeding", align: "right", sort: (x) => x.feeding, render: (x) => <b className="num">{money(x.feeding)}</b> },
     { key: "m", header: "Method", hideOnMobile: true, render: (x) => x.method },
-    { key: "r", header: "Receipt", hideOnMobile: true, render: (x) => <Link className="num text-info hover:underline" href={`/print/receipt/${x.id}`}>{x.receipt}</Link> },
+    { key: "r", header: "Receipt", hideOnMobile: true, render: (x) => <Link className="num text-info hover:underline" href={printHref("receipt", x.id)}>{x.receipt}</Link> },
   ];
   return (
     <Card><CardHeader title="Feeding payments" sub={`${data.length} payments · ${money(total)} confirmed. Feeding paid with the school fees at once shows the feeding part of that payment.`}
@@ -183,7 +184,7 @@ function PlansTab({ rows, canEdit, td, today, termLabel, termKey: key, classes, 
   const onFeeding = rows.filter((r) => r.rate > 0);
   const data = onFeeding.filter((r) => (!plan || r.freq === plan) && (!behindOnly || r.plan.label === "Behind") && (!cls || r.classId === cls));
   const cols: Column<Row>[] = [
-    { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={`/students/${x.id}?tab=feeding`}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
+    { key: "n", header: "Student", sort: (x) => x.name, render: (x) => <div><Link className="font-medium hover:text-info" href={studentHref(x.id, "feeding")}>{x.name}</Link><div className="text-xs text-muted">{x.cls}</div></div> },
     { key: "pl", header: "Plan", sort: (x) => x.freq, render: (x) => { const h = history(x.id, key); return <div><div className="font-medium">{planLabel(x.freq)}</div>
       <div className="num text-[11px] text-muted">{x.perPeriod > 0 ? `${money(x.perPeriod)} per ${periodWord(x.freq)}` : "with the school fees invoice"}{h.length > 1 ? ` · ${h.length} changes` : ""}</div></div>; } },
     { key: "ex", header: "Expected by today", align: "right", hideOnMobile: true, sort: (x) => x.expected, render: (x) => <span className="num">{money(x.expected)}</span> },

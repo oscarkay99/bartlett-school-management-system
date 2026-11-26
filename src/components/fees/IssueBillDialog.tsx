@@ -7,6 +7,9 @@ import { Modal, useToast } from "@/components/ui/interactive";
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { ACCOUNTS, activitiesFor, type FeeAccount } from "@/lib/accounts";
+import { LIVE } from "@/lib/live/config";
+import { useLiveData } from "@/lib/live/data";
+import { createInvoices, enrolActivities } from "@/lib/live/actions";
 import { invoiceStem, termKey } from "@/lib/fees";
 import { money } from "@/lib/money";
 
@@ -16,7 +19,7 @@ export interface BillCandidate { id: string; name: string; adm: string; classId:
 // Issue an Extracurricular or Extra Classes invoice (standalone, never added to school fees) for one student, for the term selected in the top bar.
 // Prices come from that term's fee schedule. Front-end preview: the backend assigns the real number.
 export function IssueBillDialog({ open, onClose, account, candidates }: { open: boolean; onClose: () => void; account: FeeAccount; candidates: BillCandidate[] }) {
-  const A = ACCOUNTS[account]; const toast = useToast();
+  const A = ACCOUNTS[account]; const toast = useToast(); const { reload } = useLiveData(); const [saving, setSaving] = useState(false); const [saveErr, setSaveErr] = useState("");
   const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term);
   const [sid, setSid] = useState(""); const [filter, setFilter] = useState(""); const [acts, setActs] = useState<string[]>([]); const [done, setDone] = useState<string | null>(null);
   const st = candidates.find((c) => c.id === sid);
@@ -33,12 +36,19 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
   const list = candidates.filter((c) => !filter || (c.name + c.adm).toLowerCase().includes(filter.toLowerCase())).slice(0, 6);
   return (
     <Modal open={open} onClose={close} title={done ? "Bill issued" : `Enrol & bill student — ${term} ${year}`} wide
-      footer={done ? <Button variant="primary" onClick={close}>Done</Button> : <><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={!!err} onClick={() => { const no = `${invoiceStem(A.invoicePrefix, year, term)}-${String(900 + Math.floor(Math.random() * 99)).padStart(4, "0")}`; setDone(no); toast(`${A.label} bill ${no} issued`); }}>Issue bill · {money(total)}</Button></>}>
+      footer={done ? <Button variant="primary" onClick={close}>Done</Button> : <><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={!!err || saving} onClick={async () => {
+          if (!LIVE) { const no = demoBillNo(A.invoicePrefix, year, term); setDone(no); toast(`${A.label} bill ${no} issued`); return; }
+          // Live: enrol in the activities, then the bill goes to the Owner for approval (it gets its number when approved).
+          setSaving(true); setSaveErr("");
+          const e = (await enrolActivities(sid, year, term, items.map((i) => i.label))) || (await createInvoices([{ studentId: sid, account, year, term, items }]));
+          setSaving(false); if (e) { setSaveErr(e); return; }
+          setDone("awaiting the Owner's approval"); toast(`${A.label} bill sent for approval`); void reload();
+        }}>{saving ? "Saving…" : `Issue bill · ${money(total)}`}</Button></>}>
       {done ? (
         <div className="space-y-2 text-center"><CheckCircle2 className="mx-auto text-ok" size={40} />
           <p>{A.label} bill <b className="num">{done}</b> issued to {st?.name} for <b>{money(total)}</b>.</p>
           <p className="text-sm text-muted">This bill is separate from school fees. Payments against it get their own {A.receiptPrefix}- receipts.</p>
-          <p className="text-xs text-muted">Front-end preview — the bill is saved once the backend is connected.</p></div>
+          {!LIVE && <p className="text-xs text-muted">Front-end preview — the bill is saved once the backend is connected.</p>}</div>
       ) : !tf ? (
         <div className="space-y-2 text-sm"><p>{term} {year} has no fees set yet, so there is nothing to bill from.</p><Link className="font-medium text-info hover:underline" href="/settings?tab=fees" onClick={close}>Set {term} fees in Settings →</Link></div>
       ) : (
@@ -51,6 +61,10 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
           {items.length > 0 && <div className="rounded-lg border border-line p-3 text-sm"><div className="mb-1 font-medium">{A.invoiceTitle} preview · {term} {year}</div>{items.map((i) => <div key={i.label} className="flex justify-between py-0.5"><span>{i.label}</span><span className="num">{money(i.amount)}</span></div>)}<div className="mt-1 flex justify-between border-t border-line pt-1.5 font-medium"><span>Total</span><span className="num">{money(total)}</span></div></div>}
           {err && st && <p role="alert" className="text-sm text-danger">{err}</p>}
         </div>)}
+      {saveErr && <p role="alert" className="mt-3 rounded-lg border border-danger/30 bg-danger/8 px-3 py-2 text-sm text-danger">Not saved: {saveErr}</p>}
     </Modal>
   );
 }
+
+/** Demo only: a made-up bill number (the live system's numbers come from the database). */
+function demoBillNo(prefix: string, year: string, term: string) { return `${invoiceStem(prefix, year, term)}-${String(900 + Math.floor(Math.random() * 99)).padStart(4, "0")}`; }

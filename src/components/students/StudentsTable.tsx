@@ -1,4 +1,5 @@
 "use client";
+import { studentHref } from "@/lib/links";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { DataTable, Select, type Column } from "@/components/ui/interactive";
@@ -6,7 +7,7 @@ import { Avatar, Badge, StatusBadge } from "@/components/ui/primitives";
 import { money } from "@/lib/money";
 
 export interface StudentRow { id: string; name: string; adm: string; cls: string; classId: string; status: string; fee: string; balance: number; guardians: string; guardianCount: number; medical: boolean }
-export function StudentsTable({ rows, classes, hrefFor = (id) => `/students/${id}` }: { rows: StudentRow[]; classes: { id: string; name: string }[]; hrefFor?: (id: string) => string }) {
+export function StudentsTable({ rows, classes, hrefFor = (id) => studentHref(id) }: { rows: StudentRow[]; classes: { id: string; name: string }[]; hrefFor?: (id: string) => string }) {
   const r = useRouter(); const [cls, setCls] = useState(""); const [fee, setFee] = useState(""); const [st, setSt] = useState(""); const [gd, setGd] = useState("");
   const data = useMemo(() => rows.filter((x) => (!cls || x.classId === cls) && (!fee || x.fee === fee) && (!st || x.status === st)), [rows, cls, fee, st]);
   const cols: Column<StudentRow>[] = [
