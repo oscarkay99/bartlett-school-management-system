@@ -94,9 +94,8 @@ export function StudentProfile({ id }: { id: string }) {
         {tc.parts.filter((p) => p.account !== "fees" && p.billed).map((p) => <div key={p.account} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm"><span className="text-muted">{p.label} <span className="text-xs">(separate invoice, not added to school fees)</span></span>
           <span><b className="num">{money(p.net)}</b> <span className="text-xs text-muted">· owed {money(Math.max(0, Q.accountSummary(s.id, p.account).balance))}</span></span></div>)}
       </div>
-      <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{accts.flatMap(({ id: acc, a, f: af }) => [<Link key={acc} href={studentHref(s.id, acc)} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">{a.label}</span><span className={`num font-semibold ${af.balance > 0 ? "text-danger" : ""}`}>{af.enrolled ? money(Math.max(0, af.balance)) : "Not enrolled"}</span></span>{af.enrolled && <StatusBadge status={af.status} />}</Link>,
-        // Feeding sits right after School Fees (it is paid separately, not part of school fees).
-        ...(acc === "fees" ? [<Link key="feeding" href={studentHref(s.id, "feeding")} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">Feeding</span><span className={`num font-semibold ${fa.balance > 0 ? "text-danger" : ""}`}>{fa.billed > 0 ? money(Math.max(0, fa.balance)) : "Not on feeding"}</span></span>{fa.billed > 0 && <StatusBadge status={fa.balance <= 0 ? "Paid in Full" : fa.paid > 0 ? "Partially Paid" : "Outstanding"} />}</Link>] : [])])}</div>
+      <div className="mb-3 grid gap-2 sm:grid-cols-3">{accts.flatMap(({ id: acc, a, f: af }) => [<Link key={acc} href={studentHref(s.id, acc)} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 transition hover:shadow-md"><span><span className="block text-xs text-muted">{a.label}</span><span className={`num font-semibold ${af.balance > 0 ? "text-danger" : ""}`}>{af.enrolled ? money(Math.max(0, af.balance)) : "Not enrolled"}</span></span>{af.enrolled && <StatusBadge status={af.status} />}</Link>,
+        ])}</div>
       {f.balance > 0 ? (
         <div role="alert" className={`mb-5 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${f.overdue ? "border-danger/30 bg-danger/8" : "border-warn/30 bg-warn/10"}`}>
           <AlertTriangle className={f.overdue ? "text-danger" : "text-warn"} />
@@ -113,15 +112,15 @@ export function StudentProfile({ id }: { id: string }) {
 }
 
 // One billing account for this student: summary, ledger, invoices and receipts. Each account is settled separately.
-/** One layout for every money tab (School Fees, Feeding, Extracurricular, Extra Classes): the four figures, status and
- *  Record payment; the ledger; what was billed; payments & receipts. */
-function MoneyPanel({ label, sum, action, ledger, billedCard, pays }: { label: string; sum: { billed: number; discount: number; paid: number; balance: number; status: string };
+/** One layout for every money tab: Ledger, Invoices, Payments & receipts (Record payment sits on the ledger).
+ *  School Fees also shows its four figures and status on top (`summary`). */
+function MoneyPanel({ label, sum, summary, action, ledger, billedCard, pays }: { label: string; summary?: boolean; sum: { billed: number; discount: number; paid: number; balance: number; status: string };
   action: React.ReactNode; ledger: Q.LedgerRow[]; billedCard: React.ReactNode; pays: { id: string; receiptNo: string; status: string; method: string; date: string; ref: string; staff: string; amount: number }[] }) {
   return (
     <div className="space-y-4">
-      <Card><div className="flex flex-wrap items-center justify-between gap-4 p-4"><div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">{[["Billed", money(sum.billed)], ["Discounts", money(sum.discount)], ["Paid", money(sum.paid)], ["Outstanding", money(Math.max(0, sum.balance))]].map(([k, v], i) => <div key={k}><div className="text-xs text-muted">{k}</div><div className={`num text-xl font-semibold ${i === 3 && sum.balance > 0 ? "text-danger" : ""}`}>{v}</div></div>)}</div>
-        <div className="flex items-center gap-2"><StatusBadge status={sum.status} />{action}</div></div></Card>
-      <Card><CardHeader title={`${label} ledger`} sub="Append-only. Corrections appear as reversals, never as edits." />
+      {summary && <Card><div className="flex flex-wrap items-center justify-between gap-4 p-4"><div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">{[["Billed", money(sum.billed)], ["Discounts", money(sum.discount)], ["Paid", money(sum.paid)], ["Outstanding", money(Math.max(0, sum.balance))]].map(([k, v], i) => <div key={k}><div className="text-xs text-muted">{k}</div><div className={`num text-xl font-semibold ${i === 3 && sum.balance > 0 ? "text-danger" : ""}`}>{v}</div></div>)}</div>
+        <div className="flex items-center gap-2"><StatusBadge status={sum.status} />{action}</div></div></Card>}
+      <Card><CardHeader title={`${label} ledger`} sub="Append-only. Corrections appear as reversals, never as edits." action={summary ? undefined : action} />
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Date</th><th className="text-left">Reference</th><th className="text-left">Description</th><th className="px-3 text-right">Debit</th><th className="px-3 text-right">Credit</th><th className="px-4 text-right">Balance</th></tr></thead>
           <tbody className="divide-y divide-line">{ledger.length === 0 ? <tr><td colSpan={6} className="px-4 py-3 text-muted">Nothing yet.</td></tr> : ledger.map((l, i) => <tr key={i}><td className="px-4 py-2.5 whitespace-nowrap">{fmtDate(l.date)}</td><td className="num">{l.ref}</td><td>{l.desc}</td><td className="num px-3 text-right">{l.debit ? money(l.debit) : ""}</td><td className="num px-3 text-right text-ok">{l.credit ? money(l.credit) : ""}</td><td className="num px-4 text-right font-medium">{money(l.bal)}</td></tr>)}</tbody></table></div></Card>
       {billedCard}
@@ -133,26 +132,20 @@ function MoneyPanel({ label, sum, action, ledger, billedCard, pays }: { label: s
 function AccountPanel({ studentId, account, payStudent, usedRefs }: { studentId: string; account: FeeAccount; payStudent: React.ComponentProps<typeof RecordPaymentButton>["student"]; usedRefs: string[] }) {
   const a = ACCOUNTS[account]; const f = Q.accountSummary(studentId, account);
   const inv = Q.invoicesOf(studentId, account); const pays = Q.paymentsOf(studentId, account).sort((x, y) => y.date.localeCompare(x.date));
-  if (!f.enrolled) return (
-    <Card className="p-6 text-center"><p className="font-medium">Not billed for {a.label.toLowerCase()} this term.</p>
-      <p className="mt-1 text-sm text-muted">Enrol the student in an activity from the <Link className="text-info" href={a.href}>{a.label}</Link> page to issue a bill.</p></Card>);
-  return <MoneyPanel label={a.label} sum={f} ledger={Q.accountLedger(studentId, account)} pays={pays}
+  return <MoneyPanel label={a.label} sum={f} summary={account === "fees"} ledger={Q.accountLedger(studentId, account)} pays={pays}
     action={<RecordPaymentButton size="sm" account={account} student={payStudent} usedRefs={usedRefs} />}
-    billedCard={<Card><CardHeader title="Invoices" />{inv.map((i) => { const net = i.items.reduce((x, y) => x + y.amount, 0) - i.discount; return <div key={i.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline gap-x-2"><b className="num">{i.no}</b><span className="text-xs text-muted">{i.term} {i.year}</span></div><div className="text-xs text-muted">{[...i.items.map((x) => `${x.label} ${money(x.amount)}`), ...(i.discount ? [`${Q.discountLabel(studentId)} −${money(i.discount)}`] : [])].join(" · ")}</div></div><div className="flex items-center gap-3"><div className="text-right"><div className="text-xs text-muted">Total</div><b className="num">{money(net)}</b></div><LinkButton size="sm" href={printHref("invoice", i.id)}><FileText size={14} />Invoice PDF</LinkButton></div></div>; })}</Card>} />;
+    billedCard={<Card><CardHeader title="Invoices" />{inv.length === 0 && <p className="px-4 pb-4 text-muted">No {a.label.toLowerCase()} invoices yet{account !== "fees" && <> — enrol the student in an activity on the <Link className="text-info" href={a.href}>{a.label}</Link> page</>}.</p>}{inv.map((i) => { const net = i.items.reduce((x, y) => x + y.amount, 0) - i.discount; return <div key={i.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline gap-x-2"><b className="num">{i.no}</b><span className="text-xs text-muted">{i.term} {i.year}</span></div><div className="text-xs text-muted">{[...i.items.map((x) => `${x.label} ${money(x.amount)}`), ...(i.discount ? [`${Q.discountLabel(studentId)} −${money(i.discount)}`] : [])].join(" · ")}</div></div><div className="flex items-center gap-3"><div className="text-right"><div className="text-xs text-muted">Total</div><b className="num">{money(net)}</b></div><LinkButton size="sm" href={printHref("invoice", i.id)}><FileText size={14} />Invoice PDF</LinkButton></div></div>; })}</Card>} />;
 }
 
 /** Feeding, in the same layout: billed = this term's feeding (never on the school fees invoice). */
 function FeedingPanel({ studentId, usedRefs }: { studentId: string; usedRefs: string[] }) {
   const fa = Q.feedingAccount(studentId); const st = Q.getStudent(studentId)!;
-  if (fa.billed === 0 && fa.payments.length === 0) return (
-    <Card className="p-6 text-center"><p className="font-medium">Not on feeding this term.</p>
-      <p className="mt-1 text-sm text-muted">Change this in the <Link className="text-info" href="/feeding?tab=students">Feeding</Link> module.</p></Card>);
   const status = fa.balance <= 0 ? "Paid in Full" : fa.paid > 0 ? "Partially Paid" : "Outstanding";
   const pays = [...fa.payments].sort((x, y) => y.date.localeCompare(x.date)).map((p) => ({ ...p, amount: p.feeding ?? p.amount }));
   return <MoneyPanel label="Feeding" sum={{ billed: fa.billed, discount: 0, paid: fa.paid, balance: fa.balance, status }} ledger={Q.feedingLedger(studentId)} pays={pays}
     action={<RecordFeedingPaymentButton studentId={studentId} usedRefs={usedRefs} />}
-    billedCard={<Card><CardHeader title="Feeding this term" sub="Paid separately from school fees, never on the school fees invoice." action={<Link className="text-sm font-medium text-info hover:underline" href="/feeding?tab=students">Change plan or amount →</Link>} />
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b>{Q.SCHOOL.term} {Q.SCHOOL.year}</b><div className="text-xs text-muted">{Q.getClass(st.classId)?.name} · <FeedingPlanLabel studentId={studentId} /></div></div>
-        <div className="text-right"><div className="text-xs text-muted">Feeding</div><b className="num">{money(fa.billed)}</b></div></div></Card>} />;
+    billedCard={<Card><CardHeader title="Invoices" sub="Feeding is billed on its own, never on the school fees invoice." action={<Link className="text-sm font-medium text-info hover:underline" href="/feeding?tab=students">Change plan or amount →</Link>} />
+      {fa.billed === 0 ? <p className="px-4 pb-4 text-muted">No feeding billed this term.</p> : <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3"><div><b>{Q.SCHOOL.term} {Q.SCHOOL.year}</b><div className="text-xs text-muted">{Q.getClass(st.classId)?.name} · <FeedingPlanLabel studentId={studentId} /></div></div>
+        <div className="text-right"><div className="text-xs text-muted">Feeding</div><b className="num">{money(fa.billed)}</b></div></div>}</Card>} />;
 }
 
