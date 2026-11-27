@@ -31,6 +31,8 @@ export interface Invoice {
 export interface Payment {
   id: string; receiptNo: string; account: FeeAccount; studentId: string; guardianId?: string; amount: Minor; method: PayMethod;
   date: string; ref: string; status: "Confirmed" | "Pending" | "Reversed"; staff: string; note?: string;
+  /** The term and year this payment is for (chosen when it is recorded). */
+  year?: string; term?: string;
   /** School fees payments only: how much of this payment is for feeding (feeding is billed on the school fees invoice). */
   feeding?: Minor;
   /** Set when the whole payment is for feeding, paid daily / weekly / monthly / for the term. */

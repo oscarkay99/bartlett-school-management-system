@@ -91,9 +91,9 @@ export async function discardInvoices(ids: string[]) {
 }
 export async function approveInvoices(ids: string[]) { const { error } = await db().rpc("approve_invoices", { p_ids: ids }); return err(error); }
 export async function returnInvoice(id: string, note: string) { const { error } = await db().rpc("return_invoice", { p_id: id, p_note: note }); return err(error); }
-export async function recordPayment(p: { account: string; studentId: string; guardianId?: string; amount: number; method: string; date: string; ref?: string; note?: string; feedingAmount?: number; feedingPeriod?: string }) {
+export async function recordPayment(p: { year?: string; term?: string; account: string; studentId: string; guardianId?: string; amount: number; method: string; date: string; ref?: string; note?: string; feedingAmount?: number; feedingPeriod?: string }) {
   const { data: r, error } = await db().from("payments").insert({ account: p.account, student_id: p.studentId, guardian_id: p.guardianId || null, amount: p.amount, method: p.method, paid_on: p.date,
-    reference: p.ref?.trim() || null, note: p.note?.trim() || null, feeding_amount: p.feedingAmount ?? 0, feeding_period: p.feedingPeriod ?? null }).select("id, receipt_no").single();
+    reference: p.ref?.trim() || null, note: p.note?.trim() || null, feeding_amount: p.feedingAmount ?? 0, feeding_period: p.feedingPeriod ?? null, term_id: p.year && p.term ? termId(p.year, p.term) ?? null : null }).select("id, receipt_no").single();
   return error ? { error: err(error) } : { id: r.id as string, receipt: r.receipt_no as string };
 }
 export async function reversePayment(id: string, reason: string) { const { error } = await db().rpc("reverse_payment", { p_id: id, p_reason: reason }); return err(error); }

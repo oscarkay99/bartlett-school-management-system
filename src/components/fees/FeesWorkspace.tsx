@@ -30,7 +30,7 @@ import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
 export interface SRow { id: string; name: string; adm: string; classId: string; cls: string; feedingOwed: number; feedingRate: number; billed: number; paid: number; balance: number; dueOn: string; overdue: boolean; status: string; invoice: string; terms: string[]; items: { label: string; amount: number }[]; payer?: { name: string; phone?: string } }
-export interface PRow { id: string; receipt: string; studentId: string; student: string; classId: string; amount: number; feeding: number; feedingPeriod?: string; method: string; date: string; ref: string; status: string; staff: string }
+export interface PRow { term?: string; id: string; receipt: string; studentId: string; student: string; classId: string; amount: number; feeding: number; feedingPeriod?: string; method: string; date: string; ref: string; status: string; staff: string }
 export interface RRow { gid: string; name: string; channel: "SMS" | "WhatsApp" | "Email"; eligible: boolean; reason?: string; last?: string; total: number; overdue: boolean; classIds: string[]; students: { id: string; name: string; balance: number }[]; message: string }
 const TODAY = Q.TODAY;
 /** Feeding mode of this page: the same layout as School Fees, filled with feeding figures by the Feeding module. */
@@ -193,16 +193,18 @@ function Reminders({ rows }: { rows: RRow[] }) {
 }
 
 function PaymentsTable({ rows }: { rows: PRow[] }) {
-  const [m, setM] = useState("");
+  const [m, setM] = useState(""); const [t, setT] = useState("");
+  const terms = [...new Set(rows.map((r) => r.term).filter(Boolean))] as string[];
   const cols: Column<PRow>[] = [
     { key: "r", header: "Receipt", sort: (x) => x.receipt, render: (x) => <b className="num">{x.receipt}</b> }, { key: "s", header: "Student", sort: (x) => x.student, render: (x) => <Link href={studentHref(x.studentId)} className="hover:text-info">{x.student}</Link> },
+    { key: "t", header: "For", hideOnMobile: true, sort: (x) => x.term ?? "", render: (x) => <span className="whitespace-nowrap text-xs">{x.term ?? "—"}</span> },
     { key: "a", header: "Amount", align: "right", sort: (x) => x.amount, render: (x) => money(x.amount) },
     { key: "f", header: "Feeding", align: "right", hideOnMobile: true, render: (x) => (x.feeding ? <span className="num">{money(x.feeding)}{x.feedingPeriod && <span className="block text-[11px] text-muted">{x.feedingPeriod === "Term" ? "for the term" : x.feedingPeriod.toLowerCase()}</span>}</span> : <span className="text-muted">—</span>) },
     { key: "m", header: "Method", hideOnMobile: true, render: (x) => x.method },
     { key: "d", header: "Date", sort: (x) => x.date, render: (x) => fmtDate(x.date) }, { key: "ref", header: "Reference", hideOnMobile: true, render: (x) => <span className="num text-xs">{x.ref}</span> },
     { key: "st", header: "Status", render: (x) => <StatusBadge status={x.status} /> }, { key: "p", header: "", render: (x) => x.status === "Confirmed" ? <span className="flex items-center gap-3"><Link className="text-info" href={printHref("receipt", x.id)}>Receipt</Link>{LIVE && <PaymentActions p={x} />}</span> : null },
   ];
-  return <Card><DataTable rows={rows.filter((r) => !m || r.method === m)} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.receipt} ${x.student} ${x.ref}`} filters={<Select label="Method" value={m} onChange={setM} options={[{ value: "", label: "All methods" }, ...["Cash", "Mobile Money", "Bank Transfer", "Card", "Cheque"].map((v) => ({ value: v, label: v }))]} />} pageSize={12} /></Card>;
+  return <Card><DataTable rows={rows.filter((r) => (!m || r.method === m) && (!t || r.term === t))} columns={cols} rowId={(x) => x.id} searchText={(x) => `${x.receipt} ${x.student} ${x.ref}`} filters={<><Select label="Method" value={m} onChange={setM} options={[{ value: "", label: "All methods" }, ...["Cash", "Mobile Money", "Bank Transfer", "Card", "Cheque"].map((v) => ({ value: v, label: v }))]} /><Select label="Term" value={t} onChange={setT} options={[{ value: "", label: "All terms" }, ...terms.map((v) => ({ value: v, label: v }))]} /></>} pageSize={12} /></Card>;
 }
 
 // One row of the Invoices tab: a recorded invoice, or one generated in this browser with "Generate Term N invoices".

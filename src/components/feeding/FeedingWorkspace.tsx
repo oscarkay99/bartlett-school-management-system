@@ -57,7 +57,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
       dueOn: td?.start ?? "", overdue: false, status: balance <= 0 ? "Paid in Full" : r.paid > 0 ? "Partially Paid" : "Outstanding",
       invoice: "", terms: [key], items: [{ label: "Feeding", amount: r.rate }], payer: r.payer }; });
   const pRows: PRow[] = payments.map((x) => { const p = Q.payments.find((y) => y.id === x.id);
-    return { id: x.id, receipt: x.receipt, studentId: x.studentId, student: x.name, classId: x.classId, amount: x.feeding, feeding: x.feeding, feedingPeriod: x.how, method: x.method, date: x.date, ref: p?.ref ?? "", status: x.status, staff: p?.staff ?? "" }; });
+    return { term: p ? Q.paymentTermLabel(p) : undefined, id: x.id, receipt: x.receipt, studentId: x.studentId, student: x.name, classId: x.classId, amount: x.feeding, feeding: x.feeding, feedingPeriod: x.how, method: x.method, date: x.date, ref: p?.ref ?? "", status: x.status, staff: p?.staff ?? "" }; });
   const reminders: RRow[] = (() => {
     const by = new Map<string, RRow>();
     for (const r of sRows.filter((x) => x.balance > 0)) {

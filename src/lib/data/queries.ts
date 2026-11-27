@@ -4,6 +4,7 @@ import * as D from "./seed";
 import type { Student, Guardian, Invoice, Payment } from "./types";
 import { ACCOUNTS, ACCOUNT_IDS, type FeeAccount } from "../accounts";
 import { termKey } from "../fees";
+import { termOfDate } from "../calendar";
 import { studentFeedingRate } from "../feeding";
 import { LIVE } from "../live/config";
 export { ACCOUNTS, ACCOUNT_IDS, type FeeAccount };
@@ -78,13 +79,25 @@ export function feedingAccount(studentId: string) {
   const ex = feedingExceptions.find((e) => e.studentId === studentId && e.term === termKey(SCHOOL.year, SCHOOL.term));
   const classRate = st ? feeStructure.find((f) => f.classId === st.classId)?.feeding ?? 0 : 0;
   const billed = st && st.status === "Active" ? studentFeedingRate(classRate, ex) : 0;
-  // This term's feeding payments: from 30 days before the term starts to its end (same window as the database).
-  const from = SCHOOL.termStart ? new Date(Date.parse(SCHOOL.termStart) - 30 * 86400000).toISOString().slice(0, 10) : "";
-  const pays = payments.filter((p) => p.studentId === studentId && p.account === "fees" && (p.feeding ?? 0) > 0 && (!from || (p.date >= from && p.date <= SCHOOL.termEnd))).sort((a, b) => b.date.localeCompare(a.date));
+  // This term's feeding payments: the ones recorded for this term (same as the database).
+  const pays = payments.filter((p) => p.studentId === studentId && p.account === "fees" && (p.feeding ?? 0) > 0 && isPaymentFor(p, SCHOOL.year, SCHOOL.term)).sort((a, b) => b.date.localeCompare(a.date));
   const paid = pays.filter((p) => p.status === "Confirmed").reduce((a, p) => a + (p.feeding ?? 0), 0);
   return { billed, paid, balance: billed - paid, payments: pays, separate: true };
 }
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
+/** The term and year a payment is for: as recorded, or (older payments) the term its date falls in. */
+export function paymentTerm(p: Payment): { year: string; term: string } {
+  if (p.year && p.term) return { year: p.year, term: p.term };
+  return termOfDate(SCHOOL.calendar ?? [], p.date) ?? { year: SCHOOL.year, term: SCHOOL.term };
+}
+export const isPaymentFor = (p: Payment, year: string, term: string) => { const t = paymentTerm(p); return t.year === year && t.term === term; };
+export const paymentTermLabel = (p: Payment) => { const t = paymentTerm(p); return `${t.term} ${t.year}`; };
+/** What is still owed on an account for one term (that term's invoices − its payments). Never below 0. */
+export function termOwed(studentId: string, account: FeeAccount, year: string, term: string): Minor {
+  const billed = invoicesOf(studentId, account).filter((i) => i.year === year && i.term === term).reduce((a, i) => a + i.items.reduce((x, y) => x + y.amount, 0) - i.discount, 0);
+  const paid = payments.filter((p) => p.studentId === studentId && p.account === account && !isFeedingPlanPayment(p) && p.status !== "Reversed" && isPaymentFor(p, year, term)).reduce((a, p) => a + p.amount, 0);
+  return Math.max(0, billed - paid);
+}
 export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Sibling discount on tuition"; };
 /** School fees still owed. Extracurricular and Extra Classes are standalone: its balance is shown separately and never added here. */
 export const totalOwed = (studentId: string) => Math.max(0, accountSummary(studentId, "fees").balance);

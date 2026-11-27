@@ -303,6 +303,15 @@ select pg_temp.err(:ADMIN, $q$ select public.register_student(jsonb_build_object
 select pg_temp.check('a new student is billed their class''s activity prices (Music 130, no STEM at 0)', (select array_agg(l.label || '=' || l.amount order by l.label) from public.invoice_lines l join public.invoices i on i.id = l.invoice_id join public.students s on s.id = i.student_id
   where s.last_name = 'Five' and i.account = 'extra') = array['Music (Piano)=13000']);
 
+-- ---------- Each payment is for a term (2026-11-27) ----------
+insert into public.terms (id, year_id, name, starts_on, ends_on, is_current) values ('00000000-0000-0000-0000-0000000000c3', '00000000-0000-0000-0000-0000000000c1', 'Term 2', '2027-01-11', '2027-04-08', false);
+select pg_temp.check('a payment with no term is for the term its date falls in', not exists (select 1 from public.payments where term_id is null)
+  and (select term_id from public.payments where student_id = '00000000-0000-0000-0000-0000000000f4' order by received_at limit 1) = '00000000-0000-0000-0000-0000000000c2');
+select pg_temp.check('nothing can be paid for a term with no bills (Term 2)', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, term_id) values ('fees', (select id from public.students where last_name = 'Four'), 100, 'Cash', '00000000-0000-0000-0000-0000000000c3') $q$) like 'Nothing is owed for school fees in Term 2 2026/2027%');
+select pg_temp.check('a payment for Term 1 is checked against Term 1''s bills', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, term_id) values ('classes', (select id from public.students where last_name = 'Four'), 15000, 'Cash', '00000000-0000-0000-0000-0000000000c2') $q$) is null
+  and pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, term_id) values ('classes', (select id from public.students where last_name = 'Four'), 100, 'Cash', '00000000-0000-0000-0000-0000000000c2') $q$) like 'Nothing is owed for Extra Classes in Term 1%');
+select pg_temp.check('feeding can be paid for any term', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period, term_id) values ('fees', (select id from public.students where last_name = 'Four'), 5000, 'Cash', 5000, 'Term', '00000000-0000-0000-0000-0000000000c3') $q$) is null);
+
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from results;
