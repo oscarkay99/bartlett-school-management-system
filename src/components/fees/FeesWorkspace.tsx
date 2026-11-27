@@ -19,13 +19,13 @@ import { confirmPayment, reversePayment, sendMessage } from "@/lib/live/actions"
 import { useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { TermFeeStructure } from "@/components/settings/FeeScheduleEditor";
-import { feedingRate, invoiceStem, termKey } from "@/lib/fees";
+import { activityPrice, feedingRate, invoiceStem, termKey } from "@/lib/fees";
 import { termOfDate } from "@/lib/calendar";
 import { studentFeedingRate } from "@/lib/feeding";
 import { useFeeding } from "@/components/feeding/useFeeding";
 import { buildTermInvoices, generatedTotal, type GeneratedInvoice } from "@/lib/generated-invoices";
 import { GeneratedInvoiceDialog, useGeneratedInvoices } from "./GeneratedInvoices";
-import { ACCOUNTS, activitiesOf, type FeeAccount } from "@/lib/accounts";
+import { ACCOUNTS, ACTIVITY_LEVELS, activitiesOf, type FeeAccount } from "@/lib/accounts";
 import { money, moneyShort, pct } from "@/lib/money";
 import { fmtDate } from "@/lib/utils";
 
@@ -299,6 +299,18 @@ function ItemBreakdown({ students, sections }: { students: SRow[]; sections: { k
   );
 }
 
+// Which classes take each activity this term, and at what price (as set in Settings → Fee schedule).
+function ClassPrices({ account }: { account: FeeAccount }) {
+  const { year, term } = useCalendar(); const fs = useFeeSchedule(); const tf = fs.get(year, term); const acts = activitiesOf(account);
+  if (!tf) return null;
+  return (
+    <Card><CardHeader title={`Classes and prices — ${term} ${year}`} sub="Who takes what, from Settings → Fee schedule. Compulsory: every student in a class that takes an activity is billed for it automatically. — = that class doesn't take it." />
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left">Class</th>{acts.map((a) => <th key={a} className="px-4 text-right">{a}</th>)}</tr></thead>
+        <tbody className="divide-y divide-line">{fs.classes.map((c) => <tr key={c.id}><td className="px-4 py-2.5">{c.name}</td>{acts.map((a) => { const on = (ACTIVITY_LEVELS as Record<string, readonly string[]>)[a]?.includes(c.level); const p = activityPrice(tf, c, a);
+          return <td key={a} className="num px-4 text-right">{on && p > 0 ? money(p) : <span className="text-muted">—</span>}</td>; })}</tr>)}</tbody></table></div></Card>
+  );
+}
+
 // Extracurricular / Extra Classes: one card per activity (enrolment and billed), plus the full roster.
 function Activities({ students, account }: { students: SRow[]; account: FeeAccount }) {
   const ACTIVITIES = activitiesOf(account);
@@ -316,6 +328,7 @@ function Activities({ students, account }: { students: SRow[]; account: FeeAccou
           { key: "b", header: "Billed", align: "right", hideOnMobile: true, render: (x) => money(x.billed) }, { key: "o", header: "Balance", align: "right", sort: (x) => x.balance, render: (x) => <span className={x.balance > 0 ? "font-medium text-danger" : ""}>{money(Math.max(0, x.balance))}</span> },
           { key: "s", header: "Status", render: (x) => <StatusBadge status={x.status} /> },
         ]} /></Card>
+      <ClassPrices account={account} />
     </div>
   );
 }

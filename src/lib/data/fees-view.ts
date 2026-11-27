@@ -1,7 +1,7 @@
 // Builds the props for the billing pages (School Fees, Extracurricular, Extra Classes) from the data layer.
 // Amounts to bill come from the fee schedule on the client (Settings → Fee schedule), for the selected term.
 import * as Q from "./queries";
-import { activitiesOf, type FeeAccount } from "../accounts";
+import { activitiesFor, activitiesOf, type FeeAccount } from "../accounts";
 import { termKey } from "../fees";
 import { liveExtra } from "../live/hydrate";
 import type { PRow, RRow, SRow } from "@/components/fees/FeesWorkspace";
@@ -35,5 +35,8 @@ export function billingProps(account: FeeAccount) {
     for (const d of liveExtra.data?.drafts ?? []) if (d.studentId === s.id && d.account === account) (billed[termKey(d.year, d.term)] ??= []).push(...d.items.map((x) => x.label));
     return { id: s.id, name: Q.fullName(s), adm: s.admissionNo, classId: s.classId, cls: Q.getClass(s.classId).name, scholarship: !!s.scholarship, billed };
   });
-  return { account, students, payments, reminders, candidates, classes: Q.classes.map((c) => ({ id: c.id, name: c.name })), usedRefs: Q.payments.map((p) => p.ref.toUpperCase()) };
+  // Extracurricular / Extra Classes: only the classes that take one of its activities (Settings shows "—" for the others).
+  const takes = (level: string) => account === "fees" || activitiesFor(level, account).length > 0;
+  const classes = Q.classes.filter((c) => takes(c.level)).map((c) => ({ id: c.id, name: c.name }));
+  return { account, students, payments, reminders, candidates: candidates.filter((c) => takes(Q.getClass(c.classId).level)), classes, usedRefs: Q.payments.map((p) => p.ref.toUpperCase()) };
 }
