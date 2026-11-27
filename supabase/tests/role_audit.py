@@ -24,7 +24,7 @@ def exp(default, **kw):
     for k, v in kw.items(): out[m[k]] = v
     return out
 
-# Fixture ids (created inside the transaction). S_IN is in the teacher's class (Primary 3), S_OUT is not (Primary 5).
+# Fixture ids (created inside the transaction). S_IN is in the teacher's class (Class 3), S_OUT is not (Class 5).
 S_IN, S_OUT = "a0000000-0000-0000-0000-000000000001", "a0000000-0000-0000-0000-000000000002"
 S_DEL = "a0000000-0000-0000-0000-000000000003"   # a student with no records at all (deletable)
 G_IN, G_OUT = "a0000000-0000-0000-0000-000000000011", "a0000000-0000-0000-0000-000000000012"
@@ -37,7 +37,7 @@ M1, AP, ST, EV, TPL, DOC = ("a0000000-0000-0000-0000-000000000071", "a0000000-00
                             "a0000000-0000-0000-0000-000000000074", "a0000000-0000-0000-0000-000000000075", "a0000000-0000-0000-0000-000000000076")
 D1 = "2000-01-03"           # fixture date (no real rows on it)
 TERM = "(select id from public.terms where is_current)"
-P3, P5 = "(select id from public.classes where name = 'Primary 3')", "(select id from public.classes where name = 'Primary 5')"
+P3, P5 = "(select id from public.classes where name = 'Class 3')", "(select id from public.classes where name = 'Class 5')"
 two = lambda a, b: f"('{a}','{b}')"
 
 FIXTURES = f"""
