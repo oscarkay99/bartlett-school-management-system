@@ -2,6 +2,7 @@
 // Fees are set per level (Creche / Nursery / Kindergarten / Primary / JHS); a class can override or add lines on top of its level.
 // Pure helpers, safe on client and server. All amounts are integer minor units (pesewas).
 import type { Minor } from "./money";
+import { ACTIVITY_LEVELS } from "./accounts";
 
 export const LEVELS = ["Creche", "Nursery", "Kindergarten", "Primary", "JHS"] as const;
 export type Level = (typeof LEVELS)[number];
@@ -19,6 +20,10 @@ export interface TermFees {
   overrides: Record<string, FeeItem[]>;
   /** Extracurricular activities (Music (Piano), STEM) → price per term. */
   activities: Record<string, Minor>;
+  /** classId → that class's feeding cost, where it differs from its level's. */
+  feedingByClass?: Record<string, Minor>;
+  /** classId → activity → that class's price, where it differs from the term's (0 = the class doesn't pay it). */
+  activitiesByClass?: Record<string, Record<string, Minor>>;
 }
 export interface ClassRef { id: string; name: string; level: Level }
 
@@ -32,7 +37,9 @@ export function classFees(tf: TermFees, cls: ClassRef): FeeItem[] {
   for (const o of over) if (!lvl.items.some((i) => i.label === o.label)) lines.push(o);
   return lines.filter((l) => l.amount > 0).map((l) => ({ ...l }));
 }
-export const feedingRate = (tf: TermFees, cls: ClassRef) => tf.levels[cls.level].feeding;
+export const feedingRate = (tf: TermFees, cls: ClassRef) => tf.feedingByClass?.[cls.id] ?? tf.levels[cls.level]?.feeding ?? 0;
+/** What a class pays for an activity this term. */
+export const activityPrice = (tf: TermFees, cls: ClassRef | undefined, activity: string) => (cls ? tf.activitiesByClass?.[cls.id]?.[activity] : undefined) ?? tf.activities[activity] ?? 0;
 /** Everything on a student's school fees invoice this term: the class's fee lines. Feeding is never on it: it is
  *  billed and paid separately in the Feeding module (at feedingRate). */
 export function termBillLines(tf: TermFees, cls: ClassRef): FeeItem[] {
@@ -125,7 +132,7 @@ export function validateGrid(g: FeeGrid, classes: ClassRef[]): string {
 
 // ---- Per-class view (client, 2026-11-27): every class has its own fees. Stored as the level's most common amount
 // for each fee plus a class adjustment wherever a class differs, so invoices and the database work unchanged. ----
-export interface ClassGrid { rows: { label: string; amounts: Record<string, Minor> }[]; feeding: Record<Level, Minor>; activities: Record<string, Minor> }
+export interface ClassGrid { rows: { label: string; amounts: Record<string, Minor> }[]; /** classId → feeding */ feeding: Record<string, Minor>; /** activity → classId → price */ activities: Record<string, Record<string, Minor>> }
 
 export function toClassGrid(tf: TermFees, classes: ClassRef[]): ClassGrid {
   const labels: string[] = [];
@@ -133,7 +140,8 @@ export function toClassGrid(tf: TermFees, classes: ClassRef[]): ClassGrid {
   for (const ov of Object.values(tf.overrides)) for (const o of ov) if (!labels.includes(o.label)) labels.push(o.label);
   const amount = (c: ClassRef, label: string) => tf.overrides[c.id]?.find((o) => o.label === label)?.amount ?? tf.levels[c.level]?.items.find((i) => i.label === label)?.amount ?? 0;
   return { rows: labels.map((label) => ({ label, amounts: Object.fromEntries(classes.map((c) => [c.id, amount(c, label)])) })),
-    feeding: perLevel((lv) => tf.levels[lv]?.feeding ?? 0), activities: { ...tf.activities } };
+    feeding: Object.fromEntries(classes.map((c) => [c.id, feedingRate(tf, c)])),
+    activities: Object.fromEntries(Object.keys(tf.activities).map((a) => [a, Object.fromEntries(classes.map((c) => [c.id, activityPrice(tf, c, a)]))])) };
 }
 
 /** The amount most classes in a level pay (ties: the first class's). */
@@ -152,9 +160,19 @@ export function fromClassGrid(g: ClassGrid, classes: ClassRef[], year: string, t
       for (const c of cs) { const v = r.amounts[c.id] ?? 0; if (v !== base) (overrides[c.id] ??= []).push({ label: r.label.trim(), amount: v }); }
       return { label: r.label.trim(), amount: base };
     });
-    return [lv, { items, feeding: g.feeding[lv] ?? 0 }];
+    return [lv, { items, feeding: commonAmount(cs.map((c) => g.feeding[c.id] ?? 0)) }];
   })) as Record<Level, LevelFees>;
-  return { year, term, levels, overrides, activities: { ...g.activities } };
+  // Feeding: the level's common cost, plus each class that differs.
+  const feedingByClass: Record<string, Minor> = {};
+  for (const c of classes) { const v = g.feeding[c.id] ?? 0; if (v !== levels[c.level].feeding) feedingByClass[c.id] = v; }
+  // Activities: the term's common price (among classes that take it), plus each class that differs.
+  const activities: Record<string, Minor> = {}; const activitiesByClass: Record<string, Record<string, Minor>> = {};
+  for (const [a, per] of Object.entries(g.activities)) {
+    const takers = classes.filter((c) => (ACTIVITY_LEVELS as Record<string, readonly string[]>)[a]?.includes(c.level) ?? true);
+    activities[a] = commonAmount(takers.map((c) => per[c.id] ?? 0));
+    for (const c of takers) { const v = per[c.id] ?? 0; if (v !== activities[a]) (activitiesByClass[c.id] ??= {})[a] = v; }
+  }
+  return { year, term, levels, overrides, activities, feedingByClass, activitiesByClass };
 }
 
 /** Plain-language problem with the per-class grid, or "". */
@@ -164,7 +182,7 @@ export function validateClassGrid(g: ClassGrid, classes: ClassRef[]): string {
   const dup = names.find((n, i) => n && names.findIndex((m) => m.toLowerCase() === n.toLowerCase()) !== i); if (dup) return `"${dup}" is listed twice`;
   const empty = classes.filter((c) => g.rows.every((r) => !((r.amounts[c.id] ?? 0) > 0))).map((c) => c.name);
   if (empty.length) return `Enter the fees for ${empty.join(", ")}`;
-  if (!Object.values(g.activities).every(okAmount) || !g.rows.every((r) => Object.values(r.amounts).every(okAmount))) return "Amounts must be zero or more";
+  if (!Object.values(g.activities).every((per) => Object.values(per).every(okAmount)) || !Object.values(g.feeding).every(okAmount) || !g.rows.every((r) => Object.values(r.amounts).every(okAmount))) return "Amounts must be zero or more";
   return "";
 }
 

@@ -292,6 +292,17 @@ select pg_temp.check('billing the term again bills nobody twice', (select count(
 select pg_temp.check('a teacher cannot bill students directly', pg_temp.err(:TEACHER, $q$ select app.bill_student('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2') $q$) is not null
   or (select count(*) from public.invoices where student_id = '00000000-0000-0000-0000-0000000000f1' and account = 'classes') <= 1);
 
+-- ---------- Per-class feeding and activity prices (client, 2026-11-27) ----------
+select pg_temp.check('only the owner sets per-class prices', pg_temp.err(:BURSAR, $q$ insert into public.class_feeding_rates (term_id, class_id, feeding) values ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000d2', 70000) $q$) is not null
+  and pg_temp.err(:OWNER, $q$ insert into public.class_feeding_rates (term_id, class_id, feeding) values ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000d2', 70000) $q$) is null
+  and pg_temp.err(:OWNER, $q$ insert into public.class_activity_prices (term_id, class_id, activity, amount) values ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000d2', 'STEM', 0), ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000d2', 'Music (Piano)', 13000) $q$) is null);
+select pg_temp.check('a class''s own feeding cost applies to its students; other classes keep the level''s', (select app.feeding_rate(id, '00000000-0000-0000-0000-0000000000c2') from public.students where last_name = 'Four') = 70000
+  and app.class_feeding('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000d1') = 60000);
+select pg_temp.check('teachers cannot see per-class prices', pg_temp.n(:TEACHER, 'select * from public.class_feeding_rates') = 0 and pg_temp.n(:TEACHER, 'select * from public.class_activity_prices') = 0);
+select pg_temp.err(:ADMIN, $q$ select public.register_student(jsonb_build_object('first_name','Kid','last_name','Five','class_id','00000000-0000-0000-0000-0000000000d2','guardians',jsonb_build_array(jsonb_build_object('name','Other Parent','phone','0240000222','primary',true)))) $q$);
+select pg_temp.check('a new student is billed their class''s activity prices (Music 130, no STEM at 0)', (select array_agg(l.label || '=' || l.amount order by l.label) from public.invoice_lines l join public.invoices i on i.id = l.invoice_id join public.students s on s.id = i.student_id
+  where s.last_name = 'Five' and i.account = 'extra') = array['Music (Piano)=13000']);
+
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from results;

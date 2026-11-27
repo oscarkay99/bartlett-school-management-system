@@ -11,7 +11,7 @@ import { ACCOUNTS, activitiesFor, type FeeAccount } from "@/lib/accounts";
 import { LIVE } from "@/lib/live/config";
 import { useLiveData } from "@/lib/live/data";
 import { createInvoices, enrolActivities } from "@/lib/live/actions";
-import { invoiceStem, termKey } from "@/lib/fees";
+import { activityPrice, invoiceStem, termKey } from "@/lib/fees";
 import { money } from "@/lib/money";
 
 /** A student who can be billed in this account. `billed` maps a term key ("2026/2027|Term 1") to the lines they already have that term. */
@@ -30,7 +30,7 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
   const items = ((): { label: string; amount: number }[] => {
     if (!st || !cls || !tf) return [];
     const pick = account === "classes" ? offered : acts;   // Extra Classes: nothing to choose, it is one bill
-    return pick.filter((a) => !billed.includes(a)).map((a) => ({ label: a, amount: tf.activities[a] ?? 0 }));
+    return pick.filter((a) => !billed.includes(a)).map((a) => ({ label: a, amount: activityPrice(tf, cls, a) }));
   })();
   const total = items.reduce((a, b) => a + b.amount, 0);
   const err = !tf ? `No fees set for ${term} ${year}` : !st ? "Select a student" : items.length === 0 ? (account === "classes" ? `${st.name} already has an Extra Classes bill for ${term}` : "Select at least one activity") : items.some((i) => i.amount <= 0) ? `${items.find((i) => i.amount <= 0)!.label} has no price for ${term}` : "";
@@ -59,7 +59,7 @@ export function IssueBillDialog({ open, onClose, account, candidates }: { open: 
             {!st && filter && list.length === 0 && <p className="mt-1 text-sm text-muted">No student matches &ldquo;{filter}&rdquo;.</p>}
             {!st && filter && <ul className="mt-1 rounded-lg border border-line">{list.map((c) => { const has = c.billed[termKey(year, term)] ?? []; return <li key={c.id}><button className="flex w-full justify-between px-3 py-2 text-left hover:bg-surface-2" onClick={() => setSid(c.id)}><span>{c.name} <span className="text-xs text-muted">{c.cls} · {c.adm}</span></span>{has.length > 0 && <span className="text-xs text-muted">has {has.join(", ")}</span>}</button></li>; })}{list.length === 0 && <li className="px-3 py-2 text-sm text-muted">No matching students</li>}</ul>}</div>
           {st && account === "extra" && <fieldset><legend className="mb-1.5 text-sm font-medium">Activities</legend><div className="grid gap-2 sm:grid-cols-3">{offered.map((a) => { const has = billed.includes(a); return (
-            <label key={a} className={`flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm ${has ? "opacity-50" : "cursor-pointer hover:bg-surface-2"}`}><span className="flex items-center gap-2"><input type="checkbox" disabled={has} checked={has || acts.includes(a)} onChange={(e) => setActs(e.target.checked ? [...acts, a] : acts.filter((x) => x !== a))} />{a}</span><span className="num text-xs text-muted">{has ? "billed" : money(tf.activities[a] ?? 0)}</span></label>); })}</div>
+            <label key={a} className={`flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm ${has ? "opacity-50" : "cursor-pointer hover:bg-surface-2"}`}><span className="flex items-center gap-2"><input type="checkbox" disabled={has} checked={has || acts.includes(a)} onChange={(e) => setActs(e.target.checked ? [...acts, a] : acts.filter((x) => x !== a))} />{a}</span><span className="num text-xs text-muted">{has ? "billed" : money(activityPrice(tf, cls, a))}</span></label>); })}</div>
             <p className="mt-1 text-xs text-muted">Music (Piano): KG 1 – Class 6. STEM: Class 1 – JHS 3.</p></fieldset>}
           {items.length > 0 && <div className="rounded-lg border border-line p-3 text-sm"><div className="mb-1 font-medium">{A.invoiceTitle} preview · {term} {year}</div>{items.map((i) => <div key={i.label} className="flex justify-between py-0.5"><span>{i.label}</span><span className="num">{money(i.amount)}</span></div>)}<div className="mt-1 flex justify-between border-t border-line pt-1.5 font-medium"><span>Total</span><span className="num">{money(total)}</span></div></div>}
           {err && st && <p role="alert" className="text-sm text-danger">{err}</p>}

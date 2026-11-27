@@ -49,15 +49,17 @@ export async function unlinkGuardian(studentId: string, guardianId: string) {
 }
 
 // ---------- Fees: schedule, invoices, payments ----------
-export async function saveTermFees(tf: { year: string; term: string; levels: Record<string, { items: { label: string; amount: number }[]; feeding: number }>; overrides: Record<string, { label: string; amount: number }[]>; activities: Record<string, number> }) {
+export async function saveTermFees(tf: { year: string; term: string; levels: Record<string, { items: { label: string; amount: number }[]; feeding: number }>; overrides: Record<string, { label: string; amount: number }[]>; activities: Record<string, number>; feedingByClass?: Record<string, number>; activitiesByClass?: Record<string, Record<string, number>> }) {
   const tid = termId(tf.year, tf.term); if (!tid) return `Add ${tf.term} ${tf.year} to the calendar first.`;
   // Replace the term's schedule (the database refuses this for a term that already has issued invoices).
-  for (const t of ["term_fee_items", "class_fee_overrides", "activity_prices", "term_fee_levels"]) { const { error } = await db().from(t).delete().eq("term_id", tid); if (error) return err(error); }
+  for (const t of ["term_fee_items", "class_fee_overrides", "class_activity_prices", "class_feeding_rates", "activity_prices", "term_fee_levels"]) { const { error } = await db().from(t).delete().eq("term_id", tid); if (error) return err(error); }
   const items = Object.entries(tf.levels).flatMap(([level, l]) => l.items.map((i, position) => ({ term_id: tid, level, label: i.label, amount: i.amount, position })));
   const lv = Object.entries(tf.levels).map(([level, l]) => ({ term_id: tid, level, feeding: l.feeding }));
   const ov = Object.entries(tf.overrides).flatMap(([class_id, ls]) => ls.map((l) => ({ term_id: tid, class_id, label: l.label, amount: l.amount })));
   const ap = Object.entries(tf.activities).map(([activity, amount]) => ({ term_id: tid, activity, amount }));
-  for (const [t, rows] of [["term_fee_levels", lv], ["term_fee_items", items], ["class_fee_overrides", ov], ["activity_prices", ap]] as const) {
+  const cf = Object.entries(tf.feedingByClass ?? {}).map(([class_id, feeding]) => ({ term_id: tid, class_id, feeding }));
+  const ca = Object.entries(tf.activitiesByClass ?? {}).flatMap(([class_id, per]) => Object.entries(per).map(([activity, amount]) => ({ term_id: tid, class_id, activity, amount })));
+  for (const [t, rows] of [["term_fee_levels", lv], ["term_fee_items", items], ["class_fee_overrides", ov], ["activity_prices", ap], ["class_feeding_rates", cf], ["class_activity_prices", ca]] as const) {
     if (rows.length) { const { error } = await db().from(t).insert(rows as never); if (error) return err(error); }
   }
   // A term already billed: bring its issued invoices in line with the new fees (Owner only, recorded in the audit trail).

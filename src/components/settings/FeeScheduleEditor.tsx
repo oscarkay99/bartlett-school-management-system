@@ -1,5 +1,6 @@
 "use client";
 import { LIVE } from "@/lib/live/config";
+import { ACTIVITY_LEVELS } from "@/lib/accounts";
 import * as Q from "@/lib/data/queries";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -100,13 +101,15 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
           <tbody className="border-t-2 border-line bg-surface-2/40">
             <tr className="font-semibold"><td className={cn("px-4 py-2.5", sticky, "bg-surface-2")}>School fees total</td>{classes.map((c) => <td key={c.id} className="num whitespace-nowrap px-2 text-right">{money(total(c.id))}</td>)}<td /></tr>
           </tbody>
+          <tbody className="border-t-2 border-line">
+            <tr><td colSpan={classes.length + 2} className="px-4 pb-1 pt-4"><div className="font-semibold">Feeding and activities</div><div className="text-xs text-muted">Billed separately, never on the school fees invoice. Feeding is compulsory (set exceptions in the Feeding module). Music (Piano): KG 1 – Class 6 · STEM: Class 1 – JHS 3 · Extra Classes: everyone.</div></td></tr>
+            <tr><td className={cn("px-4 py-2 font-medium", sticky)}>Feeding</td>{classes.map((c) => <td key={c.id} className="px-1.5 py-2"><MoneyInput className="w-24" label={`Feeding for ${c.name}`} value={g.feeding[c.id] ?? 0} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [c.id]: m } })} /></td>)}<td /></tr>
+            {Object.entries(g.activities).map(([a, per]) => (
+              <tr key={a}><td className={cn("px-4 py-2 font-medium", sticky)}>{a}</td>{classes.map((c) => <td key={c.id} className="px-1.5 py-2">{(ACTIVITY_LEVELS as Record<string, readonly string[]>)[a]?.includes(c.level) ?? true
+                ? <MoneyInput className="w-24" label={`${a} for ${c.name}`} value={per[c.id] ?? 0} onChange={(m) => setG({ ...g, activities: { ...g.activities, [a]: { ...per, [c.id]: m } } })} />
+                : <span className="block w-24 text-right text-muted">—</span>}</td>)}<td /></tr>))}
+          </tbody>
         </table></div></Card>
-
-      <Card><CardHeader title="Feeding (per term)" sub="Compulsory: every student owes their level's feeding cost (set someone not on feeding, or a different amount, in the Feeding module). Billed separately, never on the school fees invoice." />
-        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3 lg:grid-cols-5">{levels.map((lv) => <label key={lv} className="block text-sm"><span className="mb-1 block font-medium">{lv}</span><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv] ?? 0} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></label>)}</div></Card>
-
-      <Card><CardHeader title="Activities" sub="Price per term. Compulsory and billed automatically: Music (Piano) KG 1 – Class 6, STEM Class 1 – JHS 3, Extra Classes everyone." />
-        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">{Object.entries(g.activities).map(([a, m]) => <label key={a} className="block text-sm"><span className="mb-1 block font-medium">{a}</span><MoneyInput label={`${a} price`} value={m} onChange={(v) => setG({ ...g, activities: { ...g.activities, [a]: v } })} /></label>)}</div></Card>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         {tried && err && <p role="alert" className="mr-auto text-sm text-danger">{err}</p>}

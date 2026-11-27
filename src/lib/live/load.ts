@@ -50,7 +50,7 @@ export interface LiveData {
 export async function loadSchool(): Promise<LiveData> {
   const since = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);   // attendance: last ~4 months
   const [settings, years, termRows, classRows, subjectRows, assign, staffRows, names, gRows, stRows, invRows, payRows, items, levels, overrides, prices, acts, enrol,
-    plans, exc, meals, batches, gradeRows, scale, invItems, onHand, moves, exp, budget, msgs, pend, audit, events, apps, att, sheets] = await Promise.all([
+    plans, exc, meals, batches, gradeRows, scale, invItems, onHand, moves, exp, budget, msgs, pend, audit, events, apps, att, sheets, classFeed, classActs] = await Promise.all([
     all("school_settings"), all("academic_years", "*", "starts_on"), all("terms", "*", "starts_on"), all("classes", "*", "position"), all("subjects", "*", "name"),
     all("teaching_assignments"), all("staff", "*", "name"), all("staff_names"), all("guardians", "*", "name"),
     all("students", "*, student_guardians(*), student_medical(alert)", "last_name"),
@@ -61,7 +61,7 @@ export async function loadSchool(): Promise<LiveData> {
     all("expenses", "*", "on_date"), all("budget_lines"), all("messages", "*", "created_at"), all("pending_approvals"), all("audit_log", "*", "at"),
     all("school_events", "*", "on_date"), all("applicants", "*", "applied_on"),
     (async () => { const r = await db().from("attendance").select("student_id, on_date, status, note").gte("on_date", since).range(0, 49999); return (r.data ?? []) as Row[]; })(),
-    all("invoice_sheets"),
+    all("invoice_sheets"), all("class_feeding_rates"), all("class_activity_prices"),
   ]);
 
   const nm: Record<string, string> = Object.fromEntries(names.map((r) => [s(r.user_id), s(r.display_name)]));
@@ -104,11 +104,13 @@ export async function loadSchool(): Promise<LiveData> {
   // Fee schedule per term: level lines + feeding, class exceptions, activity prices.
   const lvl = (tid: string, level: string) => ({ items: items.filter((i) => i.term_id === tid && i.level === level).map((i): FeeItem => ({ label: s(i.label), amount: n(i.amount) })),
     feeding: n(levels.find((l) => l.term_id === tid && l.level === level)?.feeding) });
-  const feeTerms = new Set([...items, ...levels, ...prices, ...overrides].map((r) => s(r.term_id)));
+  const feeTerms = new Set([...items, ...levels, ...prices, ...overrides, ...classFeed, ...classActs].map((r) => s(r.term_id)));
   const feeSchedule: TermFees[] = terms.filter((t) => feeTerms.has(t.id)).map((t) => ({ year: t.year, term: t.term,
     levels: Object.fromEntries(LEVELS.map((lv) => [lv, lvl(t.id, lv)])) as TermFees["levels"],
     overrides: overrides.filter((o) => o.term_id === t.id).reduce<Record<string, FeeItem[]>>((a, o) => { (a[s(o.class_id)] ??= []).push({ label: s(o.label), amount: n(o.amount) }); return a; }, {}),
-    activities: Object.fromEntries(acts.map((a) => [s(a.name), n(prices.find((p) => p.term_id === t.id && p.activity === a.name)?.amount)])) }));
+    activities: Object.fromEntries(acts.map((a) => [s(a.name), n(prices.find((p) => p.term_id === t.id && p.activity === a.name)?.amount)])),
+    feedingByClass: Object.fromEntries(classFeed.filter((f) => f.term_id === t.id).map((f) => [s(f.class_id), n(f.feeding)])),
+    activitiesByClass: classActs.filter((x) => x.term_id === t.id).reduce<Record<string, Record<string, number>>>((acc, x) => { (acc[s(x.class_id)] ??= {})[s(x.activity)] = n(x.amount); return acc; }, {}) }));
 
   const batchById = Object.fromEntries(batches.map((b) => [s(b.id), b]));
   const grades: T.GradeRow[] = gradeRows.map((g) => ({ studentId: s(g.student_id), subject: subjName[s(batchById[s(g.batch_id)]?.subject_id)] ?? "", ca: n(g.ca), exam: n(g.exam) }));

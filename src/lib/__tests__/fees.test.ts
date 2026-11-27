@@ -173,7 +173,7 @@ describe("Generate term invoices", () => {
   });
 });
 
-import { classFees as cf, fromClassGrid, toClassGrid, validateClassGrid } from "../fees";
+import { activityPrice, classFees as cf, feedingRate as fr, fromClassGrid, toClassGrid, validateClassGrid } from "../fees";
 import { classes as seedClasses, feeSchedule as seedSchedule } from "../data/seed";
 describe("Per-class fees (every class has its own fees)", () => {
   const tf = seedSchedule.find((t) => t.year === "2026/2027" && t.term === "Term 2")!;
@@ -188,5 +188,13 @@ describe("Per-class fees (every class has its own fees)", () => {
     expect(cf(back, kg2).find((l) => l.label === "Tuition")!.amount).toBe(199900);
     expect(cf(back, seedClasses.find((c) => c.name === "KG 1")!).find((l) => l.label === "Tuition")!.amount).toBe(tf.levels.Kindergarten.items.find((i) => i.label === "Tuition")!.amount);
     expect(validateClassGrid(g, seedClasses)).toBe("");
+  });
+  it("feeding and activity prices can differ per class too", () => {
+    const g = toClassGrid(tf, seedClasses); const kg1 = seedClasses.find((c) => c.name === "KG 1")!, kg2 = seedClasses.find((c) => c.name === "KG 2")!;
+    g.feeding[kg2.id] = 55500; g.activities["Music (Piano)"][kg1.id] = 12300;
+    const back = fromClassGrid(g, seedClasses, tf.year, tf.term);
+    expect(fr(back, kg2)).toBe(55500); expect(fr(back, kg1)).toBe(fr(tf, kg1));
+    expect(activityPrice(back, kg1, "Music (Piano)")).toBe(12300); expect(activityPrice(back, kg2, "Music (Piano)")).toBe(tf.activities["Music (Piano)"]);
+    for (const c of seedClasses) for (const a of Object.keys(tf.activities)) if (c !== kg1) expect(activityPrice(back, c, a), `${c.name} ${a}`).toBe(activityPrice(tf, c, a));
   });
 });
