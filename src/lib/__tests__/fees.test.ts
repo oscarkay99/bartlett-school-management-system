@@ -137,7 +137,7 @@ describe("Fee schedule — spreadsheet editor", () => {
   it("one row per fee; a level that doesn't pay a fee is 0 and gets no line", () => {
     const g = toGrid(t2);
     expect(g.rows.map((r) => r.label)).toEqual(["Tuition", "Books", "ICT & Development Levy", "PTA"]); // no Examination fee
-    const jhsOnly = { ...g, rows: [...g.rows, { label: "Computer Lab", amounts: { Kindergarten: 0, Primary: 0, JHS: ghs(80) } }] };
+    const jhsOnly = { ...g, rows: [...g.rows, { label: "Computer Lab", amounts: { Creche: 0, Nursery: 0, Kindergarten: 0, Primary: 0, JHS: ghs(80) } }] };
     expect(fromGrid(jhsOnly, "y", "t").levels.Primary.items.some((i) => i.label === "Computer Lab")).toBe(false);
     expect(fromGrid(jhsOnly, "y", "t").levels.JHS.items.find((i) => i.label === "Computer Lab")!.amount).toBe(ghs(80));
     expect(g.exceptions).toContainEqual({ classId: cls("JHS 3").id, label: "BECE Registration", amount: ghs(320) });
@@ -146,9 +146,9 @@ describe("Fee schedule — spreadsheet editor", () => {
     const blank = toGrid(blankTerm("2027/2028", "Term 1", ["STEM"]));
     expect(validateGrid(blank, classes)).toBe("Enter the fees for Kindergarten, Primary, JHS");
     const g = toGrid(t2); expect(validateGrid(g, classes)).toBe("");
-    expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toBe("Give every fee a name");
-    expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] }, classes)).toBe(""); // empty extra row is ignored
-    expect(validateGrid({ ...g, rows: [...g.rows, { label: "pta", amounts: { Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toMatch(/listed twice/);
+    expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Creche: 0, Nursery: 0, Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toBe("Give every fee a name");
+    expect(validateGrid({ ...g, rows: [...g.rows, { label: "", amounts: { Creche: 0, Nursery: 0, Kindergarten: 0, Primary: 0, JHS: 0 } }] }, classes)).toBe(""); // empty extra row is ignored
+    expect(validateGrid({ ...g, rows: [...g.rows, { label: "pta", amounts: { Creche: 0, Nursery: 0, Kindergarten: 5, Primary: 0, JHS: 0 } }] }, classes)).toMatch(/listed twice/);
     expect(validateGrid({ ...g, exceptions: [{ classId: "", label: "X", amount: 1 }] }, classes)).toMatch(/Choose a class/);
   });
 });
@@ -170,5 +170,23 @@ describe("Generate term invoices", () => {
   it("ignores malformed saved invoices", () => {
     const [ok] = buildTermInvoices([cand("a", cls("KG 1").id)], classes, t2, "2027-01-11");
     expect(readGenerated([ok, { no: 1 }, null])).toEqual([ok]); expect(readGenerated("x")).toEqual([]);
+  });
+});
+
+import { classFees as cf, fromClassGrid, toClassGrid, validateClassGrid } from "../fees";
+import { classes as seedClasses, feeSchedule as seedSchedule } from "../data/seed";
+describe("Per-class fees (every class has its own fees)", () => {
+  const tf = seedSchedule.find((t) => t.year === "2026/2027" && t.term === "Term 2")!;
+  it("round-trips: each class keeps exactly its own fee lines", () => {
+    const back = fromClassGrid(toClassGrid(tf, seedClasses), seedClasses, tf.year, tf.term);
+    for (const c of seedClasses) expect(cf(back, c), c.name).toEqual(cf(tf, c));
+  });
+  it("one class can differ from the others in its level", () => {
+    const g = toClassGrid(tf, seedClasses); const kg2 = seedClasses.find((c) => c.name === "KG 2")!;
+    const tuition = g.rows.find((r) => r.label === "Tuition")!; tuition.amounts[kg2.id] = 199900;
+    const back = fromClassGrid(g, seedClasses, tf.year, tf.term);
+    expect(cf(back, kg2).find((l) => l.label === "Tuition")!.amount).toBe(199900);
+    expect(cf(back, seedClasses.find((c) => c.name === "KG 1")!).find((l) => l.label === "Tuition")!.amount).toBe(tf.levels.Kindergarten.items.find((i) => i.label === "Tuition")!.amount);
+    expect(validateClassGrid(g, seedClasses)).toBe("");
   });
 });

@@ -12,7 +12,7 @@ import { Pencil, Trash2, UserPlus } from "lucide-react";
 export interface SRow { id: string; empNo: string; name: string; position: string; department: string; type: string; phone: string; qualification: string; status: string; classes: string; subjects: string; students: number; periods: number }
 const FIELDS: FieldDef[] = [
   { key: "name", label: "Full name", required: true }, { key: "position", label: "Position", type: "select", options: ["Class Teacher", "Subject Teacher", "Head of Department", "Bursar", "Storekeeper", "Administrator", "Nurse", "Driver", "Security"], required: true },
-  { key: "department", label: "Department", type: "select", options: ["Kindergarten", "Primary", "JHS", "Administration", "Operations"], required: true }, { key: "type", label: "Employment type", type: "select", options: ["Full-time", "Part-time", "Contract"], required: true },
+  { key: "department", label: "Department", type: "select", options: ["Creche", "Nursery", "Kindergarten", "Primary", "JHS", "Administration", "Operations"], required: true }, { key: "type", label: "Employment type", type: "select", options: ["Full-time", "Part-time", "Contract"], required: true },
   { key: "phone", label: "Phone", type: "tel", required: true, validate: (v) => (v.replace(/\D/g, "").length < 9 ? "Enter a valid phone number" : undefined) }, { key: "email", label: "Email", type: "email", validate: (v) => (/^\S+@\S+\.\S+$/.test(v) ? undefined : "Enter a valid email") },
   { key: "qualification", label: "Qualification" }, { key: "status", label: "Status", type: "select", options: ["Active", "On leave"], required: true },
 ];

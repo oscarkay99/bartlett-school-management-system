@@ -1,4 +1,5 @@
 "use client";
+import { LEVELS } from "../fees";
 // Loads the school's data from the database (what the signed-in role may see; row-level security filters it)
 // and turns rows into the app's in-memory shapes (lib/data/types). See hydrate.ts for how it replaces the demo data.
 import { db } from "./client";
@@ -105,7 +106,7 @@ export async function loadSchool(): Promise<LiveData> {
     feeding: n(levels.find((l) => l.term_id === tid && l.level === level)?.feeding) });
   const feeTerms = new Set([...items, ...levels, ...prices, ...overrides].map((r) => s(r.term_id)));
   const feeSchedule: TermFees[] = terms.filter((t) => feeTerms.has(t.id)).map((t) => ({ year: t.year, term: t.term,
-    levels: { Kindergarten: lvl(t.id, "Kindergarten"), Primary: lvl(t.id, "Primary"), JHS: lvl(t.id, "JHS") },
+    levels: Object.fromEntries(LEVELS.map((lv) => [lv, lvl(t.id, lv)])) as TermFees["levels"],
     overrides: overrides.filter((o) => o.term_id === t.id).reduce<Record<string, FeeItem[]>>((a, o) => { (a[s(o.class_id)] ??= []).push({ label: s(o.label), amount: n(o.amount) }); return a; }, {}),
     activities: Object.fromEntries(acts.map((a) => [s(a.name), n(prices.find((p) => p.term_id === t.id && p.activity === a.name)?.amount)])) }));
 

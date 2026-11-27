@@ -74,7 +74,7 @@ export function FeedingWorkspace({ students, payments, kitchen, today, usedRefs 
       feeding={{
         finder: <FeedingFinder rows={rows} canPay={canPay} canEdit={canEdit} onPay={(id) => setPayFor(id)} termLabel={`${term} ${year}`} />,
         onRecordPay: () => setPayFor(""),
-        onEnrol: canEdit && td ? () => setEnrolOpen(true) : undefined,
+        onEnrol: FEEDING_OPT_IN && canEdit && td ? () => setEnrolOpen(true) : undefined,
         dialog: <>{payFor !== null && canPay && <FeedingPaymentDialog students={rows} usedRefs={usedRefs} termLabel={`${term}, ${year}`} today={today} initial={payFor || undefined} onClose={() => setPayFor(null)} />}
           {enrolOpen && <EnrolFeedingDialog rows={rows} levelOf={(id) => fs.classes.find((c) => c.id === id)?.level ?? ""} termLabel={`${term} ${year}`} onClose={() => setEnrolOpen(false)}
             onEnrol={(sid, rate) => { feeding.updateException(sid, key, enrolment(sid, key, rate)); setEnrolOpen(false); }} />}</>,

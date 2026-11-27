@@ -1,9 +1,9 @@
 // Fee schedule: what each class is charged, set per academic year + term.
-// Fees are set per level (Kindergarten / Primary / JHS); a class can override or add lines on top of its level.
+// Fees are set per level (Creche / Nursery / Kindergarten / Primary / JHS); a class can override or add lines on top of its level.
 // Pure helpers, safe on client and server. All amounts are integer minor units (pesewas).
 import type { Minor } from "./money";
 
-export const LEVELS = ["Kindergarten", "Primary", "JHS"] as const;
+export const LEVELS = ["Creche", "Nursery", "Kindergarten", "Primary", "JHS"] as const;
 export type Level = (typeof LEVELS)[number];
 export interface FeeItem { label: string; amount: Minor }
 export interface LevelFees {
@@ -46,7 +46,7 @@ export const copyTerm = (from: TermFees, year: string, term: string): TermFees =
 /** An empty schedule for a term: the usual lines at zero, so the school only types amounts. */
 export function blankTerm(year: string, term: string, activities: readonly string[]): TermFees {
   const lines = (extra: string[] = []) => ["Tuition", "Books", "ICT & Development Levy", "PTA", ...extra].map((label) => ({ label, amount: 0 }));
-  return { year, term, levels: { Kindergarten: { items: lines(), feeding: 0 }, Primary: { items: lines(), feeding: 0 }, JHS: { items: lines(), feeding: 0 } }, overrides: {}, activities: Object.fromEntries(activities.map((a) => [a, 0])) };
+  return { year, term, levels: Object.fromEntries(LEVELS.map((lv) => [lv, { items: lines(), feeding: 0 }])) as Record<Level, LevelFees>, overrides: {}, activities: Object.fromEntries(activities.map((a) => [a, 0])) };
 }
 
 /** The most recent term before (year, term) in calendar order that already has fees — what "Copy from" offers. */
@@ -65,7 +65,7 @@ export function validateTermFees(tf: TermFees, classes: ClassRef[]): string {
     if (labels.some((x) => !x)) return `${lv}: every line needs a name`;
     const dup = labels.find((x, i) => labels.findIndex((y) => y.toLowerCase() === x.toLowerCase()) !== i); if (dup) return `${lv}: "${dup}" appears twice`;
     if (!l.items.every((i) => okAmount(i.amount)) || !okAmount(l.feeding)) return `${lv}: amounts must be zero or more`;
-    if (sumItems(l.items) === 0) return `${lv}: school fees add up to zero`;
+    if (sumItems(l.items) === 0 && classes.some((c) => c.level === lv) && classes.filter((c) => c.level === lv).every((c) => sumItems(classFees(tf, c)) === 0)) return `${lv}: school fees add up to zero`;
   }
   for (const [cid, over] of Object.entries(tf.overrides)) {
     const c = classes.find((x) => x.id === cid); if (!c) return "An adjustment refers to a class that no longer exists";
@@ -115,11 +115,57 @@ export function validateGrid(g: FeeGrid, classes: ClassRef[]): string {
   const names = g.rows.map((r) => r.label.trim());
   if (names.some((n, i) => !n && LEVELS.some((lv) => g.rows[i].amounts[lv] > 0))) return "Give every fee a name";
   const dup = names.find((n, i) => n && names.findIndex((m) => m.toLowerCase() === n.toLowerCase()) !== i); if (dup) return `"${dup}" is listed twice`;
-  const empty = LEVELS.filter((lv) => g.rows.every((r) => !(r.amounts[lv] > 0)));
+  // Only levels the school has classes in need fees.
+  const empty = LEVELS.filter((lv) => (!classes.length || classes.some((c) => c.level === lv)) && g.rows.every((r) => !(r.amounts[lv] > 0)));
   if (empty.length) return `Enter the fees for ${empty.join(", ")}`;
   if (g.exceptions.some((e) => !e.classId || !e.label.trim())) return "Choose a class and a fee for each class exception";
   const err = validateTermFees(fromGrid({ ...g, rows: g.rows.filter((r) => r.label.trim()) }, "", ""), classes);
   return err;
+}
+
+// ---- Per-class view (client, 2026-11-27): every class has its own fees. Stored as the level's most common amount
+// for each fee plus a class adjustment wherever a class differs, so invoices and the database work unchanged. ----
+export interface ClassGrid { rows: { label: string; amounts: Record<string, Minor> }[]; feeding: Record<Level, Minor>; activities: Record<string, Minor> }
+
+export function toClassGrid(tf: TermFees, classes: ClassRef[]): ClassGrid {
+  const labels: string[] = [];
+  for (const lv of LEVELS) for (const i of tf.levels[lv]?.items ?? []) if (!labels.includes(i.label)) labels.push(i.label);
+  for (const ov of Object.values(tf.overrides)) for (const o of ov) if (!labels.includes(o.label)) labels.push(o.label);
+  const amount = (c: ClassRef, label: string) => tf.overrides[c.id]?.find((o) => o.label === label)?.amount ?? tf.levels[c.level]?.items.find((i) => i.label === label)?.amount ?? 0;
+  return { rows: labels.map((label) => ({ label, amounts: Object.fromEntries(classes.map((c) => [c.id, amount(c, label)])) })),
+    feeding: perLevel((lv) => tf.levels[lv]?.feeding ?? 0), activities: { ...tf.activities } };
+}
+
+/** The amount most classes in a level pay (ties: the first class's). */
+function commonAmount(values: Minor[]): Minor {
+  let best = values[0] ?? 0, n = 0;
+  for (const v of values) { const k = values.filter((x) => x === v).length; if (k > n) { best = v; n = k; } }
+  return best;
+}
+
+export function fromClassGrid(g: ClassGrid, classes: ClassRef[], year: string, term: string): TermFees {
+  const rows = g.rows.filter((r) => r.label.trim()); const overrides: Record<string, FeeItem[]> = {};
+  const levels = Object.fromEntries(LEVELS.map((lv) => {
+    const cs = classes.filter((c) => c.level === lv);
+    const items = rows.map((r) => {
+      const base = commonAmount(cs.map((c) => r.amounts[c.id] ?? 0));
+      for (const c of cs) { const v = r.amounts[c.id] ?? 0; if (v !== base) (overrides[c.id] ??= []).push({ label: r.label.trim(), amount: v }); }
+      return { label: r.label.trim(), amount: base };
+    });
+    return [lv, { items, feeding: g.feeding[lv] ?? 0 }];
+  })) as Record<Level, LevelFees>;
+  return { year, term, levels, overrides, activities: { ...g.activities } };
+}
+
+/** Plain-language problem with the per-class grid, or "". */
+export function validateClassGrid(g: ClassGrid, classes: ClassRef[]): string {
+  const names = g.rows.map((r) => r.label.trim());
+  if (names.some((n, i) => !n && Object.values(g.rows[i].amounts).some((m) => m > 0))) return "Give every fee a name";
+  const dup = names.find((n, i) => n && names.findIndex((m) => m.toLowerCase() === n.toLowerCase()) !== i); if (dup) return `"${dup}" is listed twice`;
+  const empty = classes.filter((c) => g.rows.every((r) => !((r.amounts[c.id] ?? 0) > 0))).map((c) => c.name);
+  if (empty.length) return `Enter the fees for ${empty.join(", ")}`;
+  if (!Object.values(g.activities).every(okAmount) || !g.rows.every((r) => Object.values(r.amounts).every(okAmount))) return "Amounts must be zero or more";
+  return "";
 }
 
 /** Invoice number stem for a term, e.g. ("INV", "2026/2027", "Term 2") → "INV-2627-T2". */

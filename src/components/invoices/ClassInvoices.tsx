@@ -28,7 +28,7 @@ const W = "105mm", H = "59.4mm";
 // Edits are kept in this browser until the backend stores them.
 export function ClassInvoices({ defaults, school }: { defaults: Record<string, ClassInvoice>; school: School }) {
   const [invoices, setInvoices] = useState(defaults);
-  const [tab, setTab] = useState(INVOICE_TABS[0].id); const [open, setOpen] = useState(false); const run = useSave();
+  const tabs = INVOICE_TABS.filter((x) => defaults[x.id]); const [tab, setTab] = useState(tabs[0]?.id ?? INVOICE_TABS[0].id); const [open, setOpen] = useState(false); const run = useSave();
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (LIVE) { // saved sheets for the current term, from the database (keyed by class id / "extra" / "classes")
@@ -49,7 +49,7 @@ export function ClassInvoices({ defaults, school }: { defaults: Record<string, C
   return (
     <div className="grid gap-4 md:grid-cols-[220px_1fr]">
       <nav aria-label="Invoices" className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-        {INVOICE_TABS.map((x) => (
+        {tabs.map((x) => (
           <button key={x.id} onClick={() => setTab(x.id)} aria-current={tab === x.id ? "page" : undefined}
             className={cn("flex shrink-0 items-center justify-between gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition",
               tab === x.id ? "bg-info/10 font-semibold text-info" : "text-fg hover:bg-surface-2", !x.classId && "md:mt-2 md:border-t md:border-line md:pt-3")}>

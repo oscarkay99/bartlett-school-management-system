@@ -11,6 +11,7 @@ export interface InvoiceTab { id: string; label: string; classId?: string; accou
 
 /** Tab order. Primary classes are called "Class 1 … Class 6" here, as the school does on its invoices. */
 export const INVOICE_TABS: InvoiceTab[] = [
+  { id: "creche", label: "Creche", classId: "creche" }, { id: "nursery1", label: "Nursery 1", classId: "nursery1" }, { id: "nursery2", label: "Nursery 2", classId: "nursery2" },
   { id: "kg1", label: "KG 1", classId: "c1" }, { id: "kg2", label: "KG 2", classId: "c2" },
   ...[1, 2, 3, 4, 5, 6].map((n) => ({ id: `class${n}`, label: `Class ${n}`, classId: `c${n + 2}` })),
   { id: "jhs1", label: "JHS 1", classId: "c9" }, { id: "jhs2", label: "JHS 2", classId: "c10" }, { id: "jhs3", label: "JHS 3", classId: "c11" },

@@ -9,13 +9,12 @@ import { Modal, MoneyInput, useToast } from "@/components/ui/interactive";
 import { PeriodSelect, useCalendar } from "@/components/shell/CalendarContext";
 import { useFeeSchedule } from "@/components/shell/FeeScheduleContext";
 import { useRole } from "@/components/shell/AppShell";
-import { blankTerm, copyTerm, feedingRate, fromGrid, termBillLines, LEVELS, previousTermWithFees, sumItems, toGrid, validateGrid, type ClassRef, type FeeGrid, type Level, type TermFees } from "@/lib/fees";
+import { blankTerm, copyTerm, feedingRate, fromClassGrid, termBillLines, LEVELS, previousTermWithFees, sumItems, toClassGrid, validateClassGrid, type ClassGrid, type ClassRef, type TermFees } from "@/lib/fees";
 import { money } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 // Inputs here set their own width (cn() does not resolve Tailwind conflicts, so never mix with inputClass's w-full).
 const box = "h-9 rounded-lg border border-line bg-surface px-2.5 text-sm placeholder:text-muted/60 focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30";
-const SHORT: Record<Level, string> = { Kindergarten: "KG", Primary: "Primary", JHS: "JHS" };
 
 /** Calendar terms oldest → newest, for "Copy from last term". */
 export function usePeriodOrder() {
@@ -36,7 +35,7 @@ export function FeeScheduleEditor() {
   const billedCount = Q.invoices.filter((i) => i.year === year && i.term === term).length;
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="max-w-6xl space-y-4">
       <div className="flex flex-wrap items-center gap-2"><PeriodSelect />
         {locked ? <Badge tone="warn" dot>Locked</Badge> : saved && !editing ? <Badge tone="ok" dot>Set</Badge> : !saved && !editing ? <Badge dot>Not set</Badge> : null}</div>
 
@@ -72,40 +71,42 @@ function RequestChange({ year, term }: { year: string; term: string }) {
   </>);
 }
 
-// One table: a row per fee, a column per level. Feeding is a row too.
+// One table: a row per fee, a column per class (every class has its own fees). Feeding is per level, below.
 function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => void; onSave: (tf: TermFees) => void }) {
   const { classes } = useFeeSchedule(); const toast = useToast();
-  const [g, setG] = useState<FeeGrid>(() => toGrid(tf)); const [tried, setTried] = useState(false);
-  const err = validateGrid(g, classes);
-  const setRow = (i: number, patch: Partial<FeeGrid["rows"][number]>) => setG({ ...g, rows: g.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
-  const total = (lv: Level) => g.rows.reduce((a, r) => a + (r.amounts[lv] || 0), 0);
-  const th = "px-2 py-2 text-right font-medium sm:px-3";
-  const save = () => { setTried(true); if (err) return; onSave(fromGrid({ ...g, rows: g.rows.filter((r) => r.label.trim()) }, tf.year, tf.term)); toast(`${tf.term} ${tf.year} fees saved`); };
+  const [g, setG] = useState<ClassGrid>(() => toClassGrid(tf, classes)); const [tried, setTried] = useState(false);
+  const err = validateClassGrid(g, classes);
+  const setRow = (i: number, patch: Partial<ClassGrid["rows"][number]>) => setG({ ...g, rows: g.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  const total = (cid: string) => g.rows.reduce((a, r) => a + (r.amounts[cid] || 0), 0);
+  const levels = LEVELS.filter((lv) => classes.some((c) => c.level === lv));
+  const th = "px-2 py-2 text-right font-medium whitespace-nowrap";
+  const save = () => { setTried(true); if (err) return; onSave(fromClassGrid({ ...g, rows: g.rows.filter((r) => r.label.trim()) }, classes, tf.year, tf.term)); toast(`${tf.term} ${tf.year} fees saved`); };
+  const sticky = "sticky left-0 z-10 bg-surface";
 
   return (
     <div className="space-y-4">
-      <Card><CardHeader title={`Fees for ${tf.term} ${tf.year}`} sub="Amounts in GH₵ for one student, per term. Leave a box empty if that level doesn't pay that fee." />
-        <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className="px-4 py-2 text-left font-medium">Fee</th>{LEVELS.map((lv) => <th key={lv} className={th}><span className="hidden sm:inline">{lv}</span><span className="sm:hidden">{SHORT[lv]}</span></th>)}<th className="w-10" /></tr></thead>
+      <Card><CardHeader title={`Fees for ${tf.term} ${tf.year}`} sub="Amounts in GH₵ for one student, per term, for each class. Leave a box at 0 if that class doesn't pay that fee. Scroll sideways for more classes." />
+        <div className="overflow-x-auto"><table className="text-sm">
+          <thead className="bg-surface-2/60 text-xs uppercase text-muted"><tr><th className={cn("px-4 py-2 text-left font-medium", sticky, "bg-surface-2")}>Fee</th>{classes.map((c) => <th key={c.id} className={th}>{c.name}</th>)}<th className="w-10" /></tr></thead>
           <tbody className="divide-y divide-line">
             {g.rows.map((r, i) => (
               <tr key={i}>
-                <td className="px-4 py-2"><input aria-label={`Fee ${i + 1} name`} placeholder="Fee name" className={cn(box, "w-full min-w-[150px]")} value={r.label} onChange={(e) => setRow(i, { label: e.target.value })} /></td>
-                {LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`${r.label || "Fee"} for ${lv}`} value={r.amounts[lv]} onChange={(m) => setRow(i, { amounts: { ...r.amounts, [lv]: m } })} /></td>)}
+                <td className={cn("px-4 py-2", sticky)}><input aria-label={`Fee ${i + 1} name`} placeholder="Fee name" className={cn(box, "w-44")} value={r.label} onChange={(e) => setRow(i, { label: e.target.value })} /></td>
+                {classes.map((c) => <td key={c.id} className="px-1.5 py-2"><MoneyInput className="w-24" label={`${r.label || "Fee"} for ${c.name}`} value={r.amounts[c.id] ?? 0} onChange={(m) => setRow(i, { amounts: { ...r.amounts, [c.id]: m } })} /></td>)}
                 <td className="pr-3"><button type="button" aria-label={`Remove ${r.label || "fee"}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => setG({ ...g, rows: g.rows.filter((_, j) => j !== i) })}><Trash2 size={15} /></button></td>
               </tr>))}
-            <tr><td colSpan={5} className="px-4 py-2"><Button size="sm" variant="ghost" onClick={() => setG({ ...g, rows: [...g.rows, { label: "", amounts: { Kindergarten: 0, Primary: 0, JHS: 0 } }] })}><Plus size={13} />Add a fee</Button></td></tr>
+            <tr><td colSpan={classes.length + 2} className="px-4 py-2"><Button size="sm" variant="ghost" onClick={() => setG({ ...g, rows: [...g.rows, { label: "", amounts: Object.fromEntries(classes.map((c) => [c.id, 0])) }] })}><Plus size={13} />Add a fee</Button></td></tr>
           </tbody>
           <tbody className="border-t-2 border-line bg-surface-2/40">
-            <tr className="font-semibold"><td className="px-4 py-2.5">School fees total</td>{LEVELS.map((lv) => <td key={lv} className="num whitespace-nowrap px-2 text-right sm:px-3">{money(total(lv))}</td>)}<td /></tr>
-            <tr><td className="px-4 py-2"><div className="font-medium">Feeding (per term)</div><div className="text-xs text-muted">Billed separately to students enrolled for feeding. Never on the school fees invoice.</div></td>{LEVELS.map((lv) => <td key={lv} className="px-2 py-2 sm:px-3"><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv]} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></td>)}<td /></tr>
+            <tr className="font-semibold"><td className={cn("px-4 py-2.5", sticky, "bg-surface-2")}>School fees total</td>{classes.map((c) => <td key={c.id} className="num whitespace-nowrap px-2 text-right">{money(total(c.id))}</td>)}<td /></tr>
           </tbody>
         </table></div></Card>
 
-      <Card><CardHeader title="Activities" sub="Price per term. Billed separately when a student joins." />
-        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">{Object.entries(g.activities).map(([a, m]) => <label key={a} className="block text-sm"><span className="mb-1 block font-medium">{a}</span><MoneyInput label={`${a} price`} value={m} onChange={(v) => setG({ ...g, activities: { ...g.activities, [a]: v } })} /></label>)}</div></Card>
+      <Card><CardHeader title="Feeding (per term)" sub="Compulsory: every student owes their level's feeding cost (set someone not on feeding, or a different amount, in the Feeding module). Billed separately, never on the school fees invoice." />
+        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3 lg:grid-cols-5">{levels.map((lv) => <label key={lv} className="block text-sm"><span className="mb-1 block font-medium">{lv}</span><MoneyInput label={`Feeding for ${lv}`} value={g.feeding[lv] ?? 0} onChange={(m) => setG({ ...g, feeding: { ...g.feeding, [lv]: m } })} /></label>)}</div></Card>
 
-      <Exceptions g={g} setG={setG} classes={classes} />
+      <Card><CardHeader title="Activities" sub="Price per term. Compulsory and billed automatically: Music (Piano) KG 1 – Class 6, STEM Class 1 – JHS 3, Extra Classes everyone." />
+        <div className="grid gap-3 px-4 pb-4 sm:grid-cols-3">{Object.entries(g.activities).map(([a, m]) => <label key={a} className="block text-sm"><span className="mb-1 block font-medium">{a}</span><MoneyInput label={`${a} price`} value={m} onChange={(v) => setG({ ...g, activities: { ...g.activities, [a]: v } })} /></label>)}</div></Card>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         {tried && err && <p role="alert" className="mr-auto text-sm text-danger">{err}</p>}
@@ -116,27 +117,6 @@ function GridEditor({ tf, onCancel, onSave }: { tf: TermFees; onCancel: () => vo
   );
 }
 
-// Optional: one class pays a different amount for a fee, or an extra fee (e.g. JHS 3 BECE registration).
-function Exceptions({ g, setG, classes }: { g: FeeGrid; setG: (g: FeeGrid) => void; classes: ClassRef[] }) {
-  const [open, setOpen] = useState(g.exceptions.length > 0);
-  const set = (i: number, patch: Partial<FeeGrid["exceptions"][number]>) => setG({ ...g, exceptions: g.exceptions.map((e, j) => (j === i ? { ...e, ...patch } : e)) });
-  const add = () => setG({ ...g, exceptions: [...g.exceptions, { classId: "", label: "", amount: 0 }] });
-  if (!open) return <button type="button" className="text-sm font-medium text-info hover:underline" onClick={() => { setOpen(true); if (!g.exceptions.length) add(); }}>+ One class pays a different amount (optional)</button>;
-  return (
-    <Card><CardHeader title="Class exceptions" sub="Use when one class pays a different amount for a fee, or a fee only it pays. Enter 0 to remove a fee for that class." />
-      <datalist id="fee-names">{g.rows.filter((r) => r.label.trim()).map((r) => <option key={r.label} value={r.label} />)}</datalist>
-      <div className="space-y-2 px-4 pb-4">
-        {g.exceptions.map((e, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2">
-            <select aria-label={`Exception ${i + 1} class`} className={cn(box, "w-36")} value={e.classId} onChange={(x) => set(i, { classId: x.target.value })}><option value="">Class…</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-            <input list="fee-names" aria-label={`Exception ${i + 1} fee`} placeholder="Fee, e.g. BECE Registration" className={cn(box, "min-w-[180px] flex-1")} value={e.label} onChange={(x) => set(i, { label: x.target.value })} />
-            <MoneyInput className="w-28 flex-none" label={`Exception ${i + 1} amount`} value={e.amount} onChange={(m) => set(i, { amount: m })} />
-            <button type="button" aria-label={`Remove exception ${i + 1}`} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" onClick={() => setG({ ...g, exceptions: g.exceptions.filter((_, j) => j !== i) })}><Trash2 size={15} /></button>
-          </div>))}
-        <Button size="sm" variant="ghost" onClick={add}><Plus size={13} />Add exception</Button>
-      </div></Card>
-  );
-}
 
 /** What each class pays in a term: school fees (with what's included), and feeding, which is billed separately. Shared with Fees → Fee structures. */
 export function ClassFeeTable({ tf, classes, title, sub, action }: { tf: TermFees; classes: ClassRef[]; title: string; sub?: string; action?: React.ReactNode }) {

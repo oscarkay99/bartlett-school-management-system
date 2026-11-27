@@ -1,11 +1,10 @@
 // Feeding module: who is on feeding each term, the daily meal register and per-class totals. Feeding is billed on
 // its own, never on the school fees invoice. Mirrors supabase/migrations/…_feeding*.sql. Pure helpers.
 import type { Minor } from "./money";
-import { LIVE } from "./live/config";
 
-/** Live site: feeding is opt-in, a student is billed only once enrolled (migration 2300). The demo keeps the old
- *  "everyone on feeding unless excepted" so its sample data still shows. */
-export const FEEDING_OPT_IN = LIVE;
+/** Feeding is compulsory (client, 2026-11-27; migration 2500): everyone owes their level's feeding cost unless the
+ *  Feeding module says otherwise. Kept as a switch in case the school ever makes it opt-in again. */
+export const FEEDING_OPT_IN = false;
 /** The exception row that enrols a student for feeding at their level's rate from Settings. */
 export const enrolment = (studentId: string, term: string, rate?: Minor): FeedingException => ({ studentId, term, onFeeding: true, rate, reason: rate === undefined ? "Enrolled for feeding" : "Enrolled for feeding (different amount)" });
 

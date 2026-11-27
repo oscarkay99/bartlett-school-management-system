@@ -5,7 +5,7 @@ export type { FeeAccount };
 export type Channel = "SMS" | "WhatsApp" | "Email";
 export type PayMethod = "Cash" | "Mobile Money" | "Bank Transfer" | "Card" | "Cheque" | "Online Gateway" | "Sponsor";
 
-export interface SchoolClass { id: string; name: string; level: "Kindergarten" | "Primary" | "JHS"; teacherId: string; }
+export interface SchoolClass { id: string; name: string; level: "Creche" | "Nursery" | "Kindergarten" | "Primary" | "JHS"; teacherId: string; }
 export interface Guardian {
   id: string; title: string; name: string; phone: string; whatsapp?: string; email?: string;
   address: string; occupation?: string; preferred: Channel; language: string;

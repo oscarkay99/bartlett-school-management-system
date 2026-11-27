@@ -85,7 +85,7 @@ export function feedingAccount(studentId: string) {
   return { billed, paid, balance: billed - paid, payments: pays, separate: true };
 }
 /** Label for an invoice's discount line, e.g. "Merit Scholarship (25%)". */
-export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Discount"; };
+export const discountLabel = (studentId: string) => { const s = getStudent(studentId)?.scholarship; return s ? `${s} on tuition` : "Sibling discount on tuition"; };
 /** School fees still owed. Extracurricular and Extra Classes are standalone: its balance is shown separately and never added here. */
 export const totalOwed = (studentId: string) => Math.max(0, accountSummary(studentId, "fees").balance);
 

@@ -55,12 +55,12 @@ const lvl = (tuition: number, books: number, levy: number, feeding: number): Lev
   feeding: ghs(feeding),
 });
 const acts = (piano: number, stem: number, classes: number): Record<Activity, Minor> => ({ "Music (Piano)": ghs(piano), "STEM": ghs(stem), "Extra Classes": ghs(classes) });
-const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Kindergarten: lvl(1650, 150, 0, 420), Primary: lvl(2200, 250, 0, 560), JHS: lvl(2750, 350, 0, 560) }, overrides: {}, activities: acts(380, 320, 280) });
+const lastYear = (term: string): TermFees => ({ year: "2025/2026", term, levels: { Creche: lvl(1200, 100, 0, 380), Nursery: lvl(1500, 120, 0, 400), Kindergarten: lvl(1650, 150, 0, 420), Primary: lvl(2200, 250, 0, 560), JHS: lvl(2750, 350, 0, 560) }, overrides: {}, activities: acts(380, 320, 280) });
 export const feeSchedule: TermFees[] = [
   lastYear("Term 1"), lastYear("Term 2"), { ...lastYear("Term 3"), overrides: { c11: [{ label: "BECE Registration", amount: ghs(300) }] } },
-  { year: "2026/2027", term: "Term 1", levels: { Kindergarten: lvl(1800, 150, 0, 450), Primary: lvl(2400, 250, 0, 600), JHS: lvl(3000, 350, 0, 600) }, overrides: {}, activities: acts(400, 350, 300) },
+  { year: "2026/2027", term: "Term 1", levels: { Creche: lvl(1300, 100, 0, 400), Nursery: lvl(1600, 120, 0, 420), Kindergarten: lvl(1800, 150, 0, 450), Primary: lvl(2400, 250, 0, 600), JHS: lvl(3000, 350, 0, 600) }, overrides: {}, activities: acts(400, 350, 300) },
   // Term 2: books are bought once a year (Term 1), Primary 6 pays a mock-exam fee, JHS 3 pays BECE registration.
-  { year: "2026/2027", term: "Term 2", levels: { Kindergarten: lvl(1800, 0, 0, 450), Primary: lvl(2400, 0, 0, 600), JHS: lvl(3000, 0, 0, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350, 300) },
+  { year: "2026/2027", term: "Term 2", levels: { Creche: lvl(1300, 0, 0, 400), Nursery: lvl(1600, 0, 0, 420), Kindergarten: lvl(1800, 0, 0, 450), Primary: lvl(2400, 0, 0, 600), JHS: lvl(3000, 0, 0, 600) }, overrides: { c8: [{ label: "Mock Examination", amount: ghs(120) }], c11: [{ label: "BECE Registration", amount: ghs(320) }] }, activities: acts(400, 350, 300) },
   // Term 3 of 2026/2027 has no fees yet — set it up in Settings → Fee schedule.
 ];
 const billingTerm = findTerm(feeSchedule, "2026/2027", "Term 1")!;

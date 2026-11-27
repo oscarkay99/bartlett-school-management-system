@@ -17,11 +17,12 @@ export const ACCOUNTS: Record<FeeAccount, AccountDef> = {
 export const ACCOUNT_IDS = Object.keys(ACCOUNTS) as FeeAccount[];
 
 // What each standalone account bills per term (prices are set in Settings → Fee schedule).
-// Kindergarten takes Music (Piano) only; Extra Classes are for Primary and JHS.
+// Music (Piano): KG 1 – Class 6. STEM: Class 1 – JHS 3. Extra Classes: every level. All compulsory (billed automatically).
 export const ACCOUNT_ACTIVITIES = { extra: ["Music (Piano)", "STEM"], classes: ["Extra Classes"] } as const;
 export const ACTIVITIES = [...ACCOUNT_ACTIVITIES.extra, ...ACCOUNT_ACTIVITIES.classes] as const;
 export type Activity = (typeof ACTIVITIES)[number];
 export const activitiesOf = (account: FeeAccount): Activity[] => (account === "fees" ? [] : [...ACCOUNT_ACTIVITIES[account]]);
-/** What a student of this level can enrol in. Extracurricular: Kindergarten takes Music (Piano) only. Extra Classes: every level. */
-export const activitiesFor = (level: string, account: FeeAccount = "extra"): Activity[] =>
-  activitiesOf(account).filter((a) => account !== "extra" || level !== "Kindergarten" || a === "Music (Piano)");
+/** Which levels take each activity (mirrors activities.levels in the database). */
+export const ACTIVITY_LEVELS: Record<Activity, readonly string[]> = { "Music (Piano)": ["Kindergarten", "Primary"], "STEM": ["Primary", "JHS"], "Extra Classes": ["Creche", "Nursery", "Kindergarten", "Primary", "JHS"] };
+/** What a student of this level takes. */
+export const activitiesFor = (level: string, account: FeeAccount = "extra"): Activity[] => activitiesOf(account).filter((a) => ACTIVITY_LEVELS[a]?.includes(level));

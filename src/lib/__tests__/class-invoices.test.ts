@@ -6,9 +6,9 @@ import { ghs } from "../money";
 const inv = (title: string, amounts: number[]): ClassInvoice => ({ title, period: "Term 1", notes: "", lines: amounts.map((a, i) => ({ description: `Line ${i}`, amount: ghs(a) })) });
 
 describe("Class invoices", () => {
-  it("lists KG 1, KG 2, Class 1–6, JHS 1–3, then Extracurricular and Extra Classes as their own invoices", () => {
-    expect(INVOICE_TABS.map((t) => t.label)).toEqual(["KG 1", "KG 2", "Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6", "JHS 1", "JHS 2", "JHS 3", "Extracurricular", "Extra Classes"]);
-    for (const t of INVOICE_TABS.filter((x) => x.classId)) expect(Q.getClass(t.classId!).name.replace("Primary", "Class"), t.id).toBe(t.label);
+  it("lists Creche, Nursery 1–2, KG 1, KG 2, Class 1–6, JHS 1–3, then Extracurricular and Extra Classes as their own invoices", () => {
+    expect(INVOICE_TABS.map((t) => t.label)).toEqual(["Creche", "Nursery 1", "Nursery 2", "KG 1", "KG 2", "Class 1", "Class 2", "Class 3", "Class 4", "Class 5", "Class 6", "JHS 1", "JHS 2", "JHS 3", "Extracurricular", "Extra Classes"]);
+    for (const t of INVOICE_TABS.filter((x) => x.classId && Q.classes.some((c) => c.id === x.classId))) expect(Q.getClass(t.classId!).name.replace("Primary", "Class"), t.id).toBe(t.label);
     expect(INVOICE_TABS.at(-1)!.classId).toBeUndefined();
   });
   it("Extracurricular and Extra Classes are the small 10-per-A4 invoices; classes get the full invoice", () => {

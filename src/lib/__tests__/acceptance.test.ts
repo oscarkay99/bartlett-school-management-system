@@ -1,3 +1,4 @@
+import { activitiesFor } from "../accounts";
 import { describe, expect, it } from "vitest";
 import * as Q from "../data/queries";
 import { ghs, money, moneyShort } from "../money";
@@ -133,10 +134,10 @@ describe("Three accounts: school fees, plus standalone Extracurricular and Extra
       expect(f.paid).toBe(paid);
     }
   });
-  it("everyone has an Extracurricular invoice: KG Music only, everyone else Music and STEM", () => {
+  it("Extracurricular invoices follow the level rules: Music KG 1 – Class 6, STEM Class 1 – JHS 3", () => {
     for (const i of Q.invoices.filter((x) => x.account === "extra")) {
-      const kg = Q.getClass(Q.getStudent(i.studentId)!.classId).level === "Kindergarten";
-      expect(i.items.map((x) => x.label), i.no).toEqual(kg ? ["Music (Piano)"] : ["Music (Piano)", "STEM"]);
+      const level = Q.getClass(Q.getStudent(i.studentId)!.classId).level;
+      expect(i.items.map((x) => x.label), i.no).toEqual(activitiesFor(level));
     }
   });
   it("Extracurricular reminders mention extracurricular, not school fees", () => {

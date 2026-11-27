@@ -69,6 +69,8 @@ insert into public.students (id, admission_no, first_name, last_name, class_id) 
 insert into public.student_medical (student_id, alert) values ('00000000-0000-0000-0000-0000000000f1', 'Asthma'), ('00000000-0000-0000-0000-0000000000f2', 'Allergy');
 insert into public.term_fee_levels (term_id, level, feeding) values ('00000000-0000-0000-0000-0000000000c2', 'Primary', 60000);
 insert into public.term_fee_items (term_id, level, label, amount) values ('00000000-0000-0000-0000-0000000000c2', 'Primary', 'Tuition', 240000);
+insert into public.activities (name, account, levels) values ('Music (Piano)', 'extra', '{Kindergarten,Primary}'), ('STEM', 'extra', '{Primary,JHS}'), ('Extra Classes', 'classes', '{Creche,Nursery,Kindergarten,Primary,JHS}');
+insert into public.activity_prices (term_id, activity, amount) values ('00000000-0000-0000-0000-0000000000c2', 'Music (Piano)', 10000), ('00000000-0000-0000-0000-0000000000c2', 'STEM', 12000), ('00000000-0000-0000-0000-0000000000c2', 'Extra Classes', 15000);
 
 \set OWNER '''00000000-0000-0000-0000-0000000000a1'''
 \set ADMIN '''00000000-0000-0000-0000-0000000000a2'''
@@ -183,12 +185,10 @@ select pg_temp.check('…movements unchanged by edit/delete attempts; on hand = 
   and (select count(*) from public.stock_movements) = 1);
 
 -- ---------- Feeding ----------
-select pg_temp.check('nobody is on feeding until enrolled', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 0);
-select pg_temp.check('bursar enrols a student for feeding: billed the level rate from Settings', pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', true, 'Enrolled for feeding') $q$) is null);
-select pg_temp.check('…and is billed the level rate from Settings (600)', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 60000);
+select pg_temp.check('everyone is on feeding at the level rate by default', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 60000);
 select pg_temp.check('teacher cannot change who is on feeding', pg_temp.err(:TEACHER, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000c2', false, 'Brings lunch') $q$) is not null);
 select pg_temp.check('bursar sets a half-day rate and an opt-out',
-  pg_temp.err(:BURSAR, $q$ update public.feeding_exceptions set rate = 30000, reason = 'Half-day' where student_id = '00000000-0000-0000-0000-0000000000f1' and term_id = '00000000-0000-0000-0000-0000000000c2' $q$) is null
+  pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, rate, reason) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', true, 30000, 'Half-day') $q$) is null
   and pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000c2', false, 'Brings lunch') $q$) is null);
 select pg_temp.check('…rates now 300 (half-day) and 0 (opted out)', (select app.feeding_rate('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2')) = 30000
   and (select app.feeding_rate('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000c2')) = 0);
@@ -212,12 +212,13 @@ select pg_temp.check('only one Extracurricular sheet per term, and it has no cla
 select pg_temp.check('teacher cannot see invoice sheets', pg_temp.n(:TEACHER, 'select * from public.invoice_sheets') = 0);
 
 -- ---------- Extracurricular enrolment & feeding payments ----------
-insert into public.activities (name, kindergarten_allowed, account) values ('Music (Piano)', true, 'extra'), ('STEM', false, 'extra'), ('Extra Classes', false, 'classes') on conflict (name) do nothing;
+insert into public.activities (name, kindergarten_allowed, account, levels) values ('Music (Piano)', true, 'extra', '{Kindergarten,Primary}'), ('STEM', false, 'extra', '{Primary,JHS}'),
+  ('Extra Classes', false, 'classes', '{Creche,Nursery,Kindergarten,Primary,JHS}') on conflict (name) do nothing;
 insert into public.classes (id, name, level, position) values ('00000000-0000-0000-0000-0000000000d3', 'KG 1', 'Kindergarten', 0);
 insert into public.students (id, admission_no, first_name, last_name, class_id) values
   ('00000000-0000-0000-0000-0000000000f3', 'A3', 'Esi', 'KG', '00000000-0000-0000-0000-0000000000d3'),
   ('00000000-0000-0000-0000-0000000000f4', 'A4', 'Yaw', 'P3', '00000000-0000-0000-0000-0000000000d1');
-select pg_temp.check('a new KG student is auto-enrolled in Music only', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f3') = array['Music (Piano)']);
+select pg_temp.check('a new KG student is auto-enrolled in Music and Extra Classes (no STEM)', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f3') = array['Extra Classes', 'Music (Piano)']);
 select pg_temp.check('a new Primary student is auto-enrolled in Music, STEM and Extra Classes', (select array_agg(activity order by activity) from public.student_activities where student_id = '00000000-0000-0000-0000-0000000000f4') = array['Extra Classes', 'Music (Piano)', 'STEM']);
 -- Feeding payments have no "still owed" limit: Esi (f3) can pay feeding even with nothing billed.
 select pg_temp.check('a feeding payment is recorded even when nothing is owed', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f3', 50000, 'Cash', 50000, 'Daily') $q$) is null);
@@ -227,8 +228,8 @@ select pg_temp.check('the feeding part cannot exceed the payment', pg_temp.err(:
 select pg_temp.check('Extracurricular payments cannot carry feeding', pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount) values ('extra', '00000000-0000-0000-0000-0000000000f1', 100, 'Cash', 100) $q$) is not null);
 -- Feeding is never on the school fees invoice: f1 owes the half-day rate (300) set above, and paid 200 weekly.
 select pg_temp.check('feeding balance: half-day rate 300 billed, 200 paid weekly, 100 owed', (select billed = 30000 and paid = 20000 and balance = 10000 from public.student_feeding_balances where student_id = '00000000-0000-0000-0000-0000000000f1'));
--- Everyone enrolled for feeding with a rate is listed (f1 half-day), plus anyone who paid feeding (f3); f2 opted out, f4 not enrolled yet.
-select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 2 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
+-- Everyone on feeding with a rate this term is listed (f1 half-day, f4 Primary), plus anyone who paid feeding (f3); f2 opted out.
+select pg_temp.check('admin sees feeding balances; teacher does not', pg_temp.n(:ADMIN, 'select * from public.student_feeding_balances') = 3 and pg_temp.n(:TEACHER, 'select * from public.student_feeding_balances') = 0);
 
 -- ---------- Feeding payment plans ----------
 select pg_temp.check('bursar puts a student on a daily plan, then switches to weekly (history kept)',
@@ -244,8 +245,7 @@ select pg_temp.check('auditor reads plans but cannot set them', pg_temp.n(:AUDIT
   and pg_temp.err(:AUDITOR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2', 'Monthly', '2026-11-02') $q$) is not null);
 
 -- ---------- Feeding paid small small is not part of school fees ----------
--- Yaw (f4, Primary 3) is enrolled for feeding and pays it weekly (feeding is never on a school fees invoice).
-select pg_temp.err(:BURSAR, $q$ insert into public.feeding_exceptions (student_id, term_id, on_feeding, reason) values ('00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2', true, 'Enrolled for feeding') $q$);
+-- Yaw (f4, Primary 3) pays feeding weekly (feeding is never on a school fees invoice).
 select pg_temp.err(:BURSAR, $q$ insert into public.feeding_plans (student_id, term_id, frequency, effective_from) values ('00000000-0000-0000-0000-0000000000f4', '00000000-0000-0000-0000-0000000000c2', 'Weekly', '2026-09-07') $q$);
 select pg_temp.err(:BURSAR, $q$ insert into public.payments (account, student_id, amount, method, feeding_amount, feeding_period) values ('fees', '00000000-0000-0000-0000-0000000000f4', 4000, 'Cash', 4000, 'Weekly') $q$);
 select pg_temp.check('a weekly feeding payment does not count towards school fees', not exists (select 1 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and paid > 0));
@@ -271,6 +271,26 @@ select pg_temp.check('an Extra Classes payment does not reduce the Extracurricul
   and (select paid = 40000 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'extra')
   and not exists (select 1 from public.student_balances where student_id = '00000000-0000-0000-0000-0000000000f4' and account = 'fees' and paid > 0));
 select pg_temp.check('no activity can be billed on the school fees account', pg_temp.err(:OWNER, $q$ insert into public.activities (name, account) values ('Bogus', 'fees') $q$) is not null);
+
+-- ---------- Automatic billing on registration, sibling discount (client, 2026-11-27) ----------
+insert into public.guardians (id, name, phone) values ('00000000-0000-0000-0000-0000000000a9', 'Family Parent', '0240000111');
+select coalesce(pg_temp.err(:ADMIN, $q$ select public.register_student(jsonb_build_object('first_name','Kid','last_name','One','class_id','00000000-0000-0000-0000-0000000000d2','guardians',jsonb_build_array(jsonb_build_object('id','00000000-0000-0000-0000-0000000000a9','primary',true)))) $q$), '') as reg1 \gset
+select pg_temp.check('registering a student succeeds', :'reg1' = '');
+select pg_temp.check('registration issues the school fees invoice straight away (numbered, no feeding)', (select count(*) from public.invoices i join public.students s on s.id = i.student_id
+  where s.last_name = 'One' and i.account = 'fees' and i.status = 'issued' and i.no like 'INV-%' and app.invoice_total(i.id) = (select sum(amount) from public.term_fee_items where term_id = '00000000-0000-0000-0000-0000000000c2' and level = 'Primary' and label <> 'Feeding') and not exists (select 1 from public.invoice_lines l where l.invoice_id = i.id and l.label = 'Feeding')) = 1);
+select pg_temp.check('…and the Extracurricular bill (Music + STEM) and the Extra Classes bill', (select count(*) from public.invoices i join public.students s on s.id = i.student_id
+  where s.last_name = 'One' and i.status = 'issued' and ((i.account = 'extra' and i.no like 'EXC-%' and app.invoice_total(i.id) = 22000) or (i.account = 'classes' and i.no like 'XCL-%' and app.invoice_total(i.id) = 15000))) = 2);
+select pg_temp.err(:ADMIN, $q$ select public.register_student(jsonb_build_object('first_name','Kid','last_name','Two','class_id','00000000-0000-0000-0000-0000000000d2','guardians',jsonb_build_array(jsonb_build_object('id','00000000-0000-0000-0000-0000000000a9','primary',true)))) $q$);
+select pg_temp.err(:ADMIN, $q$ select public.register_student(jsonb_build_object('first_name','Kid','last_name','Three','class_id','00000000-0000-0000-0000-0000000000d2','guardians',jsonb_build_array(jsonb_build_object('id','00000000-0000-0000-0000-0000000000a9','primary',true)))) $q$);
+select pg_temp.err(:ADMIN, $q$ select public.register_student(jsonb_build_object('first_name','Kid','last_name','Four','class_id','00000000-0000-0000-0000-0000000000d2','guardians',jsonb_build_array(jsonb_build_object('id','00000000-0000-0000-0000-0000000000a9','primary',true)))) $q$);
+select pg_temp.check('siblings: 1st and 2nd pay full tuition, 3rd half, 4th free', (select array_agg(i.discount order by s.admission_no) from public.invoices i join public.students s on s.id = i.student_id
+  where i.account = 'fees' and s.last_name in ('One', 'Two', 'Three', 'Four')) = array[0, 0, 120000, 240000]::bigint[]);
+select pg_temp.check('the sibling discount is on tuition only: activity bills are unchanged', (select bool_and(app.invoice_total(i.id) = 22000) from public.invoices i join public.students s on s.id = i.student_id
+  where i.account = 'extra' and s.last_name in ('One', 'Two', 'Three', 'Four')));
+select pg_temp.err(:OWNER, $q$ select public.bill_current_term() $q$);
+select pg_temp.check('billing the term again bills nobody twice', (select count(*) from public.invoices i join public.students s on s.id = i.student_id where s.last_name = 'Four') = 3);
+select pg_temp.check('a teacher cannot bill students directly', pg_temp.err(:TEACHER, $q$ select app.bill_student('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000c2') $q$) is not null
+  or (select count(*) from public.invoices where student_id = '00000000-0000-0000-0000-0000000000f1' and account = 'classes') <= 1);
 
 -- ---------- Report ----------
 select n, case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail, '') as detail from results order by n;
